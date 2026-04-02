@@ -21,7 +21,9 @@ for (const f of ["package.json", "package-lock.json", "icon.png"]) {
 // Generate tools list from the built server and inject into manifest
 console.log("Generating tools list from server...");
 const tools = await listTools(root);
+const { version } = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const manifest = JSON.parse(readFileSync(resolve(root, "manifest.json"), "utf8"));
+manifest.version = version;
 manifest.tools = tools;
 writeFileSync(resolve(staging, "manifest.json"), JSON.stringify(manifest, null, 2));
 console.log(`Found ${tools.length} tools.`);

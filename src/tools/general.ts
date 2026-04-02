@@ -1,6 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { createRequire } from "module";
+
+const { version } = createRequire(import.meta.url)("../../package.json");
 
 export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
   // Get server status
@@ -16,7 +19,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
       const statusInfo = {
         server: {
           name: "obs-mcp",
-          version: "1.0.1",
+          version,
           status: "running"
         },
         obs: {

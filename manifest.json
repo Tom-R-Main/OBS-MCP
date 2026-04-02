@@ -2,7 +2,6 @@
   "manifest_version": "0.3",
   "name": "obs-mcp",
   "display_name": "OBS Studio",
-  "version": "1.0.1",
   "description": "Control OBS Studio via MCP — manage scenes, sources, recording, streaming and more",
   "long_description": "Connects Claude to OBS Studio through the OBS WebSocket protocol (v5). Allows you to control scenes, sources, recording, streaming, filters, transitions, and other OBS features directly from Claude.\n\n**Requirements:**\n- OBS Studio 28+ with WebSocket Server enabled (`Tools → WebSocket Server Settings`)",
   "icon": "icon.png",
