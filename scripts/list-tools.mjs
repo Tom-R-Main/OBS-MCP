@@ -11,16 +11,15 @@ export async function listTools(root) {
   };
 
   const server = new McpServer({ name: "obs-mcp", version: "1.0.0" });
-  const tools = [];
-  const orig = server.tool.bind(server);
-  server.tool = (name, description, ...rest) => {
-    tools.push({ name, description });
-    return orig(name, description, ...rest);
-  };
 
   const { initialize } = await import(pathToFileURL(resolve(root, "build/tools/index.js")).href);
   await initialize(server, mockClient);
-  return tools;
+
+  return Object.entries(server._registeredTools).map(([name, tool]) => ({
+    name,
+    // title: tool.title,
+    description: tool.description,
+  }));
 }
 
 // Allow running directly: node scripts/list-tools.mjs
