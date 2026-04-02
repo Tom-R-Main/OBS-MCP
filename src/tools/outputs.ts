@@ -4,11 +4,13 @@ import { z } from "zod";
 
 export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
   // GetVirtualCamStatus tool
-  server.tool(
+  server.registerTool(
     "obs-get-virtual-cam-status",
-    "Gets the status of the virtualcam output",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Virtual Camera Status",
+      description: "Gets the status of the virtualcam output",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const response = await client.sendRequest("GetVirtualCamStatus");
@@ -35,11 +37,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // ToggleVirtualCam tool
-  server.tool(
+  server.registerTool(
     "obs-toggle-virtual-cam",
-    "Toggles the state of the virtualcam output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Toggle Virtual Camera",
+      description: "Toggles the state of the virtualcam output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         const response = await client.sendRequest("ToggleVirtualCam");
@@ -66,11 +70,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StartVirtualCam tool
-  server.tool(
+  server.registerTool(
     "obs-start-virtual-cam",
-    "Starts the virtualcam output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Start Virtual Camera",
+      description: "Starts the virtualcam output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("StartVirtualCam");
@@ -97,11 +103,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StopVirtualCam tool
-  server.tool(
+  server.registerTool(
     "obs-stop-virtual-cam",
-    "Stops the virtualcam output",
-    {},
-    { destructiveHint: false, idempotentHint: true },
+    {
+      title: "Stop Virtual Camera",
+      description: "Stops the virtualcam output",
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
     async () => {
       try {
         await client.sendRequest("StopVirtualCam");
@@ -128,11 +136,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetReplayBufferStatus tool
-  server.tool(
+  server.registerTool(
     "obs-get-replay-buffer-status",
-    "Gets the status of the replay buffer output",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Replay Buffer Status",
+      description: "Gets the status of the replay buffer output",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const response = await client.sendRequest("GetReplayBufferStatus");
@@ -159,11 +169,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // ToggleReplayBuffer tool
-  server.tool(
+  server.registerTool(
     "obs-toggle-replay-buffer",
-    "Toggles the state of the replay buffer output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Toggle Replay Buffer",
+      description: "Toggles the state of the replay buffer output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         const response = await client.sendRequest("ToggleReplayBuffer");
@@ -190,11 +202,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StartReplayBuffer tool
-  server.tool(
+  server.registerTool(
     "obs-start-replay-buffer",
-    "Starts the replay buffer output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Start Replay Buffer",
+      description: "Starts the replay buffer output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("StartReplayBuffer");
@@ -221,11 +235,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StopReplayBuffer tool
-  server.tool(
+  server.registerTool(
     "obs-stop-replay-buffer",
-    "Stops the replay buffer output",
-    {},
-    { destructiveHint: false, idempotentHint: true },
+    {
+      title: "Stop Replay Buffer",
+      description: "Stops the replay buffer output",
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
     async () => {
       try {
         await client.sendRequest("StopReplayBuffer");
@@ -252,11 +268,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SaveReplayBuffer tool
-  server.tool(
+  server.registerTool(
     "obs-save-replay-buffer",
-    "Saves the contents of the replay buffer output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Save Replay Buffer",
+      description: "Saves the contents of the replay buffer output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("SaveReplayBuffer");
@@ -283,11 +301,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetLastReplayBufferReplay tool
-  server.tool(
+  server.registerTool(
     "obs-get-last-replay-buffer-replay",
-    "Gets the filename of the last replay buffer save file",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Last Replay Buffer File",
+      description: "Gets the filename of the last replay buffer save file",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const response = await client.sendRequest("GetLastReplayBufferReplay");
@@ -314,11 +334,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetOutputList tool
-  server.tool(
+  server.registerTool(
     "obs-get-output-list",
-    "Gets the list of available outputs",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Output List",
+      description: "Gets the list of available outputs",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const response = await client.sendRequest("GetOutputList");
@@ -345,13 +367,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetOutputStatus tool
-  server.tool(
+  server.registerTool(
     "obs-get-output-status",
-    "Gets the status of an output",
     {
-      outputName: z.string().describe("Output name")
+      title: "Get Output Status",
+      description: "Gets the status of an output",
+      inputSchema: {
+        outputName: z.string().describe("Output name")
+      },
+      annotations: { readOnlyHint: true },
     },
-    { readOnlyHint: true },
     async ({ outputName }) => {
       try {
         const response = await client.sendRequest("GetOutputStatus", { outputName });
@@ -378,13 +403,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // ToggleOutput tool
-  server.tool(
+  server.registerTool(
     "obs-toggle-output",
-    "Toggles the status of an output",
     {
-      outputName: z.string().describe("Output name")
+      title: "Toggle Output",
+      description: "Toggles the status of an output",
+      inputSchema: {
+        outputName: z.string().describe("Output name")
+      },
+      annotations: { destructiveHint: false, idempotentHint: false },
     },
-    { destructiveHint: false, idempotentHint: false },
     async ({ outputName }) => {
       try {
         const response = await client.sendRequest("ToggleOutput", { outputName });
@@ -411,13 +439,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StartOutput tool
-  server.tool(
+  server.registerTool(
     "obs-start-output",
-    "Starts an output",
     {
-      outputName: z.string().describe("Output name")
+      title: "Start Output",
+      description: "Starts an output",
+      inputSchema: {
+        outputName: z.string().describe("Output name")
+      },
+      annotations: { destructiveHint: false, idempotentHint: false },
     },
-    { destructiveHint: false, idempotentHint: false },
     async ({ outputName }) => {
       try {
         await client.sendRequest("StartOutput", { outputName });
@@ -444,13 +475,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StopOutput tool
-  server.tool(
+  server.registerTool(
     "obs-stop-output",
-    "Stops an output",
     {
-      outputName: z.string().describe("Output name")
+      title: "Stop Output",
+      description: "Stops an output",
+      inputSchema: {
+        outputName: z.string().describe("Output name")
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
-    { destructiveHint: false, idempotentHint: true },
     async ({ outputName }) => {
       try {
         await client.sendRequest("StopOutput", { outputName });
@@ -477,13 +511,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetOutputSettings tool
-  server.tool(
+  server.registerTool(
     "obs-get-output-settings",
-    "Gets the settings of an output",
     {
-      outputName: z.string().describe("Output name")
+      title: "Get Output Settings",
+      description: "Gets the settings of an output",
+      inputSchema: {
+        outputName: z.string().describe("Output name")
+      },
+      annotations: { readOnlyHint: true },
     },
-    { readOnlyHint: true },
     async ({ outputName }) => {
       try {
         const response = await client.sendRequest("GetOutputSettings", { outputName });
@@ -510,14 +547,17 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SetOutputSettings tool
-  server.tool(
+  server.registerTool(
     "obs-set-output-settings",
-    "Sets the settings of an output",
     {
-      outputName: z.string().describe("Output name"),
-      outputSettings: z.record(z.any()).describe("Output settings")
+      title: "Set Output Settings",
+      description: "Sets the settings of an output",
+      inputSchema: {
+        outputName: z.string().describe("Output name"),
+        outputSettings: z.record(z.any()).describe("Output settings")
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
-    { destructiveHint: false, idempotentHint: true },
     async ({ outputName, outputSettings }) => {
       try {
         await client.sendRequest("SetOutputSettings", { outputName, outputSettings });

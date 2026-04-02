@@ -4,21 +4,24 @@ import { z } from "zod";
 
 export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
   // GetSourceActive tool
-  server.tool(
+  server.registerTool(
     "obs-get-source-active",
-    "Gets the active and show state of a source",
     {
-      sourceName: z.string().optional().describe("Name of the source to get the active state of"),
-      sourceUuid: z.string().optional().describe("UUID of the source to get the active state of")
+      title: "Get Source Active State",
+      description: "Gets the active and show state of a source",
+      inputSchema: {
+        sourceName: z.string().optional().describe("Name of the source to get the active state of"),
+        sourceUuid: z.string().optional().describe("UUID of the source to get the active state of")
+      },
+      annotations: { readOnlyHint: true },
     },
-    { readOnlyHint: true },
     async ({ sourceName, sourceUuid }) => {
       try {
         const response = await client.sendRequest("GetSourceActive", {
           sourceName,
           sourceUuid
         });
-        
+
         return {
           content: [
             {
@@ -42,18 +45,21 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetSourceScreenshot tool
-  server.tool(
+  server.registerTool(
     "obs-get-source-screenshot",
-    "Gets a Base64-encoded screenshot of a source",
     {
-      sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
-      sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
-      imageFormat: z.string().describe("Image compression format to use"),
-      imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
-      imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
-      imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+      title: "Get Source Screenshot",
+      description: "Gets a Base64-encoded screenshot of a source",
+      inputSchema: {
+        sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
+        sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
+        imageFormat: z.string().describe("Image compression format to use"),
+        imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
+        imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
+        imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+      },
+      annotations: { readOnlyHint: true },
     },
-    { readOnlyHint: true },
     async ({ sourceName, sourceUuid, imageFormat, imageWidth, imageHeight, imageCompressionQuality }) => {
       try {
         const response = await client.sendRequest("GetSourceScreenshot", {
@@ -64,7 +70,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
           imageHeight,
           imageCompressionQuality
         });
-        
+
         return {
           content: [
             {
@@ -88,19 +94,22 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SaveSourceScreenshot tool
-  server.tool(
+  server.registerTool(
     "obs-save-source-screenshot",
-    "Saves a screenshot of a source to the filesystem",
     {
-      sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
-      sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
-      imageFormat: z.string().describe("Image compression format to use"),
-      imageFilePath: z.string().describe("Path to save the screenshot file to"),
-      imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
-      imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
-      imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+      title: "Save Source Screenshot",
+      description: "Saves a screenshot of a source to the filesystem",
+      inputSchema: {
+        sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
+        sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
+        imageFormat: z.string().describe("Image compression format to use"),
+        imageFilePath: z.string().describe("Path to save the screenshot file to"),
+        imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
+        imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
+        imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+      },
+      annotations: { destructiveHint: false, idempotentHint: false },
     },
-    { destructiveHint: false, idempotentHint: false },
     async ({ sourceName, sourceUuid, imageFormat, imageFilePath, imageWidth, imageHeight, imageCompressionQuality }) => {
       try {
         await client.sendRequest("SaveSourceScreenshot", {
@@ -112,7 +121,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
           imageHeight,
           imageCompressionQuality
         });
-        
+
         return {
           content: [
             {

@@ -4,11 +4,13 @@ import { z } from "zod";
 
 export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
   // GetRecordStatus tool
-  server.tool(
+  server.registerTool(
     "obs-get-record-status",
-    "Gets the status of the record output",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Record Status",
+      description: "Gets the status of the record output",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const response = await client.sendRequest("GetRecordStatus");
@@ -35,11 +37,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // ToggleRecord tool
-  server.tool(
+  server.registerTool(
     "obs-toggle-record",
-    "Toggles the status of the record output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Toggle Recording",
+      description: "Toggles the status of the record output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         const response = await client.sendRequest("ToggleRecord");
@@ -66,11 +70,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StartRecord tool
-  server.tool(
+  server.registerTool(
     "obs-start-record",
-    "Starts the record output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Start Recording",
+      description: "Starts the record output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("StartRecord");
@@ -97,11 +103,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // StopRecord tool
-  server.tool(
+  server.registerTool(
     "obs-stop-record",
-    "Stops the record output",
-    {},
-    { destructiveHint: false, idempotentHint: true },
+    {
+      title: "Stop Recording",
+      description: "Stops the record output",
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
     async () => {
       try {
         const response = await client.sendRequest("StopRecord");
@@ -128,11 +136,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // ToggleRecordPause tool
-  server.tool(
+  server.registerTool(
     "obs-toggle-record-pause",
-    "Toggles pause on the record output",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Toggle Record Pause",
+      description: "Toggles pause on the record output",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("ToggleRecordPause");
@@ -159,11 +169,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // PauseRecord tool
-  server.tool(
+  server.registerTool(
     "obs-pause-record",
-    "Pauses the record output",
-    {},
-    { destructiveHint: false, idempotentHint: true },
+    {
+      title: "Pause Recording",
+      description: "Pauses the record output",
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
     async () => {
       try {
         await client.sendRequest("PauseRecord");
@@ -190,11 +202,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // ResumeRecord tool
-  server.tool(
+  server.registerTool(
     "obs-resume-record",
-    "Resumes the record output",
-    {},
-    { destructiveHint: false, idempotentHint: true },
+    {
+      title: "Resume Recording",
+      description: "Resumes the record output",
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
     async () => {
       try {
         await client.sendRequest("ResumeRecord");
@@ -221,11 +235,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SplitRecordFile tool
-  server.tool(
+  server.registerTool(
     "obs-split-record-file",
-    "Splits the current file being recorded into a new file",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Split Record File",
+      description: "Splits the current file being recorded into a new file",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("SplitRecordFile");
@@ -252,13 +268,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // CreateRecordChapter tool
-  server.tool(
+  server.registerTool(
     "obs-create-record-chapter",
-    "Adds a new chapter marker to the file currently being recorded",
     {
-      chapterName: z.string().optional().describe("Name of the new chapter")
+      title: "Create Record Chapter",
+      description: "Adds a new chapter marker to the file currently being recorded",
+      inputSchema: {
+        chapterName: z.string().optional().describe("Name of the new chapter")
+      },
+      annotations: { destructiveHint: false, idempotentHint: false },
     },
-    { destructiveHint: false, idempotentHint: false },
     async ({ chapterName }) => {
       try {
         const requestParams: Record<string, any> = {};

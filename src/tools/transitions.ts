@@ -4,11 +4,13 @@ import { z } from "zod";
 
 export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
   // GetTransitionList tool
-  server.tool(
+  server.registerTool(
     "obs-get-transition-list",
-    "Get a list of available transitions in OBS",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Transition List",
+      description: "Get a list of available transitions in OBS",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const transitions = await client.sendRequest("GetTransitionList");
@@ -35,11 +37,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetCurrentTransition tool
-  server.tool(
+  server.registerTool(
     "obs-get-current-transition",
-    "Get the name of the currently active transition",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Current Transition",
+      description: "Get the name of the currently active transition",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const transition = await client.sendRequest("GetCurrentSceneTransition");
@@ -66,13 +70,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SetCurrentTransition tool
-  server.tool(
+  server.registerTool(
     "obs-set-current-transition",
-    "Set the current transition in OBS",
     {
-      transitionName: z.string().describe("The name of the transition to set as current")
+      title: "Set Current Transition",
+      description: "Set the current transition in OBS",
+      inputSchema: {
+        transitionName: z.string().describe("The name of the transition to set as current")
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
-    { destructiveHint: false, idempotentHint: true },
     async ({ transitionName }) => {
       try {
         await client.sendRequest("SetCurrentSceneTransition", { transitionName });
@@ -99,11 +106,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetTransitionDuration tool
-  server.tool(
+  server.registerTool(
     "obs-get-transition-duration",
-    "Get the duration of the current transition in milliseconds",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Transition Duration",
+      description: "Get the duration of the current transition in milliseconds",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const duration = await client.sendRequest("GetCurrentSceneTransitionDuration");
@@ -130,13 +139,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SetTransitionDuration tool
-  server.tool(
+  server.registerTool(
     "obs-set-transition-duration",
-    "Set the duration of the current transition in milliseconds",
     {
-      duration: z.number().min(0).describe("The duration to set in milliseconds")
+      title: "Set Transition Duration",
+      description: "Set the duration of the current transition in milliseconds",
+      inputSchema: {
+        duration: z.number().min(0).describe("The duration to set in milliseconds")
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
-    { destructiveHint: false, idempotentHint: true },
     async ({ duration }) => {
       try {
         await client.sendRequest("SetCurrentSceneTransitionDuration", { transitionDuration: duration });
@@ -163,11 +175,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetTransitionKind tool
-  server.tool(
+  server.registerTool(
     "obs-get-transition-kind",
-    "Get the kind/type of the current transition",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Transition Kind",
+      description: "Get the kind/type of the current transition",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const transition = await client.sendRequest("GetCurrentSceneTransition");
@@ -194,13 +208,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // SetTransitionSettings tool
-  server.tool(
+  server.registerTool(
     "obs-set-transition-settings",
-    "Set the settings of the current transition",
     {
-      transitionSettings: z.record(z.any()).describe("The settings to apply to the transition")
+      title: "Set Transition Settings",
+      description: "Set the settings of the current transition",
+      inputSchema: {
+        transitionSettings: z.record(z.any()).describe("The settings to apply to the transition")
+      },
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
-    { destructiveHint: false, idempotentHint: true },
     async ({ transitionSettings }) => {
       try {
         await client.sendRequest("SetCurrentSceneTransitionSettings", { transitionSettings });
@@ -227,11 +244,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // GetTransitionSettings tool
-  server.tool(
+  server.registerTool(
     "obs-get-transition-settings",
-    "Get the settings of the current transition",
-    {},
-    { readOnlyHint: true },
+    {
+      title: "Get Transition Settings",
+      description: "Get the settings of the current transition",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       try {
         const settings = await client.sendRequest("GetCurrentSceneTransitionSettings");
@@ -258,11 +277,13 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
   );
 
   // TriggerStudioModeTransition tool
-  server.tool(
+  server.registerTool(
     "obs-trigger-transition",
-    "Trigger a scene transition in OBS (Studio Mode must be enabled)",
-    {},
-    { destructiveHint: false, idempotentHint: false },
+    {
+      title: "Trigger Transition",
+      description: "Trigger a scene transition in OBS (Studio Mode must be enabled)",
+      annotations: { destructiveHint: false, idempotentHint: false },
+    },
     async () => {
       try {
         await client.sendRequest("TriggerStudioModeTransition");
