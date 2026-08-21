@@ -27,7 +27,7 @@ The explicit tools remain the normal interface. The generic request tool is ther
 
 ## Requirements
 
-- Node.js 20.17 or newer
+- Node.js 20.19 or newer
 - OBS Studio 28 or newer with the WebSocket server enabled
 - An MCP client that supports MCP 2026-07-28 or the compatible legacy protocol
 

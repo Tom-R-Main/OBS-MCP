@@ -30,7 +30,7 @@
     "url": "https://github.com/Tom-R-Main/OBS-MCP/issues"
   },
   "engines": {
-    "node": ">=20.17"
+    "node": ">=20.19"
   },
   "type": "module",
   "bin": {
