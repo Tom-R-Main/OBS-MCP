@@ -1,8 +1,18 @@
 # OBS MCP
 
+[![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
+
 OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 155 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
+
+## How it works
+
+```text
+MCP client  <-- stdio -->  OBS MCP  <-- WebSocket v5 -->  OBS Studio
+```
+
+OBS MCP runs as a separate Node.js process. It does not patch OBS or require an OBS plugin; it uses the WebSocket server built into OBS Studio. MCP handles tool discovery, schemas, results, and approval hints. OBS WebSocket handles the live application state.
 
 ## What is covered
 
@@ -52,6 +62,14 @@ Then point your MCP client at the built entrypoint:
 
 If OBS uses a non-default address, add `OBS_WEBSOCKET_URL` to the environment block.
 
+## Verify the connection
+
+Open OBS, start a new agent session, and ask:
+
+> Check the OBS connection. Report the OBS version, current scene, stream status, and recording status. Do not change anything.
+
+The client should request only read-only tools and return live values from OBS. If tool discovery works but the prompt reports that OBS is disconnected, leave the MCP server running and start OBS; reconnection happens in the background.
+
 ## Install the MCPB package
 
 Build the desktop package locally:
@@ -77,7 +95,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
 
-## Tool groups
+## Tool surface
 
 The 155 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
@@ -90,6 +108,38 @@ The 155 tools are organized around the OBS protocol rather than a smaller opinio
 - protocol description and the guarded generic request fallback
 
 Tool discovery works without an OBS connection. Calls that need OBS return an MCP error until the WebSocket connection is ready.
+
+## Where it fits
+
+OBS MCP is well suited to operational work that already has a clear outcome: inspecting a scene collection, creating or arranging sources, changing audio state, switching scenes, taking screenshots, checking output status, or carrying out a repeatable recording setup.
+
+It does not replace visual or editorial judgment. Framing, color, transition timing, audio balance, and the decision to go live still need a person watching and listening to the result.
+
+## Safety and approvals
+
+Every tool publishes all four MCP behavior hints. Read-only inspection is separated from state changes, and actions with broader consequences are marked destructive or open-world as appropriate.
+
+Pay particular attention to approvals for tools that:
+
+- start or stop streaming, recording, virtual camera, replay buffer, or another output
+- switch profiles or scene collections
+- trigger hotkeys or interact with OBS UI elements
+- invoke vendor requests
+- save files or use the generic `obs-call-request` fallback
+
+`obs-call-request` accepts only request types in the bundled OBS protocol, but its payload is intentionally generic. It is always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
+
+## Troubleshooting
+
+**Tools appear, but OBS calls fail:** make sure OBS is open and its WebSocket server is enabled. The MCP process stays available while it retries the connection.
+
+**Authentication fails:** copy the password from **Tools > WebSocket Server Settings** into `OBS_WEBSOCKET_PASSWORD`, then restart the MCP server process.
+
+**The agent cannot see the tools:** restart the agent session or the MCP host so it creates a fresh stdio connection and reloads the tool list.
+
+**A request is unsupported:** the connected OBS build did not advertise that WebSocket request. Use an operation supported by that version or update OBS.
+
+**The process exits or emits protocol errors:** inspect stderr. stdout is reserved for MCP traffic and should not be redirected into ordinary application logs.
 
 ## Development
 
@@ -107,6 +157,10 @@ npm run check
 ```
 
 The tests cover the OBS WebSocket handshake and request correlation, concurrent connection attempts, capability gating, exact OBS request parity, deterministic tool discovery, annotations, and both legacy and MCP 2026-07-28 negotiation.
+
+### TypeScript policy
+
+The application builds with TypeScript 7.0.2 and does not import the TypeScript compiler API. If a future generator, linter, or build tool needs programmatic compiler access, keep that tool on TypeScript 6 while the application compiler remains on TypeScript 7. TypeScript 7.0 does not ship a programmatic API; Microsoft documents the side-by-side TypeScript 6 compatibility package in the [TypeScript 7.0 release notes](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6-0).
 
 ## Protocol baselines
 
