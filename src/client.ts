@@ -234,9 +234,20 @@ export class OBSWebSocketClient extends EventEmitter {
     requestData?: unknown,
     timeout = 10_000,
   ): Promise<T> {
+    if (!this.isConnected()) {
+      try {
+        await this.connect();
+      } catch (error) {
+        throw new Error(
+          `Unable to connect to OBS WebSocket server: ${asError(error).message}`,
+          { cause: error },
+        );
+      }
+    }
+
     const socket = this.ws;
-    if (!socket || !this.connected || !this.identified || socket.readyState !== WebSocket.OPEN) {
-      throw new Error("Not connected or identified with OBS WebSocket server");
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      throw new Error("OBS WebSocket connection was not available after connecting");
     }
     if (this.availableRequests && !this.availableRequests.has(requestType)) {
       throw new Error(`OBS WebSocket does not advertise support for request '${requestType}'`);

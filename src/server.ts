@@ -22,8 +22,10 @@ let reconnectTimer: NodeJS.Timeout | null = null;
 let connectionAttempt: Promise<void> | null = null;
 let reconnectAttempts = 0;
 let shuttingDown = false;
+let shutdownPromise: Promise<void> | null = null;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
+const SHUTDOWN_DEADLINE_MS = 1500;
 
 const logger = {
   log: (message: string) => console.error(message),
@@ -116,9 +118,12 @@ export async function startServer(): Promise<void> {
     // Connect in the background so MCP discovery remains available while OBS is offline.
     void attemptOBSConnection();
 
-    // Set up graceful shutdown
-    process.once("SIGINT", handleShutdown);
-    process.once("SIGTERM", handleShutdown);
+    // stdin EOF is the only portable graceful-shutdown signal for stdio MCP
+    // servers. Signals remain useful for terminals and process supervisors.
+    process.stdin.once("end", () => void handleShutdown("stdin end"));
+    process.stdin.once("close", () => void handleShutdown("stdin close"));
+    process.once("SIGINT", () => void handleShutdown("SIGINT"));
+    process.once("SIGTERM", () => void handleShutdown("SIGTERM"));
     
     logger.log("Server startup complete");
     
@@ -133,19 +138,36 @@ export async function startServer(): Promise<void> {
 }
 
 // Handle graceful shutdown
-async function handleShutdown(): Promise<void> {
-  logger.log("Shutting down...");
+function handleShutdown(reason: string): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
+
   shuttingDown = true;
+  shutdownPromise = (async () => {
+    logger.log(`Shutting down after ${reason}...`);
 
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
 
-  obsClient.disconnect();
-  await stdioServer?.close();
-  stdioServer = null;
-  process.exit(0);
+    const deadline = new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, SHUTDOWN_DEADLINE_MS);
+      timer.unref();
+    });
+
+    await Promise.race([
+      Promise.allSettled([
+        obsClient.disconnect(),
+        stdioServer?.close() ?? Promise.resolve(),
+      ]).then(() => undefined),
+      deadline,
+    ]);
+
+    stdioServer = null;
+    process.exit(0);
+  })();
+
+  return shutdownPromise;
 }
 
 export { obsClient };
