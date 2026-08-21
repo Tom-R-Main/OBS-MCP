@@ -1,0 +1,76 @@
+{
+  "name": "obs-mcp",
+  "version": "1.1.1",
+  "description": "Control OBS Studio through a current MCP server",
+  "license": "GPL-2.0-only",
+  "author": {
+    "name": "Thomas Main",
+    "url": "https://github.com/Tom-R-Main"
+  },
+  "contributors": [
+    {
+      "name": "Roy Shilkrot",
+      "url": "https://github.com/royshil"
+    },
+    {
+      "name": "Zeke Sikelianos",
+      "url": "https://github.com/zeke"
+    },
+    {
+      "name": "Jag-k",
+      "url": "https://github.com/jag-k"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tom-R-Main/OBS-MCP.git"
+  },
+  "homepage": "https://github.com/Tom-R-Main/OBS-MCP#readme",
+  "bugs": {
+    "url": "https://github.com/Tom-R-Main/OBS-MCP/issues"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "type": "module",
+  "bin": {
+    "obs-mcp": "./build/index.js"
+  },
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc && chmod 755 build/index.js",
+    "start": "node build/index.js",
+    "pack": "node scripts/pack.mjs",
+    "test": "vitest run",
+    "validate:manifest": "mcpb validate manifest.json",
+    "check": "npm run build && npm test && npm run validate:manifest"
+  },
+  "files": [
+    "build",
+    "src",
+    "scripts",
+    "docs/protocol.json",
+    "tsconfig.json",
+    "manifest.json",
+    "icon.png",
+    "NOTICE.md"
+  ],
+  "dependencies": {
+    "ws": "8.21.3",
+    "zod": "4.4.3",
+    "@modelcontextprotocol/server": "2.0.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "22.20.1",
+    "@types/ws": "8.18.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@anthropic-ai/mcpb": {
+      "@inquirer/prompts": "8.6.0"
+    }
+  }
+}
