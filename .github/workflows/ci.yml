@@ -42,4 +42,4 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
-      - run: npm run pack
+      - run: npm run test:package

@@ -46,7 +46,8 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "test:e2e": "npm run build && npm run test:e2e:run",
     "test:e2e:run": "vitest run --config vitest.e2e.config.ts",
-    "test:package": "vitest run --config vitest.package.config.ts",
+    "test:package": "npm run pack && npm run test:package:run",
+    "test:package:run": "vitest run --config vitest.package.config.ts",
     "test:obs-live": "vitest run --config vitest.live.config.ts --passWithNoTests",
     "validate:manifest": "mcpb validate manifest.json",
     "check": "npm run build && npm run typecheck:test && npm run test:unit && npm run test:e2e:run && npm run validate:manifest"
