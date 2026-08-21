@@ -3,9 +3,9 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
-import WebSocket from 'ws';
-import crypto from 'node:crypto';
-import { EventEmitter } from 'events';
+import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
+import WebSocket from "ws";
 
 const logger = {
   log: (message: string) => console.error(message),
@@ -13,7 +13,6 @@ const logger = {
   debug: (message: string) => console.error(message),
 };
 
-// Define OpCodes
 enum OpCode {
   Hello = 0,
   Identify = 1,
@@ -23,10 +22,9 @@ enum OpCode {
   Request = 6,
   RequestResponse = 7,
   RequestBatch = 8,
-  RequestBatchResponse = 9
+  RequestBatchResponse = 9,
 }
 
-// Define EventSubscription bitmasks
 export enum EventSubscription {
   None = 0,
   General = 1 << 0,
@@ -40,233 +38,156 @@ export enum EventSubscription {
   MediaInputs = 1 << 8,
   Vendors = 1 << 9,
   Ui = 1 << 10,
-  All = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10)
+  Canvases = 1 << 11,
+  All = (1 << 12) - 1,
 }
 
-// Define interfaces for message types
-interface BaseMessage {
-  op: OpCode;
-  d: any;
-}
+type JsonObject = Record<string, unknown>;
+type BaseMessage = { op: number; d: JsonObject };
 
-interface HelloMessage extends BaseMessage {
-  d: {
-    obsStudioVersion: string;
-    obsWebSocketVersion: string;
-    rpcVersion: number;
-    authentication?: {
-      challenge: string;
-      salt: string;
-    };
-  };
-}
+type HelloData = {
+  obsStudioVersion: string;
+  obsWebSocketVersion: string;
+  rpcVersion: number;
+  authentication?: { challenge: string; salt: string };
+};
 
-interface IdentifyMessage extends BaseMessage {
-  d: {
-    rpcVersion: number;
-    authentication?: string;
-    eventSubscriptions: number;
-  };
-}
+type RequestResponseData = {
+  requestType: string;
+  requestId: string;
+  requestStatus: { result: boolean; code: number; comment?: string };
+  responseData?: unknown;
+};
 
-interface IdentifiedMessage extends BaseMessage {
-  d: {
-    negotiatedRpcVersion: number;
-  };
-}
+type EventData = {
+  eventType: string;
+  eventIntent: number;
+  eventData?: unknown;
+};
 
-interface RequestMessage extends BaseMessage {
-  d: {
-    requestType: string;
-    requestId: string;
-    requestData?: any;
-  };
-}
-
-interface RequestResponseMessage extends BaseMessage {
-  d: {
-    requestType: string;
-    requestId: string;
-    requestStatus: {
-      result: boolean;
-      code: number;
-      comment?: string;
-    };
-    responseData?: any;
-  };
-}
-
-interface EventMessage extends BaseMessage {
-  d: {
-    eventType: string;
-    eventIntent: number;
-    eventData?: any;
-  };
-}
-
-interface VersionResponse {
-  obsStudioVersion?: unknown;
+type VersionResponse = {
+  obsVersion?: unknown;
   obsWebSocketVersion?: unknown;
   rpcVersion?: unknown;
   availableRequests?: unknown;
   supportedImageFormats?: unknown;
   platform?: unknown;
   platformDescription?: unknown;
+};
+
+type PendingRequest = {
+  socket: WebSocket;
+  requestType: string;
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timeout: NodeJS.Timeout;
+};
+
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Define the OBS WebSocket client class
+function parseBaseMessage(value: unknown): BaseMessage | null {
+  if (!isObject(value) || typeof value.op !== "number" || !isObject(value.d)) return null;
+  return { op: value.op, d: value.d };
+}
+
+function parseHello(data: JsonObject): HelloData | null {
+  if (
+    typeof data.obsStudioVersion !== "string"
+    || typeof data.obsWebSocketVersion !== "string"
+    || typeof data.rpcVersion !== "number"
+  ) return null;
+
+  let authentication: HelloData["authentication"];
+  if (data.authentication !== undefined) {
+    if (
+      !isObject(data.authentication)
+      || typeof data.authentication.challenge !== "string"
+      || typeof data.authentication.salt !== "string"
+    ) return null;
+    authentication = {
+      challenge: data.authentication.challenge,
+      salt: data.authentication.salt,
+    };
+  }
+
+  return {
+    obsStudioVersion: data.obsStudioVersion,
+    obsWebSocketVersion: data.obsWebSocketVersion,
+    rpcVersion: data.rpcVersion,
+    ...(authentication ? { authentication } : {}),
+  };
+}
+
+function parseRequestResponse(data: JsonObject): RequestResponseData | null {
+  if (
+    typeof data.requestType !== "string"
+    || typeof data.requestId !== "string"
+    || !isObject(data.requestStatus)
+    || typeof data.requestStatus.result !== "boolean"
+    || typeof data.requestStatus.code !== "number"
+    || (data.requestStatus.comment !== undefined && typeof data.requestStatus.comment !== "string")
+  ) return null;
+
+  return {
+    requestType: data.requestType,
+    requestId: data.requestId,
+    requestStatus: {
+      result: data.requestStatus.result,
+      code: data.requestStatus.code,
+      ...(typeof data.requestStatus.comment === "string"
+        ? { comment: data.requestStatus.comment }
+        : {}),
+    },
+    ...(data.responseData === undefined ? {} : { responseData: data.responseData }),
+  };
+}
+
+function parseEvent(data: JsonObject): EventData | null {
+  if (typeof data.eventType !== "string" || typeof data.eventIntent !== "number") return null;
+  return {
+    eventType: data.eventType,
+    eventIntent: data.eventIntent,
+    ...(data.eventData === undefined ? {} : { eventData: data.eventData }),
+  };
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 export class OBSWebSocketClient extends EventEmitter {
   private ws: WebSocket | null = null;
-  private url: string;
-  private password: string | null;
-  private connected: boolean = false;
-  private identified: boolean = false;
+  private readonly url: string;
+  private readonly password: string | null;
+  private connected = false;
+  private identified = false;
   private connectionPromise: Promise<void> | null = null;
   private availableRequests: Set<string> | null = null;
   private versionInfo: VersionResponse | null = null;
-  private pendingRequests: Map<string, { resolve: Function, reject: Function, timeout: NodeJS.Timeout }> = new Map();
+  private readonly pendingRequests = new Map<string, PendingRequest>();
 
-  constructor(url: string = 'ws://localhost:4455', password: string | null = null) {
+  constructor(url = "ws://localhost:4455", password: string | null = null) {
     super();
     this.url = url;
     this.password = password;
   }
 
-  /**
-   * Connect to the OBS WebSocket server
-   */
   public connect(): Promise<void> {
-    if (this.isConnected()) {
-      return Promise.resolve();
-    }
-
-    if (this.connectionPromise) {
-      return this.connectionPromise;
-    }
+    if (this.isConnected()) return Promise.resolve();
+    if (this.connectionPromise) return this.connectionPromise;
 
     this.connectionPromise = this.openConnection().finally(() => {
       this.connectionPromise = null;
     });
-
     return this.connectionPromise;
   }
 
-  private openConnection(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        logger.log(`Attempting to connect to OBS WebSocket at: ${this.url}`);
-        const socket = new WebSocket(this.url);
-        this.ws = socket;
-        let settled = false;
-
-        const connectionTimeout = setTimeout(() => {
-          socket.terminate();
-          finishReject(new Error('WebSocket connection timeout - OBS may not be running or WebSocket may be disabled'));
-        }, 10000);
-
-        const onHello = async (hello: HelloMessage['d']) => {
-          try {
-            await this.identify(hello);
-            await this.refreshCapabilities();
-            finishResolve();
-          } catch (error) {
-            socket.close();
-            finishReject(error);
-          }
-        };
-
-        const cleanupAttempt = () => {
-          clearTimeout(connectionTimeout);
-          this.off('hello', onHello);
-        };
-
-        const finishResolve = () => {
-          if (settled) return;
-          settled = true;
-          cleanupAttempt();
-          resolve();
-        };
-
-        const finishReject = (error: unknown) => {
-          if (settled) return;
-          settled = true;
-          cleanupAttempt();
-          reject(error instanceof Error ? error : new Error(String(error)));
-        };
-
-        this.once('hello', onHello);
-
-        socket.on('open', () => {
-          this.connected = true;
-          logger.log('WebSocket connection opened successfully');
-        });
-
-        socket.on('message', (data: WebSocket.Data) => {
-          try {
-            const message = JSON.parse(data.toString()) as BaseMessage;
-            this.handleMessage(message);
-          } catch (error) {
-            logger.error(`Error parsing message: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        });
-
-        socket.on('close', (code: number, reason: Buffer) => {
-          const reasonStr = reason.toString() || 'No reason provided';
-          logger.log(`WebSocket connection closed with code ${code}: ${reasonStr}`);
-
-          if (this.ws === socket) {
-            this.ws = null;
-            this.connected = false;
-            this.identified = false;
-            this.availableRequests = null;
-            this.versionInfo = null;
-            this.emit('disconnected');
-          }
-
-          finishReject(new Error(`WebSocket connection closed before identification: ${reasonStr}`));
-
-          // Clear all pending requests
-          this.pendingRequests.forEach((request) => {
-            clearTimeout(request.timeout);
-            request.reject(new Error(`WebSocket connection closed: ${reasonStr}`));
-          });
-          this.pendingRequests.clear();
-        });
-
-        socket.on('error', (error) => {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.error(`WebSocket connection error: ${errorMessage}`);
-          
-          // Provide more specific error information
-          if (errorMessage.includes('ECONNREFUSED')) {
-            logger.error('Connection refused. Make sure OBS Studio is running and WebSocket is enabled.');
-            logger.error('Check that the WebSocket port (default: 4455) is not blocked by firewall.');
-          } else if (errorMessage.includes('ENOTFOUND')) {
-            logger.error('Host not found. Check the OBS_WEBSOCKET_URL environment variable.');
-          } else if (errorMessage.includes('ETIMEDOUT')) {
-            logger.error('Connection timed out. Check network connectivity and firewall settings.');
-          }
-          
-          finishReject(error);
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to create WebSocket connection: ${errorMessage}`);
-        reject(error);
-      }
-    });
-  }
-
-  /**
-   * Check if the client is connected and identified
-   */
   public isConnected(): boolean {
     return this.connected && this.identified;
   }
 
-  /**
-   * Get connection status information
-   */
   public getConnectionStatus(): {
     connected: boolean;
     identified: boolean;
@@ -289,226 +210,355 @@ export class OBSWebSocketClient extends EventEmitter {
     return this.availableRequests?.has(requestType) ?? null;
   }
 
-  /**
-   * Disconnect from the OBS WebSocket server
-   */
-  public disconnect(): void {
+  public disconnect(): Promise<void> {
     const socket = this.ws;
+    if (!socket) return Promise.resolve();
+
     this.ws = null;
-    this.connected = false;
-    this.identified = false;
-    this.availableRequests = null;
-    this.versionInfo = null;
-    socket?.close();
+    this.resetConnectionState();
+    this.rejectPendingForSocket(socket, new Error("Disconnected from OBS WebSocket server"));
+
+    if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      socket.once("close", resolve);
+      try {
+        socket.close();
+      } catch {
+        socket.terminate();
+      }
+    });
   }
 
-  /**
-   * Send a request to the OBS WebSocket server
-   */
-  public async sendRequest<T = any>(requestType: string, requestData?: any, timeout: number = 10000): Promise<T> {
-    if (!this.ws || !this.connected || !this.identified) {
-      throw new Error('Not connected or identified with OBS WebSocket server');
+  public async sendRequest<T = any>(
+    requestType: string,
+    requestData?: unknown,
+    timeout = 10_000,
+  ): Promise<T> {
+    const socket = this.ws;
+    if (!socket || !this.connected || !this.identified || socket.readyState !== WebSocket.OPEN) {
+      throw new Error("Not connected or identified with OBS WebSocket server");
     }
-
     if (this.availableRequests && !this.availableRequests.has(requestType)) {
       throw new Error(`OBS WebSocket does not advertise support for request '${requestType}'`);
     }
 
     return new Promise<T>((resolve, reject) => {
       const requestId = crypto.randomUUID();
-
       const timeoutId = setTimeout(() => {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending) return;
         this.pendingRequests.delete(requestId);
-        reject(new Error(`Request ${requestType} timed out after ${timeout}ms`));
+        pending.reject(new Error(`Request ${requestType} timed out after ${timeout}ms`));
       }, timeout);
 
-      this.pendingRequests.set(requestId, {
-        resolve: (data: T) => {
-          clearTimeout(timeoutId);
-          resolve(data);
-        },
-        reject: (error: Error) => {
-          clearTimeout(timeoutId);
-          reject(error);
-        },
-        timeout: timeoutId
-      });
+      const pending: PendingRequest = {
+        socket,
+        requestType,
+        resolve: (value) => resolve(value as T),
+        reject,
+        timeout: timeoutId,
+      };
+      this.pendingRequests.set(requestId, pending);
 
-      const requestMessage: RequestMessage = {
+      const message = {
         op: OpCode.Request,
         d: {
           requestType,
           requestId,
-          requestData
-        }
+          ...(requestData === undefined ? {} : { requestData }),
+        },
       };
 
-      this.ws!.send(JSON.stringify(requestMessage));
+      try {
+        socket.send(JSON.stringify(message), (error) => {
+          if (error) this.rejectPending(requestId, asError(error));
+        });
+      } catch (error) {
+        this.rejectPending(requestId, asError(error));
+      }
     });
   }
 
-  /**
-   * Handle incoming messages from the OBS WebSocket server
-   */
-  private handleMessage(message: BaseMessage): void {
+  private openConnection(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      logger.log(`Attempting to connect to OBS WebSocket at: ${this.url}`);
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(this.url);
+      } catch (error) {
+        reject(asError(error));
+        return;
+      }
+
+      this.ws = socket;
+      let settled = false;
+      let helloHandled = false;
+      const connectionTimeout = setTimeout(() => {
+        finishReject(new Error(
+          "WebSocket connection timeout - OBS may not be running or WebSocket may be disabled",
+        ));
+        socket.terminate();
+      }, 10_000);
+
+      const cleanupAttempt = () => clearTimeout(connectionTimeout);
+      const finishResolve = () => {
+        if (settled) return;
+        settled = true;
+        cleanupAttempt();
+        resolve();
+      };
+      const finishReject = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanupAttempt();
+        reject(asError(error));
+      };
+
+      socket.on("open", () => {
+        if (this.ws !== socket) return;
+        this.connected = true;
+        logger.log("WebSocket connection opened successfully");
+      });
+
+      socket.on("message", (data) => {
+        if (this.ws !== socket) return;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data.toString());
+        } catch (error) {
+          logger.error(`Error parsing message: ${asError(error).message}`);
+          return;
+        }
+
+        const message = parseBaseMessage(parsed);
+        if (!message) {
+          logger.error("Ignoring malformed OBS WebSocket message");
+          return;
+        }
+
+        if (message.op === OpCode.Hello) {
+          const hello = parseHello(message.d);
+          if (!hello) {
+            logger.error("Ignoring malformed OBS Hello message");
+            return;
+          }
+          if (helloHandled) return;
+          helloHandled = true;
+          void this.completeHandshake(socket, hello).then(
+            () => {
+              if (this.ws === socket) finishResolve();
+              else finishReject(new Error("OBS WebSocket connection changed during identification"));
+            },
+            (error: unknown) => {
+              finishReject(error);
+              if (socket.readyState === WebSocket.OPEN) socket.close();
+            },
+          );
+          return;
+        }
+
+        this.handleMessage(socket, message);
+      });
+
+      socket.on("close", (code, reason) => {
+        const reasonText = reason.toString() || "No reason provided";
+        logger.log(`WebSocket connection closed with code ${code}: ${reasonText}`);
+        this.rejectPendingForSocket(
+          socket,
+          new Error(`WebSocket connection closed: ${reasonText}`),
+        );
+
+        if (this.ws === socket) {
+          this.ws = null;
+          this.resetConnectionState();
+          this.emit("disconnected");
+        }
+        finishReject(new Error(`WebSocket connection closed before identification: ${reasonText}`));
+      });
+
+      socket.on("error", (error) => {
+        const message = asError(error).message;
+        logger.error(`WebSocket connection error: ${message}`);
+        if (message.includes("ECONNREFUSED")) {
+          logger.error("Connection refused. Make sure OBS Studio is running and WebSocket is enabled.");
+        } else if (message.includes("ENOTFOUND")) {
+          logger.error("Host not found. Check the OBS_WEBSOCKET_URL environment variable.");
+        } else if (message.includes("ETIMEDOUT")) {
+          logger.error("Connection timed out. Check network connectivity and firewall settings.");
+        }
+        finishReject(error);
+      });
+    });
+  }
+
+  private async completeHandshake(socket: WebSocket, hello: HelloData): Promise<void> {
+    await this.identify(socket, hello);
+    if (this.ws !== socket) throw new Error("OBS WebSocket connection changed during identification");
+    await this.refreshCapabilities(socket);
+  }
+
+  private handleMessage(socket: WebSocket, message: BaseMessage): void {
+    if (this.ws !== socket) return;
     switch (message.op) {
-      case OpCode.Hello:
-        this.emit('hello', (message as HelloMessage).d);
-        break;
-
       case OpCode.Identified:
+        if (typeof message.d.negotiatedRpcVersion !== "number") {
+          logger.error("Ignoring malformed OBS Identified message");
+          return;
+        }
         this.identified = true;
-        this.emit('identified', (message as IdentifiedMessage).d);
+        this.emit("identified", socket);
         break;
-
-      case OpCode.RequestResponse:
-        this.handleRequestResponse(message as RequestResponseMessage);
+      case OpCode.RequestResponse: {
+        const response = parseRequestResponse(message.d);
+        if (response) this.handleRequestResponse(socket, response);
+        else logger.error("Ignoring malformed OBS request response");
         break;
-
-      case OpCode.Event:
-        this.handleEvent(message as EventMessage);
+      }
+      case OpCode.Event: {
+        const event = parseEvent(message.d);
+        if (event) this.handleEvent(event);
+        else logger.error("Ignoring malformed OBS event");
         break;
-
+      }
       default:
         logger.debug(`Unhandled message type: ${message.op}`);
-        break;
     }
   }
 
-  /**
-   * Handle request responses from the OBS WebSocket server
-   */
-  private handleRequestResponse(message: RequestResponseMessage): void {
-    const { requestId, requestStatus, responseData } = message.d;
-    const pendingRequest = this.pendingRequests.get(requestId);
+  private handleRequestResponse(socket: WebSocket, response: RequestResponseData): void {
+    const pending = this.pendingRequests.get(response.requestId);
+    if (!pending || pending.socket !== socket) return;
+    this.pendingRequests.delete(response.requestId);
+    clearTimeout(pending.timeout);
 
-    if (pendingRequest) {
-      this.pendingRequests.delete(requestId);
-
-      if (requestStatus.result) {
-        pendingRequest.resolve(responseData || {});
-      } else {
-        const errorMessage = `Request failed: ${requestStatus.code} ${requestStatus.comment || ''}`;
-        pendingRequest.reject(new Error(errorMessage));
-      }
-    }
-  }
-
-  /**
-   * Handle events from the OBS WebSocket server
-   */
-  private handleEvent(message: EventMessage): void {
-    const { eventType, eventData } = message.d;
-    this.emit('event', eventType, eventData);
-    this.emit(eventType, eventData);
-  }
-
-  /**
-   * Identify with the OBS WebSocket server
-   */
-  private async identify(hello: HelloMessage['d']): Promise<void> {
-    if (!this.ws || !this.connected) {
-      throw new Error('Not connected to OBS WebSocket server');
+    if (response.requestStatus.result) {
+      pending.resolve(response.responseData ?? {});
+      return;
     }
 
-    logger.log(`Received hello from OBS WebSocket v${hello.obsWebSocketVersion} (OBS v${hello.obsStudioVersion})`);
-    logger.log(`RPC Version: ${hello.rpcVersion}`);
+    const comment = response.requestStatus.comment ? `: ${response.requestStatus.comment}` : "";
+    pending.reject(new Error(
+      `OBS request ${response.requestType} failed with code ${response.requestStatus.code}${comment}`,
+    ));
+  }
+
+  private handleEvent(event: EventData): void {
+    this.emit("event", event.eventType, event.eventData);
+    this.emit(event.eventType, event.eventData);
+  }
+
+  private identify(socket: WebSocket, hello: HelloData): Promise<void> {
+    if (this.ws !== socket || !this.connected) {
+      return Promise.reject(new Error("Not connected to OBS WebSocket server"));
+    }
+
+    logger.log(
+      `Received hello from OBS WebSocket v${hello.obsWebSocketVersion} (OBS v${hello.obsStudioVersion})`,
+    );
 
     let authentication: string | undefined;
-
-    // Handle authentication if required
-    if (hello.authentication && this.password) {
-      logger.log('Authentication required, generating auth string...');
+    if (hello.authentication) {
+      if (!this.password) {
+        return Promise.reject(new Error(
+          "Password required for authentication but not provided. Set OBS_WEBSOCKET_PASSWORD environment variable.",
+        ));
+      }
       authentication = this.generateAuthenticationString(
         this.password,
         hello.authentication.salt,
-        hello.authentication.challenge
+        hello.authentication.challenge,
       );
-    } else if (hello.authentication && !this.password) {
-      const errorMsg = 'Password required for authentication but not provided. Set OBS_WEBSOCKET_PASSWORD environment variable.';
-      logger.error(errorMsg);
-      throw new Error(errorMsg);
-    } else if (!hello.authentication) {
-      logger.log('No authentication required');
     }
 
-    const identifyMessage: IdentifyMessage = {
+    const identifyMessage = {
       op: OpCode.Identify,
       d: {
         rpcVersion: hello.rpcVersion,
         eventSubscriptions: EventSubscription.All,
-      }
+        ...(authentication ? { authentication } : {}),
+      },
     };
 
-    if (authentication) {
-      identifyMessage.d.authentication = authentication;
-    }
-
     return new Promise<void>((resolve, reject) => {
-      const onIdentified = () => {
-        clearTimeout(timeoutId);
-        logger.log('Successfully identified with OBS WebSocket server');
+      const cleanup = () => {
+        clearTimeout(timeout);
+        this.off("identified", onIdentified);
+        socket.off("close", onClose);
+      };
+      const onIdentified = (identifiedSocket: WebSocket) => {
+        if (identifiedSocket !== socket) return;
+        cleanup();
         resolve();
       };
+      const onClose = () => {
+        cleanup();
+        reject(new Error("WebSocket closed during identification"));
+      };
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("Identification timed out - OBS may be unresponsive or authentication failed"));
+      }, 5_000);
 
-      // Set a timeout for identification
-      const timeoutId = setTimeout(() => {
-        this.off('identified', onIdentified);
-        const errorMsg = 'Identification timed out - OBS may be unresponsive or authentication failed';
-        logger.error(errorMsg);
-        reject(new Error(errorMsg));
-      }, 5000);
-
-      this.once('identified', onIdentified);
-
-      // Send the Identify message
-      logger.log('Sending identify message...');
+      this.on("identified", onIdentified);
+      socket.once("close", onClose);
       try {
-        this.ws!.send(JSON.stringify(identifyMessage));
+        socket.send(JSON.stringify(identifyMessage), (error) => {
+          if (!error) return;
+          cleanup();
+          reject(asError(error));
+        });
       } catch (error) {
-        clearTimeout(timeoutId);
-        this.off('identified', onIdentified);
-        reject(error);
+        cleanup();
+        reject(asError(error));
       }
     });
   }
 
-  private async refreshCapabilities(): Promise<void> {
+  private async refreshCapabilities(socket: WebSocket): Promise<void> {
     try {
-      const versionInfo = await this.sendRequest<VersionResponse>('GetVersion');
+      const versionInfo = await this.sendRequest<VersionResponse>("GetVersion");
+      if (this.ws !== socket) return;
       this.versionInfo = versionInfo;
-
-      if (Array.isArray(versionInfo.availableRequests)) {
-        this.availableRequests = new Set(
-          versionInfo.availableRequests.filter(
-            (requestType): requestType is string => typeof requestType === 'string',
-          ),
-        );
-      }
+      this.availableRequests = Array.isArray(versionInfo.availableRequests)
+        ? new Set(versionInfo.availableRequests.filter(
+          (requestType): requestType is string => typeof requestType === "string",
+        ))
+        : null;
     } catch (error) {
-      logger.error(`Unable to read OBS WebSocket capabilities: ${error instanceof Error ? error.message : String(error)}`);
+      if (this.ws !== socket) return;
+      logger.error(`Unable to read OBS WebSocket capabilities: ${asError(error).message}`);
       this.availableRequests = null;
       this.versionInfo = null;
     }
   }
 
-  /**
-   * Generate authentication string for OBS WebSocket
-   */
+  private rejectPending(requestId: string, error: Error): void {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) return;
+    this.pendingRequests.delete(requestId);
+    clearTimeout(pending.timeout);
+    pending.reject(error);
+  }
+
+  private rejectPendingForSocket(socket: WebSocket, error: Error): void {
+    for (const [requestId, pending] of this.pendingRequests) {
+      if (pending.socket !== socket) continue;
+      this.pendingRequests.delete(requestId);
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+  }
+
+  private resetConnectionState(): void {
+    this.connected = false;
+    this.identified = false;
+    this.availableRequests = null;
+    this.versionInfo = null;
+  }
+
   private generateAuthenticationString(password: string, salt: string, challenge: string): string {
-    // Create SHA256 Base64 encoded secret
-    const secretBytes = crypto.createHash('sha256')
-      .update(password + salt)
-      .digest();
-    const secret = secretBytes.toString('base64');
-
-    // Create authentication string
-    const authBytes = crypto.createHash('sha256')
-      .update(secret + challenge)
-      .digest();
-    const authentication = authBytes.toString('base64');
-
-    return authentication;
+    const secret = crypto.createHash("sha256").update(password + salt).digest("base64");
+    return crypto.createHash("sha256").update(secret + challenge).digest("base64");
   }
 }
 

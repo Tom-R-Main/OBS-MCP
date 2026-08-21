@@ -41,9 +41,14 @@
     "build": "tsc && chmod 755 build/index.js",
     "start": "node build/index.js",
     "pack": "node scripts/pack.mjs",
-    "test": "vitest run",
+    "test": "npm run test:unit",
+    "typecheck:test": "tsc -p tsconfig.test.json",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts --passWithNoTests",
+    "test:package": "vitest run --config vitest.package.config.ts",
+    "test:obs-live": "vitest run --config vitest.live.config.ts --passWithNoTests",
     "validate:manifest": "mcpb validate manifest.json",
-    "check": "npm run build && npm test && npm run validate:manifest"
+    "check": "npm run build && npm run typecheck:test && npm run test:unit && npm run test:e2e && npm run validate:manifest"
   },
   "files": [
     "build",

@@ -40,7 +40,8 @@ describe("pinned OBS WebSocket protocol", () => {
         /requestType:\s*"([^"]+)"/g,
       ]) {
         for (const match of source.matchAll(pattern)) {
-          wrappedRequests.add(match[1]);
+          const requestType = match[1];
+          if (requestType) wrappedRequests.add(requestType);
         }
       }
     }

@@ -9,9 +9,7 @@
 import { startServer } from "./server.js";
 
 const logger = {
-  log: (message: string) => console.log(message),
   error: (message: string) => console.error(message),
-  debug: (message: string) => console.debug(message),
 };
 
 // Set up better error handling
