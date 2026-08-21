@@ -2,21 +2,21 @@
   "manifest_version": "0.4",
   "name": "obs-mcp",
   "version": "1.1.1",
-  "display_name": "OBS Studio",
-  "description": "Control OBS Studio via MCP — manage scenes, sources, recording, streaming and more",
-  "long_description": "Connects Claude to OBS Studio through the OBS WebSocket protocol (v5). Allows you to control scenes, sources, recording, streaming, filters, transitions, and other OBS features directly from Claude.\n\n**Requirements:**\n- OBS Studio 28+ with WebSocket Server enabled (`Tools → WebSocket Server Settings`)",
+  "display_name": "OBS MCP",
+  "description": "Control OBS Studio through 155 current, annotated MCP tools",
+  "long_description": "OBS MCP connects compatible MCP clients to OBS Studio through the built-in WebSocket v5 server. It covers the synchronized OBS request surface for scenes, sources, audio, filters, transitions, recording, streaming, canvases, and configuration. Tool discovery remains available while OBS is offline, and the server reconnects in the background.\n\nRequirements:\n- Node.js 20.17 or newer\n- OBS Studio 28 or newer with WebSocket Server enabled under Tools > WebSocket Server Settings",
   "icon": "icon.png",
   "author": {
-    "name": "Roy Shilkrot",
-    "url": "https://github.com/royshil"
+    "name": "Thomas Main",
+    "url": "https://github.com/Tom-R-Main"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/royshil/obs-mcp"
+    "url": "https://github.com/Tom-R-Main/OBS-MCP"
   },
-  "homepage": "https://github.com/royshil/obs-mcp",
-  "documentation": "https://github.com/royshil/obs-mcp#readme",
-  "support": "https://github.com/royshil/obs-mcp/issues",
+  "homepage": "https://github.com/Tom-R-Main/OBS-MCP",
+  "documentation": "https://github.com/Tom-R-Main/OBS-MCP#readme",
+  "support": "https://github.com/Tom-R-Main/OBS-MCP/issues",
   "license": "GPL-2.0-only",
   "tools_generated": true,
   "keywords": ["obs", "streaming", "recording", "video", "broadcast", "scenes"],
