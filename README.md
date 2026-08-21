@@ -19,6 +19,8 @@ OBS MCP runs as a separate Node.js process. It does not patch OBS or require an 
 - All 147 request types in the OBS WebSocket protocol revision pinned by the current OBS Studio source tree
 - Explicit read-only, destructive, idempotent, and open-world annotations on every tool
 - Runtime capability checks against the requests advertised by the connected OBS instance
+- Structured MCP results for automation, with readable text retained for people and older clients
+- Source screenshots returned as MCP image content instead of clipped base64 text
 - Protocol inspection through `obs-describe-request`
 - A generic `obs-call-request` escape hatch, limited to requests in the bundled OBS protocol and marked destructive for client approval
 - A reproducible `.mcpb` build with its tool inventory generated through MCP rather than private SDK internals
@@ -92,6 +94,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | --- | --- | --- | --- |
 | `OBS_WEBSOCKET_URL` | No | `ws://localhost:4455` | Address of the OBS WebSocket server |
 | `OBS_WEBSOCKET_PASSWORD` | Only when OBS authentication is enabled | None | Password configured in OBS |
+| `OBS_MCP_MAX_SCREENSHOT_BYTES` | No | `4194304` | Maximum decoded size of a screenshot returned through MCP; the hard ceiling is 6 MiB |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
 
@@ -143,20 +146,45 @@ Pay particular attention to approvals for tools that:
 
 ## Development
 
+Install the pinned dependencies, then run the complete hermetic gate:
+
 ```bash
 npm ci
-npm run build
-npm test
-npm run validate:manifest
-```
-
-Run the complete local gate with:
-
-```bash
 npm run check
 ```
 
-The tests cover the OBS WebSocket handshake and request correlation, concurrent connection attempts, capability gating, exact OBS request parity, deterministic tool discovery, annotations, and both legacy and MCP 2026-07-28 negotiation.
+This does not require OBS. It builds with TypeScript 7, type-checks the tests, runs the unit suite, starts the compiled stdio server against a fake OBS WebSocket endpoint, exercises modern and legacy MCP clients, and validates the manifest. The end-to-end cases cover connection recovery, request routing, clean EOF and signal shutdown, structured results, bounded screenshot payloads, and session survival after a rejected screenshot.
+
+Test the file users will actually install with:
+
+```bash
+npm run test:package
+```
+
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 155 tool definitions, and calls the extracted server through MCP against fake OBS.
+
+### Live OBS tests
+
+The live suite is separate from `npm run check` and CI. By default it is skipped. With OBS open and the standard WebSocket environment variables already available to the process, run the read-only checks with:
+
+```bash
+OBS_MCP_LIVE_TEST=1 npm run test:obs-live
+```
+
+The read-only lane checks the OBS version, scenes, active scene collection, streaming state, and recording state through the compiled MCP stdio server.
+
+There is also a narrowly bounded mutation test. Use a disposable scene collection, select it in OBS first, and make sure streaming and recording are stopped. Then run:
+
+```bash
+OBS_MCP_LIVE_TEST=1 \
+OBS_MCP_LIVE_MUTATION=1 \
+OBS_MCP_LIVE_SCENE_COLLECTION="OBS MCP Test" \
+npm run test:obs-live
+```
+
+The suite refuses to mutate if the selected collection does not exactly match `OBS_MCP_LIVE_SCENE_COLLECTION` or if either output is active. It creates one uniquely named scene and removes it in a `finally` block.
+
+Pull-request CI runs the hermetic gate on Node 20.19, 22, and 24, plus the packaged-artifact smoke test on Node 22. Dependency auditing runs in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
 
 ### TypeScript policy
 
