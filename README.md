@@ -177,8 +177,6 @@ The generated protocol files live under [`docs/`](docs/). Tests compare every re
 
 This project began with [Roy Shilkrot's `obs-mcp`](https://github.com/royshil/obs-mcp), including upstream work by [Zeke Sikelianos](https://github.com/zeke). It also preserves [Jag-k's](https://github.com/jag-k/obs-mcp) MCPB packaging and `registerTool` migration work. Their original commits and authorship remain in the Git history.
 
-OBS MCP is now maintained as an independent repository with its own protocol baseline, test suite, packaging path, and maintenance direction. The attribution above records where the work started without presenting this repository as a GitHub-network fork.
-
 ## License
 
 OBS MCP is licensed under GPL-2.0-only. Published npm and MCPB packages include the corresponding TypeScript source and build scripts. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
