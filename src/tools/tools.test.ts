@@ -47,6 +47,12 @@ describe("MCP tool inventory", () => {
         .toMatchObject({ destructiveHint: true, openWorldHint: true });
       expect(first.tools.find(({ name }) => name === "obs-get-canvas-list")?.annotations)
         .toMatchObject({ readOnlyHint: true, openWorldHint: false });
+
+      const status = await client.callTool({ name: "obs-get-status", arguments: {} });
+      expect(status.structuredContent).toEqual(expect.objectContaining({
+        server: expect.objectContaining({ name: "obs-mcp", status: "running" }),
+        obs: expect.objectContaining({ connected: false }),
+      }));
     } finally {
       await client.close();
       await server.close();

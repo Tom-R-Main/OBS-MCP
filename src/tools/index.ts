@@ -22,24 +22,26 @@ import * as record from "./record.js";
 import * as ui from "./ui.js";
 import * as protocolExtensions from "./protocol-extensions.js";
 import * as protocol from "./protocol.js";
+import { withStructuredToolResults } from "./results.js";
 
 // Export the initialization function for all tools
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
-  general.initialize(server, client);
-  scenes.initialize(server, client);
-  sources.initialize(server, client);
-  sceneItems.initialize(server, client);
-  streaming.initialize(server, client);
-  transitions.initialize(server, client);
-  config.initialize(server, client);
-  filters.initialize(server, client);
-  inputs.initialize(server, client);
-  mediaInputs.initialize(server, client);
-  outputs.initialize(server, client);
-  record.initialize(server, client);
-  ui.initialize(server, client);
-  protocolExtensions.initialize(server, client);
-  protocol.initialize(server, client);
+  const structuredServer = withStructuredToolResults(server);
+  general.initialize(structuredServer, client);
+  scenes.initialize(structuredServer, client);
+  sources.initialize(structuredServer, client);
+  sceneItems.initialize(structuredServer, client);
+  streaming.initialize(structuredServer, client);
+  transitions.initialize(structuredServer, client);
+  config.initialize(structuredServer, client);
+  filters.initialize(structuredServer, client);
+  inputs.initialize(structuredServer, client);
+  mediaInputs.initialize(structuredServer, client);
+  outputs.initialize(structuredServer, client);
+  record.initialize(structuredServer, client);
+  ui.initialize(structuredServer, client);
+  protocolExtensions.initialize(structuredServer, client);
+  protocol.initialize(structuredServer, client);
 }
 
 // Export tool modules

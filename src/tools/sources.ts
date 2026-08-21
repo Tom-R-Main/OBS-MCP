@@ -5,6 +5,7 @@
  */
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
+import { screenshotResult } from "./screenshot.js";
 import { z } from "zod";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
@@ -56,16 +57,20 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-get-source-screenshot",
     {
       title: "Get Source Screenshot",
-      description: "Gets a Base64-encoded screenshot of a source",
+      description: "Gets a source screenshot as MCP image content",
       inputSchema: z.object({
               canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
               sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
               sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
-              imageFormat: z.string().describe("Image compression format to use"),
-              imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
-              imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
-              imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+              imageFormat: z.string().min(1).max(16).describe("Image compression format to use"),
+              imageWidth: z.number().int().min(8).max(4096).optional().describe("Width to scale the screenshot to"),
+              imageHeight: z.number().int().min(8).max(4096).optional().describe("Height to scale the screenshot to"),
+              imageCompressionQuality: z.number().int().min(-1).max(100).optional().describe("Compression quality to use (0-100, -1 for default)")
             }),
+      outputSchema: z.object({
+        mimeType: z.string(),
+        sizeBytes: z.number().int().nonnegative(),
+      }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ canvasUuid, sourceName, sourceUuid, imageFormat, imageWidth, imageHeight, imageCompressionQuality }) => {
@@ -80,14 +85,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
           imageCompressionQuality
         });
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Screenshot data: ${response.imageData.substring(0, 100)}...`
-            }
-          ]
-        };
+        return screenshotResult(response);
       } catch (error) {
         return {
           content: [

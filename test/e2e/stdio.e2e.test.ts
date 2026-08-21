@@ -57,11 +57,16 @@ async function reservePort(): Promise<number> {
   return address.port;
 }
 
-function childEnvironment(obsUrl: string, password?: string): Record<string, string> {
+function childEnvironment(
+  obsUrl: string,
+  password?: string,
+  additional: Record<string, string> = {},
+): Record<string, string> {
   return {
     ...getDefaultEnvironment(),
     OBS_WEBSOCKET_URL: obsUrl,
     ...(password ? { OBS_WEBSOCKET_PASSWORD: password } : {}),
+    ...additional,
   };
 }
 
@@ -77,6 +82,7 @@ async function processIsGone(pid: number): Promise<boolean> {
 async function connectClient(
   fake: FakeOBSServer,
   mode: "modern" | "legacy",
+  environment: Record<string, string> = {},
 ): Promise<{ client: Client; transport: StdioClientTransport; stderr: string[] }> {
   const client = new Client(
     { name: `obs-mcp-${mode}-e2e`, version: "1.0.0" },
@@ -88,7 +94,7 @@ async function connectClient(
     command: process.execPath,
     args: [cliPath],
     cwd: projectRoot,
-    env: childEnvironment(fake.url, fake.password),
+    env: childEnvironment(fake.url, fake.password, environment),
     stderr: "pipe",
   });
   const stderr: string[] = [];
@@ -300,6 +306,53 @@ describe("compiled stdio MCP boundary", () => {
       await vi.waitFor(async () => expect(await processIsGone(pid)).toBe(true));
     }
     await vi.waitFor(() => expect(fake.openConnectionCount).toBe(0));
+  });
+
+  it("returns bounded screenshot image content and remains live after rejection", async () => {
+    const transparentPng =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    const fake = await FakeOBSServer.start({ availableRequests: ["GetSourceScreenshot"] });
+    fakeServers.push(fake);
+    const { client } = await connectClient(fake, "modern", {
+      OBS_MCP_MAX_SCREENSHOT_BYTES: "68",
+    });
+    await waitForObsConnected(client);
+
+    fake.queueSuccess("GetSourceScreenshot", {
+      imageData: `data:image/png;base64,${transparentPng}`,
+    });
+    const screenshot = await client.callTool({
+      name: "obs-get-source-screenshot",
+      arguments: { sourceName: "Program", imageFormat: "png" },
+    });
+    expect(screenshot.isError).not.toBe(true);
+    expect(screenshot.structuredContent).toEqual({ mimeType: "image/png", sizeBytes: 68 });
+    expect(screenshot.content).toContainEqual({
+      type: "image",
+      mimeType: "image/png",
+      data: transparentPng,
+    });
+    expect(textContent(screenshot)).not.toContain(transparentPng);
+
+    fake.queueSuccess("GetSourceScreenshot", {
+      imageData: `data:image/png;base64,${Buffer.alloc(69).toString("base64")}`,
+    });
+    const oversized = await client.callTool({
+      name: "obs-get-source-screenshot",
+      arguments: { sourceName: "Program", imageFormat: "png" },
+    });
+    expect(oversized.isError).toBe(true);
+    expect(textContent(oversized)).toContain("69 bytes; limit is 68 bytes");
+
+    const invalidDimensions = await client.callTool({
+      name: "obs-get-source-screenshot",
+      arguments: { sourceName: "Program", imageFormat: "png", imageWidth: 7 },
+    });
+    expect(invalidDimensions.isError).toBe(true);
+
+    const version = await client.callTool({ name: "obs-get-version", arguments: {} });
+    expect(version.isError).not.toBe(true);
+    expect(version.structuredContent).toEqual(expect.objectContaining({ obsVersion: "32.2.2" }));
   });
 
   it("keeps discovery online and reconnects when fake OBS returns", async () => {
