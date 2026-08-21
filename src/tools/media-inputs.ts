@@ -1,18 +1,18 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetMediaInputStatus tool
   server.registerTool(
     "obs-get-media-input-status",
     {
       title: "Get Media Input Status",
       description: "Gets the status of a media input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the media input")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the media input")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -45,11 +45,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Media Input Cursor",
       description: "Sets the cursor position of a media input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the media input"),
-        mediaCursor: z.number().min(0).describe("New cursor position to set (in milliseconds)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the media input"),
+              mediaCursor: z.number().min(0).describe("New cursor position to set (in milliseconds)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, mediaCursor }) => {
       try {
@@ -82,11 +82,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Offset Media Input Cursor",
       description: "Offsets the current cursor position of a media input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the media input"),
-        mediaCursorOffset: z.number().describe("Value to offset the current cursor position by (in milliseconds)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the media input"),
+              mediaCursorOffset: z.number().describe("Value to offset the current cursor position by (in milliseconds)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ inputName, mediaCursorOffset }) => {
       try {
@@ -119,18 +119,18 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Trigger Media Input Action",
       description: "Triggers an action on a media input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the media input"),
-        mediaAction: z.enum([
-          "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY",
-          "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE",
-          "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP",
-          "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
-          "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_NEXT",
-          "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PREVIOUS"
-        ]).describe("Action to trigger (PLAY, PAUSE, STOP, RESTART, NEXT, PREVIOUS)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the media input"),
+              mediaAction: z.enum([
+                "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY",
+                "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE",
+                "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP",
+                "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART",
+                "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_NEXT",
+                "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PREVIOUS"
+              ]).describe("Action to trigger (PLAY, PAUSE, STOP, RESTART, NEXT, PREVIOUS)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ inputName, mediaAction }) => {
       try {

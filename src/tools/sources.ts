@@ -1,23 +1,25 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetSourceActive tool
   server.registerTool(
     "obs-get-source-active",
     {
       title: "Get Source Active State",
       description: "Gets the active and show state of a source",
-      inputSchema: {
-        sourceName: z.string().optional().describe("Name of the source to get the active state of"),
-        sourceUuid: z.string().optional().describe("UUID of the source to get the active state of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().optional().describe("Name of the source to get the active state of"),
+              sourceUuid: z.string().optional().describe("UUID of the source to get the active state of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, sourceUuid }) => {
+    async ({ canvasUuid, sourceName, sourceUuid }) => {
       try {
         const response = await client.sendRequest("GetSourceActive", {
+          canvasUuid,
           sourceName,
           sourceUuid
         });
@@ -50,19 +52,21 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Source Screenshot",
       description: "Gets a Base64-encoded screenshot of a source",
-      inputSchema: {
-        sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
-        sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
-        imageFormat: z.string().describe("Image compression format to use"),
-        imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
-        imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
-        imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
+              sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
+              imageFormat: z.string().describe("Image compression format to use"),
+              imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
+              imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
+              imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, sourceUuid, imageFormat, imageWidth, imageHeight, imageCompressionQuality }) => {
+    async ({ canvasUuid, sourceName, sourceUuid, imageFormat, imageWidth, imageHeight, imageCompressionQuality }) => {
       try {
         const response = await client.sendRequest("GetSourceScreenshot", {
+          canvasUuid,
           sourceName,
           sourceUuid,
           imageFormat,
@@ -99,20 +103,22 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Save Source Screenshot",
       description: "Saves a screenshot of a source to the filesystem",
-      inputSchema: {
-        sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
-        sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
-        imageFormat: z.string().describe("Image compression format to use"),
-        imageFilePath: z.string().describe("Path to save the screenshot file to"),
-        imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
-        imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
-        imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().optional().describe("Name of the source to take a screenshot of"),
+              sourceUuid: z.string().optional().describe("UUID of the source to take a screenshot of"),
+              imageFormat: z.string().describe("Image compression format to use"),
+              imageFilePath: z.string().describe("Path to save the screenshot file to"),
+              imageWidth: z.number().optional().describe("Width to scale the screenshot to"),
+              imageHeight: z.number().optional().describe("Height to scale the screenshot to"),
+              imageCompressionQuality: z.number().optional().describe("Compression quality to use (0-100, -1 for default)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ sourceName, sourceUuid, imageFormat, imageFilePath, imageWidth, imageHeight, imageCompressionQuality }) => {
+    async ({ canvasUuid, sourceName, sourceUuid, imageFormat, imageFilePath, imageWidth, imageHeight, imageCompressionQuality }) => {
       try {
         await client.sendRequest("SaveSourceScreenshot", {
+          canvasUuid,
           sourceName,
           sourceUuid,
           imageFormat,

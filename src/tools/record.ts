@@ -1,15 +1,15 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetRecordStatus tool
   server.registerTool(
     "obs-get-record-status",
     {
       title: "Get Record Status",
       description: "Gets the status of the record output",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -42,7 +42,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Recording",
       description: "Toggles the status of the record output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -75,7 +75,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Start Recording",
       description: "Starts the record output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -108,7 +108,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Stop Recording",
       description: "Stops the record output",
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -141,7 +141,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Record Pause",
       description: "Toggles pause on the record output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -174,7 +174,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Pause Recording",
       description: "Pauses the record output",
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -207,7 +207,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Resume Recording",
       description: "Resumes the record output",
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -240,7 +240,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Split Record File",
       description: "Splits the current file being recorded into a new file",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -273,14 +273,14 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Create Record Chapter",
       description: "Adds a new chapter marker to the file currently being recorded",
-      inputSchema: {
-        chapterName: z.string().optional().describe("Name of the new chapter")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              chapterName: z.string().optional().describe("Name of the new chapter")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ chapterName }) => {
       try {
-        const requestParams: Record<string, any> = {};
+        const requestParams: Record<string, unknown> = {};
         if (chapterName !== undefined) {
           requestParams.chapterName = chapterName;
         }

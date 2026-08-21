@@ -1,15 +1,15 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetStreamStatus tool
   server.registerTool(
     "obs-get-stream-status",
     {
       title: "Get Stream Status",
       description: "Get the current streaming status",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -42,7 +42,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Start Stream",
       description: "Start streaming in OBS",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async () => {
       try {
@@ -75,7 +75,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Stop Stream",
       description: "Stop streaming in OBS",
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async () => {
       try {
@@ -108,7 +108,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Stream",
       description: "Toggle the streaming state in OBS",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async () => {
       try {
@@ -141,10 +141,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Send Stream Caption",
       description: "Sends CEA-608 caption text over the stream output",
-      inputSchema: {
-        captionText: z.string().describe("Caption text to send")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              captionText: z.string().describe("Caption text to send")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async ({ captionText }) => {
       try {

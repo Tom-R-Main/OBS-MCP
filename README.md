@@ -1,11 +1,14 @@
 # OBS MCP Server
 
-An MCP server for OBS Studio that provides tools to control OBS via the OBS WebSocket protocol.
+An MCP server for OBS Studio that provides 155 annotated tools over the built-in OBS WebSocket protocol.
+
+This branch is synchronized with the OBS Studio `master` protocol snapshot and the released MCP 2026-07-28 specification. Its stdio entrypoint negotiates both modern MCP 2026-07-28 clients and legacy 2025-era clients.
 
 ## Features
 
-- Connect to OBS WebSocket server
-- Control OBS via MCP tools
+- Keeps MCP tool discovery available while OBS is offline and reconnects automatically
+- Covers all 147 request types in the synchronized OBS WebSocket protocol snapshot
+- Includes a safe protocol-description tool and an explicitly destructive generic request fallback for newly added OBS operations
 - Provides tools for:
   - General operations
   - Scene management
@@ -40,20 +43,20 @@ export OBS_WEBSOCKET_PASSWORD="your_password_here"
 }
 ```
 
-4. Use Claude to control your OBS!
+4. Use your MCP client to control OBS.
 
 ## Installation via .mcpb package
 
-You can also install OBS MCP as a `.mcpb` package directly in Claude Desktop — no manual config needed.
-Download the latest `obs-studio.mcpb` from the [releases page](https://github.com/royshil/obs-mcp/releases) and open it with Claude Desktop.
+You can also install OBS MCP as a `.mcpb` package directly in a compatible desktop client. Build `dist/obs-studio.mcpb` from this branch using the command below; a release artifact has not yet been published for this fork.
 
 ## Development
 
-If you want to run the server locally using the code in this git repo, you can do the following:
+Install dependencies, verify the project, and run the server:
 
 
 ```bash
-npm run build
+npm ci
+npm run check
 npm run start
 ```
 
@@ -82,18 +85,19 @@ npm run build
 npm run pack  # → dist/obs-studio.mcpb
 ```
 
-`npm run pack` automatically collects package version and the full tool list from the built server and injects it into `manifest.json` before packing.
+`npm run pack` builds the project, collects the public tool list through MCP, installs production-only dependencies in an isolated staging directory, validates the manifest, and produces the package without retaining staging files.
 
 ## Available Tools
 
 The server provides tools organized by category:
 
-- General tools: Version info, stats, hotkeys, studio mode
+- General tools: Version info, stats, hotkeys, studio mode, protocol introspection
 - Scene tools: List scenes, switch scenes, create/remove scenes
 - Source tools: Manage sources, settings, audio levels, mute/unmute
 - Scene item tools: Manage items in scenes (position, visibility, etc.)
 - Streaming tools: Start/stop streaming, recording, virtual camera
 - Transition tools: Set transitions, durations, trigger transitions
+- Canvas, audio-track, deinterlace, group, source, and scene-item operations from the current OBS protocol
 
 ## Environment Variables
 
@@ -102,9 +106,17 @@ The server provides tools organized by category:
 
 ## Requirements
 
-- Node.js 16+
-- OBS Studio 31+ with WebSocket server enabled
-- Claude desktop
+- Node.js 20.17+
+- OBS Studio 28+ with WebSocket server enabled; current protocol additions require an OBS build that advertises those requests
+- An MCP 2026-07-28 or compatible legacy MCP client
+
+## Protocol Baselines
+
+- MCP SDK: modular `@modelcontextprotocol/server` and `@modelcontextprotocol/client` 2.0.0, implementing MCP 2026-07-28
+- MCP specification checkout: [`cbd57657`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/cbd57657ec769b942263a5251afc05959fc4ce58)
+- OBS Studio checkout: [`0043697f`](https://github.com/obsproject/obs-studio/commit/0043697fc59d791b95b3495dfa1fe180b395966f)
+- OBS WebSocket protocol: generated from the checkout's pinned [`1ef34bf4`](https://github.com/obsproject/obs-websocket/commit/1ef34bf48110c2a18184e50e41cd0b1a855e2147) revision
+- Unsupported OBS requests are capability-gated at runtime with a descriptive error
 
 ## License
 

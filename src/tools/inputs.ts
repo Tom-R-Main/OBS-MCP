@@ -1,22 +1,22 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetInputList tool
   server.registerTool(
     "obs-get-input-list",
     {
       title: "Get Input List",
       description: "Gets an array of all inputs in OBS",
-      inputSchema: {
-        inputKind: z.string().optional().describe("Restrict the array to only inputs of the specified kind")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputKind: z.string().optional().describe("Restrict the array to only inputs of the specified kind")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputKind }) => {
       try {
-        const requestParams: Record<string, any> = {};
+        const requestParams: Record<string, unknown> = {};
         if (inputKind !== undefined) {
           requestParams.inputKind = inputKind;
         }
@@ -50,14 +50,14 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Kind List",
       description: "Gets an array of all available input kinds in OBS",
-      inputSchema: {
-        unversioned: z.boolean().optional().describe("True to return all kinds as unversioned, False to return with version suffixes")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              unversioned: z.boolean().optional().describe("True to return all kinds as unversioned, False to return with version suffixes")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ unversioned }) => {
       try {
-        const requestParams: Record<string, any> = {};
+        const requestParams: Record<string, unknown> = {};
         if (unversioned !== undefined) {
           requestParams.unversioned = unversioned;
         }
@@ -91,7 +91,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Special Inputs",
       description: "Gets the names of all special inputs",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -124,18 +124,19 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Create Input",
       description: "Creates a new input, adding it as a scene item to the specified scene",
-      inputSchema: {
-        sceneName: z.string().describe("Name of the scene to add the input to as a scene item"),
-        inputName: z.string().describe("Name of the new input to created"),
-        inputKind: z.string().describe("The kind of input to be created"),
-        inputSettings: z.record(z.any()).optional().describe("Settings object to initialize the input with"),
-        sceneItemEnabled: z.boolean().optional().describe("Whether to set the created scene item to enabled or disabled")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
+              sceneName: z.string().describe("Name of the scene to add the input to as a scene item"),
+              inputName: z.string().describe("Name of the new input to created"),
+              inputKind: z.string().describe("The kind of input to be created"),
+              inputSettings: z.record(z.string(), z.unknown()).optional().describe("Settings object to initialize the input with"),
+              sceneItemEnabled: z.boolean().optional().describe("Whether to set the created scene item to enabled or disabled")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ sceneName, inputName, inputKind, inputSettings, sceneItemEnabled }) => {
+    async ({ canvasUuid, sceneName, inputName, inputKind, inputSettings, sceneItemEnabled }) => {
       try {
-        const requestParams: Record<string, any> = { sceneName, inputName, inputKind };
+        const requestParams: Record<string, unknown> = { canvasUuid, sceneName, inputName, inputKind };
         if (inputSettings !== undefined) {
           requestParams.inputSettings = inputSettings;
         }
@@ -172,10 +173,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Remove Input",
       description: "Removes an existing input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to remove")
-      },
-      annotations: { destructiveHint: true, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to remove")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -208,11 +209,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Rename Input",
       description: "Sets the name of an input (rename)",
-      inputSchema: {
-        inputName: z.string().describe("Current input name"),
-        newInputName: z.string().describe("New name for the input")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Current input name"),
+              newInputName: z.string().describe("New name for the input")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, newInputName }) => {
       try {
@@ -245,10 +246,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Default Settings",
       description: "Gets the default settings for an input kind",
-      inputSchema: {
-        inputKind: z.string().describe("Input kind to get the default settings for")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputKind: z.string().describe("Input kind to get the default settings for")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputKind }) => {
       try {
@@ -281,10 +282,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Settings",
       description: "Gets the settings of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to get the settings of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to get the settings of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -317,16 +318,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Input Settings",
       description: "Sets the settings of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to set the settings of"),
-        inputSettings: z.record(z.any()).describe("Object of settings to apply"),
-        overlay: z.boolean().optional().describe("True to apply settings on top of existing ones, False to reset to defaults first")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to set the settings of"),
+              inputSettings: z.record(z.string(), z.unknown()).describe("Object of settings to apply"),
+              overlay: z.boolean().optional().describe("True to apply settings on top of existing ones, False to reset to defaults first")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputSettings, overlay }) => {
       try {
-        const requestParams: Record<string, any> = { inputName, inputSettings };
+        const requestParams: Record<string, unknown> = { inputName, inputSettings };
         if (overlay !== undefined) {
           requestParams.overlay = overlay;
         }
@@ -360,10 +361,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Mute State",
       description: "Gets the audio mute state of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of input to get the mute state of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of input to get the mute state of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -396,11 +397,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Input Mute",
       description: "Sets the audio mute state of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to set the mute state of"),
-        inputMuted: z.boolean().describe("Whether to mute the input or not")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to set the mute state of"),
+              inputMuted: z.boolean().describe("Whether to mute the input or not")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputMuted }) => {
       try {
@@ -433,10 +434,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Input Mute",
       description: "Toggles the audio mute state of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to toggle the mute state of")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to toggle the mute state of")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -469,10 +470,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Volume",
       description: "Gets the current volume setting of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to get the volume of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to get the volume of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -505,12 +506,12 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Input Volume",
       description: "Sets the volume setting of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to set the volume of"),
-        inputVolumeMul: z.number().min(0).max(20).optional().describe("Volume setting in mul (0-20)"),
-        inputVolumeDb: z.number().min(-100).max(26).optional().describe("Volume setting in dB (-100 to 26)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to set the volume of"),
+              inputVolumeMul: z.number().min(0).max(20).optional().describe("Volume setting in mul (0-20)"),
+              inputVolumeDb: z.number().min(-100).max(26).optional().describe("Volume setting in dB (-100 to 26)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputVolumeMul, inputVolumeDb }) => {
       try {
@@ -518,7 +519,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
           throw new Error("Either inputVolumeMul or inputVolumeDb must be provided");
         }
 
-        const requestParams: Record<string, any> = { inputName };
+        const requestParams: Record<string, unknown> = { inputName };
         if (inputVolumeMul !== undefined) {
           requestParams.inputVolumeMul = inputVolumeMul;
         }
@@ -555,10 +556,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Audio Balance",
       description: "Gets the audio balance of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to get the audio balance of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to get the audio balance of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -591,11 +592,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Input Audio Balance",
       description: "Sets the audio balance of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to set the audio balance of"),
-        inputAudioBalance: z.number().min(0).max(1).describe("New audio balance value (0.0-1.0)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to set the audio balance of"),
+              inputAudioBalance: z.number().min(0).max(1).describe("New audio balance value (0.0-1.0)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputAudioBalance }) => {
       try {
@@ -628,10 +629,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Audio Sync Offset",
       description: "Gets the audio sync offset of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to get the audio sync offset of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to get the audio sync offset of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -664,11 +665,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Input Audio Sync Offset",
       description: "Sets the audio sync offset of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to set the audio sync offset of"),
-        inputAudioSyncOffset: z.number().min(-950).max(20000).describe("New audio sync offset in milliseconds")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to set the audio sync offset of"),
+              inputAudioSyncOffset: z.number().min(-950).max(20000).describe("New audio sync offset in milliseconds")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputAudioSyncOffset }) => {
       try {
@@ -701,10 +702,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Input Audio Monitor Type",
       description: "Gets the audio monitor type of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to get the audio monitor type of")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to get the audio monitor type of")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName }) => {
       try {
@@ -737,11 +738,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Input Audio Monitor Type",
       description: "Sets the audio monitor type of an input",
-      inputSchema: {
-        inputName: z.string().describe("Name of the input to set the audio monitor type of"),
-        monitorType: z.string().describe("Audio monitor type (OBS_MONITORING_TYPE_NONE, OBS_MONITORING_TYPE_MONITOR_ONLY, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().describe("Name of the input to set the audio monitor type of"),
+              monitorType: z.string().describe("Audio monitor type (OBS_MONITORING_TYPE_NONE, OBS_MONITORING_TYPE_MONITOR_ONLY, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, monitorType }) => {
       try {

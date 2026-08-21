@@ -1,34 +1,43 @@
 {
   "requests": [
     {
-      "description": "Gets an array of all scenes in OBS.",
+      "description": "Gets an array of scenes in OBS.",
       "requestType": "GetSceneList",
       "complexity": 2,
       "rpcVersion": "1",
       "deprecated": false,
       "initialVersion": "5.0.0",
       "category": "scenes",
-      "requestFields": [],
+      "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scenes are in",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        }
+      ],
       "responseFields": [
         {
           "valueName": "currentProgramSceneName",
           "valueType": "String",
-          "valueDescription": "Current program scene name. Can be `null` if internal state desync"
+          "valueDescription": "Current program scene name. Can be `null` if non-main canvas or internal state desync"
         },
         {
           "valueName": "currentProgramSceneUuid",
           "valueType": "String",
-          "valueDescription": "Current program scene UUID. Can be `null` if internal state desync"
+          "valueDescription": "Current program scene UUID. Can be `null` if non-main canvas or internal state desync"
         },
         {
           "valueName": "currentPreviewSceneName",
           "valueType": "String",
-          "valueDescription": "Current preview scene name. `null` if not in studio mode"
+          "valueDescription": "Current preview scene name. `null` if not in studio mode or non-main canvas"
         },
         {
           "valueName": "currentPreviewSceneUuid",
           "valueType": "String",
-          "valueDescription": "Current preview scene UUID. `null` if not in studio mode"
+          "valueDescription": "Current preview scene UUID. `null` if not in studio mode or non-main canvas"
         },
         {
           "valueName": "scenes",
@@ -55,7 +64,7 @@
       ]
     },
     {
-      "description": "Gets the current program scene.\n\nNote: This request is slated to have the `currentProgram`-prefixed fields removed from in an upcoming RPC version.",
+      "description": "Gets the current program scene.\n\nNote 1: This request is slated to have the `currentProgram`-prefixed fields removed from in an upcoming RPC version.\n\nNote 2: Canvases do not have any concept of a program or preview scene, so this request does not support canvases.",
       "requestType": "GetCurrentProgramScene",
       "complexity": 1,
       "rpcVersion": "1",
@@ -184,6 +193,14 @@
       "category": "scenes",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas to create the new scene in. Leave default to assume main canvas",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name for the new scene",
@@ -209,6 +226,14 @@
       "initialVersion": "5.0.0",
       "category": "scenes",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -237,6 +262,14 @@
       "initialVersion": "5.0.0",
       "category": "scenes",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -273,6 +306,14 @@
       "initialVersion": "5.0.0",
       "category": "scenes",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -312,6 +353,14 @@
       "initialVersion": "5.0.0",
       "category": "scenes",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",

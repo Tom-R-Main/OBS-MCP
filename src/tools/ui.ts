@@ -1,15 +1,15 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetStudioModeEnabled tool
   server.registerTool(
     "obs-get-studio-mode",
     {
       title: "Get Studio Mode",
       description: "Gets whether studio mode is enabled",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -42,10 +42,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Studio Mode",
       description: "Enables or disables studio mode",
-      inputSchema: {
-        studioModeEnabled: z.boolean().describe("Whether to enable (true) or disable (false) Studio Mode")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              studioModeEnabled: z.boolean().describe("Whether to enable (true) or disable (false) Studio Mode")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ studioModeEnabled }) => {
       try {
@@ -78,15 +78,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Open Input Properties",
       description: "Opens the properties dialog of an input",
-      inputSchema: {
-        inputName: z.string().optional().describe("Name of the input to open the dialog of"),
-        inputUuid: z.string().optional().describe("UUID of the input to open the dialog of")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().optional().describe("Name of the input to open the dialog of"),
+              inputUuid: z.string().optional().describe("UUID of the input to open the dialog of")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputUuid }) => {
       try {
-        const params: Record<string, any> = {};
+        const params: Record<string, unknown> = {};
 
         if (inputName !== undefined) {
           params.inputName = inputName;
@@ -124,15 +124,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Open Input Filters",
       description: "Opens the filters dialog of an input",
-      inputSchema: {
-        inputName: z.string().optional().describe("Name of the input to open the dialog of"),
-        inputUuid: z.string().optional().describe("UUID of the input to open the dialog of")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().optional().describe("Name of the input to open the dialog of"),
+              inputUuid: z.string().optional().describe("UUID of the input to open the dialog of")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputUuid }) => {
       try {
-        const params: Record<string, any> = {};
+        const params: Record<string, unknown> = {};
 
         if (inputName !== undefined) {
           params.inputName = inputName;
@@ -170,15 +170,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Open Input Interact",
       description: "Opens the interact dialog of an input",
-      inputSchema: {
-        inputName: z.string().optional().describe("Name of the input to open the dialog of"),
-        inputUuid: z.string().optional().describe("UUID of the input to open the dialog of")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              inputName: z.string().optional().describe("Name of the input to open the dialog of"),
+              inputUuid: z.string().optional().describe("UUID of the input to open the dialog of")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ inputName, inputUuid }) => {
       try {
-        const params: Record<string, any> = {};
+        const params: Record<string, unknown> = {};
 
         if (inputName !== undefined) {
           params.inputName = inputName;
@@ -216,7 +216,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Monitor List",
       description: "Gets a list of connected monitors and information about them",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -249,20 +249,20 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Open Video Mix Projector",
       description: "Opens a projector for a specific output video mix",
-      inputSchema: {
-        videoMixType: z.enum([
-          "OBS_WEBSOCKET_VIDEO_MIX_TYPE_PREVIEW",
-          "OBS_WEBSOCKET_VIDEO_MIX_TYPE_PROGRAM",
-          "OBS_WEBSOCKET_VIDEO_MIX_TYPE_MULTIVIEW"
-        ]).describe("Type of mix to open"),
-        monitorIndex: z.number().optional().describe("Monitor index, use -1 for windowed mode"),
-        projectorGeometry: z.string().optional().describe("Size/Position data for a windowed projector")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              videoMixType: z.enum([
+                "OBS_WEBSOCKET_VIDEO_MIX_TYPE_PREVIEW",
+                "OBS_WEBSOCKET_VIDEO_MIX_TYPE_PROGRAM",
+                "OBS_WEBSOCKET_VIDEO_MIX_TYPE_MULTIVIEW"
+              ]).describe("Type of mix to open"),
+              monitorIndex: z.number().optional().describe("Monitor index, use -1 for windowed mode"),
+              projectorGeometry: z.string().optional().describe("Size/Position data for a windowed projector")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ videoMixType, monitorIndex, projectorGeometry }) => {
       try {
-        const requestParams: Record<string, any> = { videoMixType };
+        const requestParams: Record<string, unknown> = { videoMixType };
         if (monitorIndex !== undefined) {
           requestParams.monitorIndex = monitorIndex;
         }
@@ -299,17 +299,22 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Open Source Projector",
       description: "Opens a projector for a source",
-      inputSchema: {
-        sourceName: z.string().optional().describe("Name of the source to open a projector for"),
-        sourceUuid: z.string().optional().describe("UUID of the source to open a projector for"),
-        monitorIndex: z.number().optional().describe("Monitor index, use -1 for windowed mode"),
-        projectorGeometry: z.string().optional().describe("Size/Position data for a windowed projector")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().optional().describe("Name of the source to open a projector for"),
+              sourceUuid: z.string().optional().describe("UUID of the source to open a projector for"),
+              monitorIndex: z.number().optional().describe("Monitor index, use -1 for windowed mode"),
+              projectorGeometry: z.string().optional().describe("Size/Position data for a windowed projector")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, sourceUuid, monitorIndex, projectorGeometry }) => {
+    async ({ canvasUuid, sourceName, sourceUuid, monitorIndex, projectorGeometry }) => {
       try {
-        const requestParams: Record<string, any> = {};
+        const requestParams: Record<string, unknown> = {};
+
+        if (canvasUuid !== undefined) {
+          requestParams.canvasUuid = canvasUuid;
+        }
 
         if (sourceName !== undefined) {
           requestParams.sourceName = sourceName;

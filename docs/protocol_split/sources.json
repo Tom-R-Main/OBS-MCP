@@ -10,6 +10,14 @@
       "category": "sources",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sourceName",
           "valueType": "String",
           "valueDescription": "Name of the source to get the active state of",
@@ -48,6 +56,14 @@
       "initialVersion": "5.0.0",
       "category": "sources",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sourceName",
           "valueType": "String",
@@ -114,6 +130,14 @@
       "initialVersion": "5.0.0",
       "category": "sources",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sourceName",
           "valueType": "String",

@@ -1,0 +1,21 @@
+{
+  "requests": [
+    {
+      "description": "Gets an array of canvases in OBS.",
+      "requestType": "GetCanvasList",
+      "complexity": 3,
+      "rpcVersion": "1",
+      "deprecated": false,
+      "initialVersion": "5.7.0",
+      "category": "canvases",
+      "requestFields": [],
+      "responseFields": [
+        {
+          "valueName": "canvases",
+          "valueType": "Array<Object>",
+          "valueDescription": "Array of canvases"
+        }
+      ]
+    }
+  ]
+}

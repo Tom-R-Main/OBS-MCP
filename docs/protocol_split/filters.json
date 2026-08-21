@@ -27,6 +27,14 @@
       "category": "filters",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sourceName",
           "valueType": "String",
           "valueDescription": "Name of the source",
@@ -87,6 +95,14 @@
       "category": "filters",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sourceName",
           "valueType": "String",
           "valueDescription": "Name of the source to add the filter to",
@@ -139,6 +155,14 @@
       "category": "filters",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sourceName",
           "valueType": "String",
           "valueDescription": "Name of the source the filter is on",
@@ -174,6 +198,14 @@
       "initialVersion": "5.0.0",
       "category": "filters",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sourceName",
           "valueType": "String",
@@ -218,6 +250,14 @@
       "initialVersion": "5.0.0",
       "category": "filters",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sourceName",
           "valueType": "String",
@@ -276,6 +316,14 @@
       "category": "filters",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sourceName",
           "valueType": "String",
           "valueDescription": "Name of the source the filter is on",
@@ -319,6 +367,14 @@
       "initialVersion": "5.0.0",
       "category": "filters",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sourceName",
           "valueType": "String",
@@ -371,6 +427,14 @@
       "initialVersion": "5.0.0",
       "category": "filters",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sourceName",
           "valueType": "String",

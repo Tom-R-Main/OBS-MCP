@@ -184,6 +184,14 @@
       "category": "ui",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the source is in, if using the sourceName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sourceName",
           "valueType": "String",
           "valueDescription": "Name of the source to open a projector for",

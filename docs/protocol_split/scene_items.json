@@ -10,6 +10,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene to get the items of",
@@ -44,6 +52,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the group is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the group to get the items of",
@@ -77,6 +93,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene or group is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -128,6 +152,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -174,6 +206,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -233,6 +273,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -268,6 +316,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -327,6 +383,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -368,6 +432,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -413,6 +485,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -454,6 +534,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -499,6 +587,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -540,6 +636,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -585,6 +689,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -626,6 +738,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",
@@ -671,6 +791,14 @@
       "category": "scene items",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene the item is in",
@@ -712,6 +840,14 @@
       "initialVersion": "5.0.0",
       "category": "scene items",
       "requestFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
         {
           "valueName": "sceneName",
           "valueType": "String",

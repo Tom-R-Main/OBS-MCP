@@ -1,19 +1,19 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetPersistentData tool
   server.registerTool(
     "obs-get-persistent-data",
     {
       title: "Get Persistent Data",
       description: "Gets the value of a slot from the selected persistent data realm",
-      inputSchema: {
-        realm: z.string().describe("The data realm to select. OBS_WEBSOCKET_DATA_REALM_GLOBAL or OBS_WEBSOCKET_DATA_REALM_PROFILE"),
-        slotName: z.string().describe("The name of the slot to retrieve data from")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              realm: z.string().describe("The data realm to select. OBS_WEBSOCKET_DATA_REALM_GLOBAL or OBS_WEBSOCKET_DATA_REALM_PROFILE"),
+              slotName: z.string().describe("The name of the slot to retrieve data from")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ realm, slotName }) => {
       try {
@@ -46,12 +46,12 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Persistent Data",
       description: "Sets the value of a slot from the selected persistent data realm",
-      inputSchema: {
-        realm: z.string().describe("The data realm to select. OBS_WEBSOCKET_DATA_REALM_GLOBAL or OBS_WEBSOCKET_DATA_REALM_PROFILE"),
-        slotName: z.string().describe("The name of the slot to set data for"),
-        slotValue: z.any().describe("The value to apply to the slot")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              realm: z.string().describe("The data realm to select. OBS_WEBSOCKET_DATA_REALM_GLOBAL or OBS_WEBSOCKET_DATA_REALM_PROFILE"),
+              slotName: z.string().describe("The name of the slot to set data for"),
+              slotValue: z.unknown().describe("The value to apply to the slot")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ realm, slotName, slotValue }) => {
       try {
@@ -84,7 +84,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Scene Collection List",
       description: "Gets an array of all scene collections",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -117,10 +117,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Current Scene Collection",
       description: "Switches to a scene collection",
-      inputSchema: {
-        sceneCollectionName: z.string().describe("Name of the scene collection to switch to")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              sceneCollectionName: z.string().describe("Name of the scene collection to switch to")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ sceneCollectionName }) => {
       try {
@@ -153,10 +153,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Create Scene Collection",
       description: "Creates a new scene collection, switching to it in the process",
-      inputSchema: {
-        sceneCollectionName: z.string().describe("Name for the new scene collection")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              sceneCollectionName: z.string().describe("Name for the new scene collection")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ sceneCollectionName }) => {
       try {
@@ -189,7 +189,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Profile List",
       description: "Gets an array of all profiles",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -222,10 +222,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Current Profile",
       description: "Switches to a profile",
-      inputSchema: {
-        profileName: z.string().describe("Name of the profile to switch to")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              profileName: z.string().describe("Name of the profile to switch to")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ profileName }) => {
       try {
@@ -258,10 +258,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Create Profile",
       description: "Creates a new profile, switching to it in the process",
-      inputSchema: {
-        profileName: z.string().describe("Name for the new profile")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              profileName: z.string().describe("Name for the new profile")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ profileName }) => {
       try {
@@ -294,10 +294,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Remove Profile",
       description: "Removes a profile. If the current profile is chosen, it will change to a different profile first",
-      inputSchema: {
-        profileName: z.string().describe("Name of the profile to remove")
-      },
-      annotations: { destructiveHint: true, idempotentHint: true },
+      inputSchema: z.object({
+              profileName: z.string().describe("Name of the profile to remove")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async ({ profileName }) => {
       try {
@@ -330,11 +330,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Profile Parameter",
       description: "Gets a parameter from the current profile's configuration",
-      inputSchema: {
-        parameterCategory: z.string().describe("Category of the parameter to get"),
-        parameterName: z.string().describe("Name of the parameter to get")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              parameterCategory: z.string().describe("Category of the parameter to get"),
+              parameterName: z.string().describe("Name of the parameter to get")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ parameterCategory, parameterName }) => {
       try {
@@ -367,12 +367,12 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Profile Parameter",
       description: "Sets the value of a parameter in the current profile's configuration",
-      inputSchema: {
-        parameterCategory: z.string().describe("Category of the parameter to set"),
-        parameterName: z.string().describe("Name of the parameter to set"),
-        parameterValue: z.string().nullable().describe("Value of the parameter to set. Use null to delete")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              parameterCategory: z.string().describe("Category of the parameter to set"),
+              parameterName: z.string().describe("Name of the parameter to set"),
+              parameterValue: z.string().nullable().describe("Value of the parameter to set. Use null to delete")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ parameterCategory, parameterName, parameterValue }) => {
       try {
@@ -405,7 +405,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Video Settings",
       description: "Gets the current video settings",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -438,20 +438,20 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Video Settings",
       description: "Sets the current video settings",
-      inputSchema: {
-        fpsNumerator: z.number().min(1).optional().describe("Numerator of the fractional FPS value"),
-        fpsDenominator: z.number().min(1).optional().describe("Denominator of the fractional FPS value"),
-        baseWidth: z.number().min(1).max(4096).optional().describe("Width of the base (canvas) resolution in pixels"),
-        baseHeight: z.number().min(1).max(4096).optional().describe("Height of the base (canvas) resolution in pixels"),
-        outputWidth: z.number().min(1).max(4096).optional().describe("Width of the output resolution in pixels"),
-        outputHeight: z.number().min(1).max(4096).optional().describe("Height of the output resolution in pixels")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              fpsNumerator: z.number().min(1).optional().describe("Numerator of the fractional FPS value"),
+              fpsDenominator: z.number().min(1).optional().describe("Denominator of the fractional FPS value"),
+              baseWidth: z.number().min(1).max(4096).optional().describe("Width of the base (canvas) resolution in pixels"),
+              baseHeight: z.number().min(1).max(4096).optional().describe("Height of the base (canvas) resolution in pixels"),
+              outputWidth: z.number().min(1).max(4096).optional().describe("Width of the output resolution in pixels"),
+              outputHeight: z.number().min(1).max(4096).optional().describe("Height of the output resolution in pixels")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (params) => {
       try {
         // Only include parameters that were provided
-        const requestParams: Record<string, any> = {};
+        const requestParams: Record<string, unknown> = {};
         if (params.fpsNumerator !== undefined) requestParams.fpsNumerator = params.fpsNumerator;
         if (params.fpsDenominator !== undefined) requestParams.fpsDenominator = params.fpsDenominator;
         if (params.baseWidth !== undefined) requestParams.baseWidth = params.baseWidth;
@@ -488,7 +488,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Stream Service Settings",
       description: "Gets the current stream service settings",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -521,11 +521,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Stream Service Settings",
       description: "Sets the current stream service settings",
-      inputSchema: {
-        streamServiceType: z.string().describe("Type of stream service to apply. Example: rtmp_common or rtmp_custom"),
-        streamServiceSettings: z.record(z.any()).describe("Settings to apply to the service")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              streamServiceType: z.string().describe("Type of stream service to apply. Example: rtmp_common or rtmp_custom"),
+              streamServiceSettings: z.record(z.string(), z.unknown()).describe("Settings to apply to the service")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ streamServiceType, streamServiceSettings }) => {
       try {
@@ -558,7 +558,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Record Directory",
       description: "Gets the current directory that the record output is set to",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -591,10 +591,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Record Directory",
       description: "Sets the current directory that the record output writes files to",
-      inputSchema: {
-        recordDirectory: z.string().describe("Output directory")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              recordDirectory: z.string().describe("Output directory")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ recordDirectory }) => {
       try {

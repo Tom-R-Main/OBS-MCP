@@ -1,19 +1,22 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetSceneList tool
   server.registerTool(
     "obs-get-scene-list",
     {
       title: "Get Scene List",
       description: "Get a list of scenes in OBS",
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas to list scenes from")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async () => {
+    async ({ canvasUuid }) => {
       try {
-        const sceneList = await client.sendRequest("GetSceneList");
+        const sceneList = await client.sendRequest("GetSceneList", { canvasUuid });
         return {
           content: [
             {
@@ -42,7 +45,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Current Scene",
       description: "Get the current active scene in OBS",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -75,10 +78,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Current Scene",
       description: "Set the current active scene in OBS",
-      inputSchema: {
-        sceneName: z.string().describe("The name of the scene to set as current")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              sceneName: z.string().describe("The name of the scene to set as current")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ sceneName }) => {
       try {
@@ -111,7 +114,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Preview Scene",
       description: "Get the current preview scene in OBS Studio Mode",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -144,10 +147,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Preview Scene",
       description: "Set the current preview scene in OBS Studio Mode",
-      inputSchema: {
-        sceneName: z.string().describe("The name of the scene to set as preview")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              sceneName: z.string().describe("The name of the scene to set as preview")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ sceneName }) => {
       try {
@@ -180,14 +183,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Create Scene",
       description: "Create a new scene in OBS",
-      inputSchema: {
-        sceneName: z.string().describe("The name for the new scene")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas to create the scene in"),
+              sceneName: z.string().describe("The name for the new scene")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ sceneName }) => {
+    async ({ canvasUuid, sceneName }) => {
       try {
-        await client.sendRequest("CreateScene", { sceneName });
+        await client.sendRequest("CreateScene", { canvasUuid, sceneName });
         return {
           content: [
             {
@@ -216,14 +220,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Remove Scene",
       description: "Remove a scene from OBS",
-      inputSchema: {
-        sceneName: z.string().describe("The name of the scene to remove")
-      },
-      annotations: { destructiveHint: true, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
+              sceneName: z.string().describe("The name of the scene to remove")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sceneName }) => {
+    async ({ canvasUuid, sceneName }) => {
       try {
-        await client.sendRequest("RemoveScene", { sceneName });
+        await client.sendRequest("RemoveScene", { canvasUuid, sceneName });
         return {
           content: [
             {
@@ -252,7 +257,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Trigger Studio Transition",
       description: "Trigger a transition from preview to program scene in Studio Mode",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {

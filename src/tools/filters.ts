@@ -1,15 +1,15 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetSourceFilterKindList tool
   server.registerTool(
     "obs-get-filter-kind-list",
     {
       title: "Get Filter Kind List",
       description: "Gets an array of all available source filter kinds",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -42,14 +42,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Source Filter List",
       description: "Gets an array of all of a source's filters",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName }) => {
+    async ({ canvasUuid, sourceName }) => {
       try {
-        const response = await client.sendRequest("GetSourceFilterList", { sourceName });
+        const response = await client.sendRequest("GetSourceFilterList", { canvasUuid, sourceName });
         return {
           content: [
             {
@@ -78,10 +79,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Filter Default Settings",
       description: "Gets the default settings for a filter kind",
-      inputSchema: {
-        filterKind: z.string().describe("Filter kind to get the default settings for")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              filterKind: z.string().describe("Filter kind to get the default settings for")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ filterKind }) => {
       try {
@@ -114,17 +115,18 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Create Source Filter",
       description: "Creates a new filter, adding it to the specified source",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source to add the filter to"),
-        filterName: z.string().describe("Name of the new filter to be created"),
-        filterKind: z.string().describe("The kind of filter to be created"),
-        filterSettings: z.record(z.any()).optional().describe("Settings object to initialize the filter with")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source to add the filter to"),
+              filterName: z.string().describe("Name of the new filter to be created"),
+              filterKind: z.string().describe("The kind of filter to be created"),
+              filterSettings: z.record(z.string(), z.unknown()).optional().describe("Settings object to initialize the filter with")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ sourceName, filterName, filterKind, filterSettings }) => {
+    async ({ canvasUuid, sourceName, filterName, filterKind, filterSettings }) => {
       try {
-        const requestParams: Record<string, any> = { sourceName, filterName, filterKind };
+        const requestParams: Record<string, unknown> = { canvasUuid, sourceName, filterName, filterKind };
         if (filterSettings !== undefined) {
           requestParams.filterSettings = filterSettings;
         }
@@ -158,15 +160,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Remove Source Filter",
       description: "Removes a filter from a source",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source the filter is on"),
-        filterName: z.string().describe("Name of the filter to remove")
-      },
-      annotations: { destructiveHint: true, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source the filter is on"),
+              filterName: z.string().describe("Name of the filter to remove")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, filterName }) => {
+    async ({ canvasUuid, sourceName, filterName }) => {
       try {
-        await client.sendRequest("RemoveSourceFilter", { sourceName, filterName });
+        await client.sendRequest("RemoveSourceFilter", { canvasUuid, sourceName, filterName });
         return {
           content: [
             {
@@ -195,16 +198,17 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Rename Source Filter",
       description: "Sets the name of a source filter (rename)",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source the filter is on"),
-        filterName: z.string().describe("Current name of the filter"),
-        newFilterName: z.string().describe("New name for the filter")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source the filter is on"),
+              filterName: z.string().describe("Current name of the filter"),
+              newFilterName: z.string().describe("New name for the filter")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, filterName, newFilterName }) => {
+    async ({ canvasUuid, sourceName, filterName, newFilterName }) => {
       try {
-        await client.sendRequest("SetSourceFilterName", { sourceName, filterName, newFilterName });
+        await client.sendRequest("SetSourceFilterName", { canvasUuid, sourceName, filterName, newFilterName });
         return {
           content: [
             {
@@ -233,15 +237,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Source Filter",
       description: "Gets the info for a specific source filter",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source"),
-        filterName: z.string().describe("Name of the filter")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source"),
+              filterName: z.string().describe("Name of the filter")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, filterName }) => {
+    async ({ canvasUuid, sourceName, filterName }) => {
       try {
-        const response = await client.sendRequest("GetSourceFilter", { sourceName, filterName });
+        const response = await client.sendRequest("GetSourceFilter", { canvasUuid, sourceName, filterName });
         return {
           content: [
             {
@@ -270,16 +275,17 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Source Filter Index",
       description: "Sets the index position of a filter on a source",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source the filter is on"),
-        filterName: z.string().describe("Name of the filter"),
-        filterIndex: z.number().min(0).describe("New index position of the filter")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source the filter is on"),
+              filterName: z.string().describe("Name of the filter"),
+              filterIndex: z.number().min(0).describe("New index position of the filter")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, filterName, filterIndex }) => {
+    async ({ canvasUuid, sourceName, filterName, filterIndex }) => {
       try {
-        await client.sendRequest("SetSourceFilterIndex", { sourceName, filterName, filterIndex });
+        await client.sendRequest("SetSourceFilterIndex", { canvasUuid, sourceName, filterName, filterIndex });
         return {
           content: [
             {
@@ -308,17 +314,18 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Source Filter Settings",
       description: "Sets the settings of a source filter",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source the filter is on"),
-        filterName: z.string().describe("Name of the filter to set the settings of"),
-        filterSettings: z.record(z.any()).describe("Object of settings to apply"),
-        overlay: z.boolean().optional().describe("True to apply settings on top of existing ones, False to reset to defaults first")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source the filter is on"),
+              filterName: z.string().describe("Name of the filter to set the settings of"),
+              filterSettings: z.record(z.string(), z.unknown()).describe("Object of settings to apply"),
+              overlay: z.boolean().optional().describe("True to apply settings on top of existing ones, False to reset to defaults first")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, filterName, filterSettings, overlay }) => {
+    async ({ canvasUuid, sourceName, filterName, filterSettings, overlay }) => {
       try {
-        const requestParams: Record<string, any> = { sourceName, filterName, filterSettings };
+        const requestParams: Record<string, unknown> = { canvasUuid, sourceName, filterName, filterSettings };
         if (overlay !== undefined) {
           requestParams.overlay = overlay;
         }
@@ -352,16 +359,17 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Source Filter Enabled",
       description: "Sets the enable state of a source filter",
-      inputSchema: {
-        sourceName: z.string().describe("Name of the source the filter is on"),
-        filterName: z.string().describe("Name of the filter"),
-        filterEnabled: z.boolean().describe("New enable state of the filter")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              canvasUuid: z.string().optional().describe("UUID of the canvas containing the source"),
+              sourceName: z.string().describe("Name of the source the filter is on"),
+              filterName: z.string().describe("Name of the filter"),
+              filterEnabled: z.boolean().describe("New enable state of the filter")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ sourceName, filterName, filterEnabled }) => {
+    async ({ canvasUuid, sourceName, filterName, filterEnabled }) => {
       try {
-        await client.sendRequest("SetSourceFilterEnabled", { sourceName, filterName, filterEnabled });
+        await client.sendRequest("SetSourceFilterEnabled", { canvasUuid, sourceName, filterName, filterEnabled });
         return {
           content: [
             {

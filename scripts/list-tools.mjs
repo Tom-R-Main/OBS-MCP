@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Client } from "@modelcontextprotocol/client";
+import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";
+import { readFileSync } from "node:fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
@@ -10,16 +12,27 @@ export async function listTools(root) {
     on: () => {},
   };
 
-  const server = new McpServer({ name: "obs-mcp", version: "1.0.0" });
+  const { version } = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+  const server = new McpServer({ name: "obs-mcp", version });
+  const client = new Client({ name: "obs-mcp-tool-inspector", version });
 
   const { initialize } = await import(pathToFileURL(resolve(root, "build/tools/index.js")).href);
   await initialize(server, mockClient);
 
-  return Object.entries(server._registeredTools).map(([name, tool]) => ({
-    name,
-    // title: tool.title,
-    description: tool.description,
-  }));
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  try {
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+    const { tools } = await client.listTools();
+
+    return tools.map(({ name, description }) => ({ name, description }));
+  } finally {
+    await client.close();
+    await server.close();
+  }
 }
 
 // Allow running directly: node scripts/list-tools.mjs

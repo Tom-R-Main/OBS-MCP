@@ -104,6 +104,14 @@
       "category": "inputs",
       "requestFields": [
         {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas the scene is in, if using the sceneName field",
+          "valueRestrictions": null,
+          "valueOptional": true,
+          "valueOptionalBehavior": "Unknown"
+        },
+        {
           "valueName": "sceneName",
           "valueType": "String",
           "valueDescription": "Name of the scene to add the input to as a scene item",

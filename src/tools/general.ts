@@ -1,18 +1,16 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
+import { PACKAGE_VERSION } from "../version.js";
 import { z } from "zod";
-import { createRequire } from "module";
 
-const { version } = createRequire(import.meta.url)("../../package.json");
-
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // Get server status
   server.registerTool(
     "obs-get-status",
     {
       title: "OBS Server Status",
       description: "Get the current status of the OBS MCP server and OBS connection",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       const status = client.getConnectionStatus();
@@ -21,7 +19,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
       const statusInfo = {
         server: {
           name: "obs-mcp",
-          version,
+          version: PACKAGE_VERSION,
           status: "running"
         },
         obs: {
@@ -50,7 +48,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "OBS Version Info",
       description: "Get OBS Studio version information",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       if (!client.isConnected()) {
@@ -95,7 +93,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Test OBS Connection",
       description: "Test the connection to OBS WebSocket",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       if (!client.isConnected()) {
@@ -141,7 +139,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "OBS Statistics",
       description: "Gets statistics about OBS, obs-websocket, and the current session",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -174,10 +172,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Broadcast Custom Event",
       description: "Broadcasts a CustomEvent to all WebSocket clients",
-      inputSchema: {
-        eventData: z.record(z.any()).describe("Data payload to emit to all receivers")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              eventData: z.record(z.string(), z.unknown()).describe("Data payload to emit to all receivers")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ eventData }) => {
       try {
@@ -210,16 +208,16 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Call Vendor Request",
       description: "Call a request registered to a vendor",
-      inputSchema: {
-        vendorName: z.string().describe("Name of the vendor to use"),
-        requestType: z.string().describe("The request type to call"),
-        requestData: z.record(z.any()).optional().describe("Object containing appropriate request data")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              vendorName: z.string().describe("Name of the vendor to use"),
+              requestType: z.string().describe("The request type to call"),
+              requestData: z.record(z.string(), z.unknown()).optional().describe("Object containing appropriate request data")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     async ({ vendorName, requestType, requestData }) => {
       try {
-        const params: Record<string, any> = {
+        const params: Record<string, unknown> = {
           vendorName,
           requestType
         };
@@ -257,7 +255,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Hotkey List",
       description: "Gets an array of all hotkey names in OBS",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -290,15 +288,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Trigger Hotkey by Name",
       description: "Triggers a hotkey using its name",
-      inputSchema: {
-        hotkeyName: z.string().describe("Name of the hotkey to trigger"),
-        contextName: z.string().optional().describe("Name of context of the hotkey to trigger")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              hotkeyName: z.string().describe("Name of the hotkey to trigger"),
+              contextName: z.string().optional().describe("Name of context of the hotkey to trigger")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     async ({ hotkeyName, contextName }) => {
       try {
-        const params: Record<string, any> = { hotkeyName };
+        const params: Record<string, unknown> = { hotkeyName };
 
         if (contextName !== undefined) {
           params.contextName = contextName;
@@ -333,20 +331,20 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Trigger Hotkey by Key Sequence",
       description: "Triggers a hotkey using a sequence of keys",
-      inputSchema: {
-        keyId: z.string().optional().describe("The OBS key ID to use"),
-        keyModifiers: z.object({
-          shift: z.boolean().optional().describe("Press Shift"),
-          control: z.boolean().optional().describe("Press CTRL"),
-          alt: z.boolean().optional().describe("Press ALT"),
-          command: z.boolean().optional().describe("Press CMD (Mac)")
-        }).optional().describe("Object containing key modifiers to apply")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              keyId: z.string().optional().describe("The OBS key ID to use"),
+              keyModifiers: z.object({
+                shift: z.boolean().optional().describe("Press Shift"),
+                control: z.boolean().optional().describe("Press CTRL"),
+                alt: z.boolean().optional().describe("Press ALT"),
+                command: z.boolean().optional().describe("Press CMD (Mac)")
+              }).optional().describe("Object containing key modifiers to apply")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     async ({ keyId, keyModifiers }) => {
       try {
-        const params: Record<string, any> = {};
+        const params: Record<string, unknown> = {};
 
         if (keyId !== undefined) {
           params.keyId = keyId;
@@ -385,15 +383,15 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "OBS Sleep",
       description: "Sleeps for a time duration or number of frames",
-      inputSchema: {
-        sleepMillis: z.number().optional().describe("Number of milliseconds to sleep for"),
-        sleepFrames: z.number().optional().describe("Number of frames to sleep for")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              sleepMillis: z.number().optional().describe("Number of milliseconds to sleep for"),
+              sleepFrames: z.number().optional().describe("Number of frames to sleep for")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ sleepMillis, sleepFrames }) => {
       try {
-        const params: Record<string, any> = {};
+        const params: Record<string, unknown> = {};
 
         if (sleepMillis !== undefined) {
           params.sleepMillis = sleepMillis;

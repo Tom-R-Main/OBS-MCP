@@ -1,7 +1,8 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "./client.js";
 import * as tools from "./tools/index.js";
+import { PACKAGE_VERSION } from "./version.js";
 
 // Create the OBS WebSocket client
 const obsClient = new OBSWebSocketClient(
@@ -9,20 +10,15 @@ const obsClient = new OBSWebSocketClient(
   process.env.OBS_WEBSOCKET_PASSWORD || null
 );
 
-// Create the MCP server
-export const server = new McpServer({
-  name: "obs-mcp",
-  version: "1.0.0",
-});
-
 export let serverConnected = false;
 export let obsConnected = false;
-let reconnectInterval: NodeJS.Timeout | null = null;
-let connectionCheckInterval: NodeJS.Timeout | null = null;
+let stdioServer: StdioServerHandle | null = null;
+let reconnectTimer: NodeJS.Timeout | null = null;
+let connectionAttempt: Promise<void> | null = null;
 let reconnectAttempts = 0;
-const RECONNECT_INTERVAL = 5000; // 5 seconds (reduced from 10)
-const CONNECTION_CHECK_INTERVAL = 1000; // 1 second (reduced from 5)
-const MAX_BACKOFF_INTERVAL = 30000; // Max 30 seconds between attempts
+let shuttingDown = false;
+const INITIAL_RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_DELAY_MS = 30000;
 
 const logger = {
   log: (message: string) => console.error(message),
@@ -30,129 +26,96 @@ const logger = {
   debug: (message: string) => console.error(message),
 };
 
-// Function to attempt OBS connection
+function getReconnectDelay(): number {
+  return Math.min(
+    INITIAL_RECONNECT_DELAY_MS * 2 ** Math.max(0, reconnectAttempts - 1),
+    MAX_RECONNECT_DELAY_MS,
+  );
+}
+
+function scheduleReconnect(): void {
+  if (shuttingDown || obsClient.isConnected() || reconnectTimer) return;
+
+  const delay = getReconnectDelay();
+  logger.debug(`Will retry the OBS connection in ${delay / 1000} seconds...`);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void attemptOBSConnection();
+  }, delay);
+  reconnectTimer.unref();
+}
+
 async function attemptOBSConnection(): Promise<void> {
-  try {
-    logger.log("Attempting to connect to OBS WebSocket...");
-    
-    // Set a timeout for the connection attempt
-    const connectionPromise = obsClient.connect();
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("Connection timeout after 10 seconds")), 10000);
-    });
-    
-    await Promise.race([connectionPromise, timeoutPromise]);
-    logger.log("Connected to OBS WebSocket server");
+  if (obsClient.isConnected()) {
     obsConnected = true;
-    reconnectAttempts = 0;
-    
-    // Clear any existing reconnect interval
-    if (reconnectInterval) {
-      clearInterval(reconnectInterval);
-      reconnectInterval = null;
-    }
-    
-    // Set up disconnect handler to trigger reconnection
-    obsClient.on('disconnected', () => {
-      logger.log("OBS WebSocket disconnected, will attempt to reconnect...");
+    return;
+  }
+
+  if (connectionAttempt) return connectionAttempt;
+
+  connectionAttempt = (async () => {
+    try {
+      logger.log("Attempting to connect to OBS WebSocket...");
+      await obsClient.connect();
+      obsConnected = true;
+      reconnectAttempts = 0;
+      logger.log("Connected and identified with OBS WebSocket server");
+    } catch (obsError) {
       obsConnected = false;
-      startReconnectionTimer();
-    });
-    
-  } catch (obsError) {
-    const errorMessage = obsError instanceof Error ? obsError.message : String(obsError);
-    logger.error(`Failed to connect to OBS WebSocket: ${errorMessage}`);
-    
-    if (reconnectAttempts === 0) {
-      logger.error("The server will continue running without OBS connection.");
-      logger.error("Make sure OBS Studio is running with WebSocket enabled on port 4455");
-      logger.error("You can also set OBS_WEBSOCKET_URL and OBS_WEBSOCKET_PASSWORD environment variables");
-      logger.error("The server will attempt to reconnect every 5 seconds...");
-    }
-    
-    obsConnected = false;
-    reconnectAttempts++;
-    
-    // Use exponential backoff with a maximum interval
-    const backoffInterval = Math.min(RECONNECT_INTERVAL * Math.pow(1.5, Math.min(reconnectAttempts, 3)), MAX_BACKOFF_INTERVAL);
-    startReconnectionTimer(backoffInterval);
-  }
-}
+      reconnectAttempts += 1;
+      const errorMessage = obsError instanceof Error ? obsError.message : String(obsError);
+      logger.error(`Failed to connect to OBS WebSocket: ${errorMessage}`);
 
-// Function to start reconnection timer with backoff
-function startReconnectionTimer(interval?: number): void {
-  if (reconnectInterval) {
-    clearInterval(reconnectInterval);
-  }
-  
-  const checkInterval = interval || RECONNECT_INTERVAL;
-  logger.debug(`Will retry connection in ${checkInterval / 1000} seconds...`);
-  
-  reconnectInterval = setInterval(async () => {
-    if (!obsConnected) {
-      logger.log(`Reconnection attempt ${reconnectAttempts + 1}...`);
-      await attemptOBSConnection();
-    }
-  }, checkInterval);
-}
-
-// Function to start periodic connection checking
-function startConnectionCheckTimer(): void {
-  if (connectionCheckInterval) {
-    clearInterval(connectionCheckInterval);
-  }
-  
-  connectionCheckInterval = setInterval(async () => {
-    // Only check if we're not currently connected
-    if (!obsConnected) {
-      logger.debug("Checking if OBS is now available...");
-      try {
-        // Try a quick connection test
-        await attemptOBSConnection();
-        if (obsConnected) {
-          logger.log("🎉 OBS became available and connection was established!");
-        }
-      } catch (error) {
-        // Silently fail - this is just a check, not a retry
-        logger.debug("OBS still not available");
+      if (reconnectAttempts === 1) {
+        logger.error("The MCP server will remain available while OBS is offline.");
+        logger.error("Verify OBS is running and OBS_WEBSOCKET_URL/OBS_WEBSOCKET_PASSWORD are correct.");
       }
+
+      scheduleReconnect();
+    } finally {
+      connectionAttempt = null;
     }
-  }, CONNECTION_CHECK_INTERVAL);
+  })();
+
+  return connectionAttempt;
+}
+
+obsClient.on("disconnected", () => {
+  obsConnected = false;
+  if (!shuttingDown) {
+    logger.log("OBS WebSocket disconnected; scheduling a reconnect.");
+    scheduleReconnect();
+  }
+});
+
+export function createServer(): McpServer {
+  const server = new McpServer({
+    name: "obs-mcp",
+    version: PACKAGE_VERSION,
+  });
+
+  tools.initialize(server, obsClient);
+  return server;
 }
 
 // Set up server startup logic
-export async function startServer() {
+export async function startServer(): Promise<void> {
   try {
-    // Initialize all tools with the OBS client
-    await tools.initialize(server, obsClient);
-    logger.log("Initialized MCP tools");
-
-    // Connect the MCP server to stdio transport
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    logger.log("OBS MCP Server running on stdio");
+    stdioServer = serveStdio(createServer, {
+      onerror: (error) => logger.error(`MCP stdio error: ${error.message}`),
+    });
+    logger.log("Initialized MCP tools and started dual-era stdio server");
 
     serverConnected = true;
 
-    // Try to connect to OBS WebSocket (but don't fail if it's not available)
-    await attemptOBSConnection();
-
-    // Start the periodic connection check timer
-    startConnectionCheckTimer();
+    // Connect in the background so MCP discovery remains available while OBS is offline.
+    void attemptOBSConnection();
 
     // Set up graceful shutdown
-    process.on("SIGINT", handleShutdown);
-    process.on("SIGTERM", handleShutdown);
+    process.once("SIGINT", handleShutdown);
+    process.once("SIGTERM", handleShutdown);
     
     logger.log("Server startup complete");
-    
-    // Log connection status
-    if (obsConnected) {
-      logger.log("✅ OBS WebSocket: Connected");
-    } else {
-      logger.log("❌ OBS WebSocket: Disconnected (will retry automatically)");
-      logger.log("💡 The server will also check every 1 second if OBS becomes available");
-    }
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -165,25 +128,18 @@ export async function startServer() {
 }
 
 // Handle graceful shutdown
-async function handleShutdown() {
+async function handleShutdown(): Promise<void> {
   logger.log("Shutting down...");
-  
-  // Clear all intervals
-  if (reconnectInterval) {
-    clearInterval(reconnectInterval);
-    reconnectInterval = null;
+  shuttingDown = true;
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
-  
-  if (connectionCheckInterval) {
-    clearInterval(connectionCheckInterval);
-    connectionCheckInterval = null;
-  }
-  
-  // Disconnect from OBS if connected
-  if (obsConnected) {
-    obsClient.disconnect();
-  }
-  
+
+  obsClient.disconnect();
+  await stdioServer?.close();
+  stdioServer = null;
   process.exit(0);
 }
 

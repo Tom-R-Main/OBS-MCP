@@ -1,15 +1,15 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
-export async function initialize(server: McpServer, client: OBSWebSocketClient): Promise<void> {
+export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetVirtualCamStatus tool
   server.registerTool(
     "obs-get-virtual-cam-status",
     {
       title: "Get Virtual Camera Status",
       description: "Gets the status of the virtualcam output",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -42,7 +42,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Virtual Camera",
       description: "Toggles the state of the virtualcam output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -75,7 +75,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Start Virtual Camera",
       description: "Starts the virtualcam output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -108,7 +108,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Stop Virtual Camera",
       description: "Stops the virtualcam output",
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -141,7 +141,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Replay Buffer Status",
       description: "Gets the status of the replay buffer output",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -174,7 +174,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Replay Buffer",
       description: "Toggles the state of the replay buffer output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -207,7 +207,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Start Replay Buffer",
       description: "Starts the replay buffer output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -240,7 +240,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Stop Replay Buffer",
       description: "Stops the replay buffer output",
-      annotations: { destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -273,7 +273,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Save Replay Buffer",
       description: "Saves the contents of the replay buffer output",
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -306,7 +306,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Last Replay Buffer File",
       description: "Gets the filename of the last replay buffer save file",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -339,7 +339,7 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Output List",
       description: "Gets the list of available outputs",
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {
@@ -372,10 +372,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Output Status",
       description: "Gets the status of an output",
-      inputSchema: {
-        outputName: z.string().describe("Output name")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              outputName: z.string().describe("Output name")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ outputName }) => {
       try {
@@ -408,10 +408,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Toggle Output",
       description: "Toggles the status of an output",
-      inputSchema: {
-        outputName: z.string().describe("Output name")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              outputName: z.string().describe("Output name")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async ({ outputName }) => {
       try {
@@ -444,10 +444,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Start Output",
       description: "Starts an output",
-      inputSchema: {
-        outputName: z.string().describe("Output name")
-      },
-      annotations: { destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+              outputName: z.string().describe("Output name")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     async ({ outputName }) => {
       try {
@@ -480,10 +480,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Stop Output",
       description: "Stops an output",
-      inputSchema: {
-        outputName: z.string().describe("Output name")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              outputName: z.string().describe("Output name")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async ({ outputName }) => {
       try {
@@ -516,10 +516,10 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Get Output Settings",
       description: "Gets the settings of an output",
-      inputSchema: {
-        outputName: z.string().describe("Output name")
-      },
-      annotations: { readOnlyHint: true },
+      inputSchema: z.object({
+              outputName: z.string().describe("Output name")
+            }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ outputName }) => {
       try {
@@ -552,11 +552,11 @@ export async function initialize(server: McpServer, client: OBSWebSocketClient):
     {
       title: "Set Output Settings",
       description: "Sets the settings of an output",
-      inputSchema: {
-        outputName: z.string().describe("Output name"),
-        outputSettings: z.record(z.any()).describe("Output settings")
-      },
-      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+              outputName: z.string().describe("Output name"),
+              outputSettings: z.record(z.string(), z.unknown()).describe("Output settings")
+            }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ outputName, outputSettings }) => {
       try {

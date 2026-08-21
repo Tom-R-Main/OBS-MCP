@@ -1,0 +1,97 @@
+import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
+import type { ZodObject } from "zod";
+import type { OBSWebSocketClient } from "../client.js";
+
+export const READ_ONLY_TOOL = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} satisfies ToolAnnotations;
+
+export const IDEMPOTENT_WRITE_TOOL = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} satisfies ToolAnnotations;
+
+export const NON_IDEMPOTENT_WRITE_TOOL = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} satisfies ToolAnnotations;
+
+export const DESTRUCTIVE_WRITE_TOOL = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false,
+} satisfies ToolAnnotations;
+
+type RequestToolDefinition = {
+  name: string;
+  title: string;
+  description: string;
+  requestType: string;
+  inputSchema?: ZodObject;
+  annotations: ToolAnnotations;
+  responseMode?: "json" | "success";
+};
+
+function formatResponse(definition: RequestToolDefinition, response: unknown): string {
+  if (definition.responseMode === "success") {
+    return `${definition.title} completed successfully`;
+  }
+
+  return JSON.stringify(response, null, 2);
+}
+
+async function executeRequest(
+  client: OBSWebSocketClient,
+  definition: RequestToolDefinition,
+  requestData?: Record<string, unknown>,
+) {
+  try {
+    const response = await client.sendRequest(definition.requestType, requestData);
+    return {
+      content: [{ type: "text" as const, text: formatResponse(definition, response) }],
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: "text" as const,
+        text: `${definition.title} failed: ${error instanceof Error ? error.message : String(error)}`,
+      }],
+      isError: true,
+    };
+  }
+}
+
+export function registerObsRequestTool(
+  server: McpServer,
+  client: OBSWebSocketClient,
+  definition: RequestToolDefinition,
+): void {
+  const { name, title, description, inputSchema, annotations } = definition;
+
+  if (inputSchema) {
+    server.registerTool(
+      name,
+      { title, description, inputSchema, annotations },
+      async (args) => executeRequest(
+        client,
+        definition,
+        args as Record<string, unknown>,
+      ),
+    );
+    return;
+  }
+
+  server.registerTool(
+    name,
+    { title, description, annotations },
+    async () => executeRequest(client, definition),
+  );
+}

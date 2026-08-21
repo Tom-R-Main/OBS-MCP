@@ -1,6 +1,77 @@
 {
   "events": [
     {
+      "description": "A new canvas has been created.",
+      "eventType": "CanvasCreated",
+      "eventSubscription": "Canvases",
+      "complexity": 2,
+      "rpcVersion": "1",
+      "deprecated": false,
+      "initialVersion": "5.7.0",
+      "category": "canvases",
+      "dataFields": [
+        {
+          "valueName": "canvasName",
+          "valueType": "String",
+          "valueDescription": "Name of the new canvas"
+        },
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the new canvas"
+        }
+      ]
+    },
+    {
+      "description": "A canvas has been removed.",
+      "eventType": "CanvasRemoved",
+      "eventSubscription": "Canvases",
+      "complexity": 2,
+      "rpcVersion": "1",
+      "deprecated": false,
+      "initialVersion": "5.7.0",
+      "category": "canvases",
+      "dataFields": [
+        {
+          "valueName": "canvasName",
+          "valueType": "String",
+          "valueDescription": "Name of the removed canvas"
+        },
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the removed canvas"
+        }
+      ]
+    },
+    {
+      "description": "The name of a canvas has changed.",
+      "eventType": "CanvasNameChanged",
+      "eventSubscription": "Canvases",
+      "complexity": 2,
+      "rpcVersion": "1",
+      "deprecated": false,
+      "initialVersion": "5.7.0",
+      "category": "canvases",
+      "dataFields": [
+        {
+          "valueName": "canvasUuid",
+          "valueType": "String",
+          "valueDescription": "UUID of the canvas"
+        },
+        {
+          "valueName": "oldCanvasName",
+          "valueType": "String",
+          "valueDescription": "Old name of the canvas"
+        },
+        {
+          "valueName": "canvasName",
+          "valueType": "String",
+          "valueDescription": "New name of the canvas"
+        }
+      ]
+    },
+    {
       "description": "The current scene collection has begun changing.\n\nNote: We recommend using this event to trigger a pause of all polling requests, as performing any requests during a\nscene collection change is considered undefined behavior and can cause crashes!",
       "eventType": "CurrentSceneCollectionChanging",
       "eventSubscription": "Config",
