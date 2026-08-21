@@ -181,4 +181,4 @@ OBS MCP is now maintained as an independent repository with its own protocol bas
 
 ## License
 
-The inherited implementation is licensed under GPL-2.0-only. See [`LICENSE`](LICENSE).
+OBS MCP is licensed under GPL-2.0-only. Published npm and MCPB packages include the corresponding TypeScript source and build scripts. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).

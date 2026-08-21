@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/*
+ * Modified for the independent OBS MCP project in August 2026.
+ * See NOTICE.md and Git history for authorship and change dates.
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { listTools } from "./list-tools.mjs";
@@ -17,9 +22,23 @@ try {
   console.log("Building server...");
   execFileSync("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
 
-  // Copy only what the extension needs.
-  for (const file of ["package.json", "package-lock.json", "icon.png"]) {
+  // Include both the runnable server and its corresponding source.
+  for (const file of [
+    "package.json",
+    "package-lock.json",
+    "icon.png",
+    "LICENSE",
+    "README.md",
+    "NOTICE.md",
+    "tsconfig.json",
+  ]) {
     cpSync(resolve(root, file), resolve(staging, file), { force: true });
+  }
+  for (const directory of ["src", "scripts"]) {
+    cpSync(resolve(root, directory), resolve(staging, directory), {
+      recursive: true,
+      force: true,
+    });
   }
   mkdirSync(resolve(staging, "docs"), { recursive: true });
   cpSync(resolve(root, "docs/protocol.json"), resolve(staging, "docs/protocol.json"), { force: true });

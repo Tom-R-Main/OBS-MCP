@@ -1,3 +1,8 @@
+/*
+ * Modified for the independent OBS MCP project in August 2026.
+ * See NOTICE.md and Git history for authorship and change dates.
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getObsProtocolRequest, OBS_PROTOCOL_REQUESTS } from "./obs-protocol.js";

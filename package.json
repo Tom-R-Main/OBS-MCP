@@ -47,7 +47,13 @@
   },
   "files": [
     "build",
-    "docs/protocol.json"
+    "src",
+    "scripts",
+    "docs/protocol.json",
+    "tsconfig.json",
+    "manifest.json",
+    "icon.png",
+    "NOTICE.md"
   ],
   "dependencies": {
     "ws": "8.21.3",
