@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 import { registerObsRequestTool } from "./request-tool.js";
+import { appendInputScreenshot, inputStateResult, readInputState } from "./after-change.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetInputList tool
@@ -105,18 +106,19 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-create-input",
     {
       title: "Create Input",
-      description: "Creates a new input, adding it as a scene item to the specified scene",
+      description: "Creates a new input, adding it as a scene item to the specified scene, then returns its settings and size in the program scene, warning when it renders at 0×0",
       inputSchema: z.object({
               canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
               sceneName: z.string().describe("Name of the scene to add the input to as a scene item"),
               inputName: z.string().describe("Name of the new input to created"),
               inputKind: z.string().describe("The kind of input to be created"),
               inputSettings: z.record(z.string(), z.unknown()).optional().describe("Settings object to initialize the input with"),
-              sceneItemEnabled: z.boolean().optional().describe("Whether to set the created scene item to enabled or disabled")
+              sceneItemEnabled: z.boolean().optional().describe("Whether to set the created scene item to enabled or disabled"),
+              includeScreenshot: z.boolean().optional().describe("Also return a screenshot of the input after creating it")
             }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ canvasUuid, sceneName, inputName, inputKind, inputSettings, sceneItemEnabled }) => {
+    async ({ canvasUuid, sceneName, inputName, inputKind, inputSettings, sceneItemEnabled, includeScreenshot }) => {
       try {
         const requestParams: Record<string, unknown> = { canvasUuid, sceneName, inputName, inputKind };
         if (inputSettings !== undefined) {
@@ -127,14 +129,11 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         }
 
         const response = await client.sendRequest("CreateInput", requestParams);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully created input '${inputName}' of kind '${inputKind}' with ID ${response.sceneItemId}`
-            }
-          ]
-        };
+        const result = inputStateResult(
+          `Successfully created input '${inputName}' of kind '${inputKind}' with ID ${response.sceneItemId}`,
+          await readInputState(client, inputName),
+        );
+        return includeScreenshot ? await appendInputScreenshot(client, inputName, result) : result;
       } catch (error) {
         return {
           content: [
@@ -205,15 +204,16 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-set-input-settings",
     {
       title: "Set Input Settings",
-      description: "Sets the settings of an input",
+      description: "Sets the settings of an input, then returns the resulting settings and the input's size in the program scene, warning when it renders at 0×0",
       inputSchema: z.object({
               inputName: z.string().describe("Name of the input to set the settings of"),
               inputSettings: z.record(z.string(), z.unknown()).describe("Object of settings to apply"),
-              overlay: z.boolean().optional().describe("True to apply settings on top of existing ones, False to reset to defaults first")
+              overlay: z.boolean().optional().describe("True to apply settings on top of existing ones, False to reset to defaults first"),
+              includeScreenshot: z.boolean().optional().describe("Also return a screenshot of the input after the change")
             }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ inputName, inputSettings, overlay }) => {
+    async ({ inputName, inputSettings, overlay, includeScreenshot }) => {
       try {
         const requestParams: Record<string, unknown> = { inputName, inputSettings };
         if (overlay !== undefined) {
@@ -221,14 +221,11 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         }
 
         await client.sendRequest("SetInputSettings", requestParams);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully updated settings for input: ${inputName}`
-            }
-          ]
-        };
+        const result = inputStateResult(
+          `Successfully updated settings for input: ${inputName}`,
+          await readInputState(client, inputName),
+        );
+        return includeScreenshot ? await appendInputScreenshot(client, inputName, result) : result;
       } catch (error) {
         return {
           content: [

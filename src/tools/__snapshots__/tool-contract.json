@@ -140,6 +140,10 @@
         "sceneItemEnabled": {
           "description": "Whether to set the created scene item to enabled or disabled",
           "type": "boolean"
+        },
+        "includeScreenshot": {
+          "description": "Also return a screenshot of the input after creating it",
+          "type": "boolean"
         }
       },
       "required": [
@@ -5326,6 +5330,10 @@
         },
         "overlay": {
           "description": "True to apply settings on top of existing ones, False to reset to defaults first",
+          "type": "boolean"
+        },
+        "includeScreenshot": {
+          "description": "Also return a screenshot of the input after the change",
           "type": "boolean"
         }
       },

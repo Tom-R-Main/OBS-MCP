@@ -155,7 +155,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-set-scene-item-transform",
     {
       title: "Set Scene Item Transform",
-      description: "Set the position, rotation, scale, or crop of a scene item",
+      description: "Set the position, rotation, scale, or crop of a scene item, then return the transform OBS applied",
       inputSchema: z.object({
               canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
               sceneName: z.string().optional().describe("Name of the scene containing the item"),
@@ -212,13 +212,28 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
           sceneItemTransform
         });
 
+        // Return the transform OBS actually applied (bounds and alignment can
+        // change the effective size), so callers do not need a second request.
+        const message = `Successfully updated transform for item with ID ${sceneItemId} in ${sceneName ?? sceneUuid}`;
+        let transform: Record<string, unknown> = {};
+        let warning: string | undefined;
+        try {
+          const applied = await client.sendRequest("GetSceneItemTransform", { canvasUuid, sceneName, sceneUuid, sceneItemId });
+          transform = applied?.sceneItemTransform ?? {};
+          if (transform.sourceWidth === 0 || transform.sourceHeight === 0) {
+            warning = "The source renders at 0×0, so the item is invisible whatever its transform";
+          }
+        } catch (error) {
+          warning = `Could not read the applied transform back: ${error instanceof Error ? error.message : String(error)}`;
+        }
         return {
           content: [
             {
               type: "text",
-              text: `Successfully updated transform for item with ID ${sceneItemId} in ${sceneName}`
+              text: [message, `Applied transform: ${JSON.stringify(transform)}`, ...(warning ? [`Warning: ${warning}`] : [])].join("\n")
             }
-          ]
+          ],
+          structuredContent: { message, sceneItemTransform: transform, ...(warning ? { warnings: [warning] } : {}) }
         };
       } catch (error) {
         return {
