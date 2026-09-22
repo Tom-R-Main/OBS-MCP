@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 import {
   REPLAY_BUFFER_OUTPUT,
   startOutputAndConfirm,
@@ -14,37 +15,13 @@ import {
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetVirtualCamStatus tool
-  server.registerTool(
-    "obs-get-virtual-cam-status",
-    {
-      title: "Get Virtual Camera Status",
-      description: "Gets the status of the virtualcam output",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetVirtualCamStatus");
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Virtual camera is ${response.outputActive ? "active" : "inactive"}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting virtual camera status: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-virtual-cam-status",
+    title: "Get Virtual Camera Status",
+    description: "Gets the status of the virtualcam output",
+    requestType: "GetVirtualCamStatus",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // ToggleVirtualCam tool
   server.registerTool(
@@ -91,70 +68,23 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // StopVirtualCam tool
-  server.registerTool(
-    "obs-stop-virtual-cam",
-    {
-      title: "Stop Virtual Camera",
-      description: "Stops the virtualcam output",
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("StopVirtualCam");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Virtual camera stopped"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error stopping virtual camera: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-stop-virtual-cam",
+    title: "Stop Virtual Camera",
+    description: "Stops the virtualcam output",
+    requestType: "StopVirtualCam",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    successMessage: () => "Virtual camera stopped",
+  });
 
   // GetReplayBufferStatus tool
-  server.registerTool(
-    "obs-get-replay-buffer-status",
-    {
-      title: "Get Replay Buffer Status",
-      description: "Gets the status of the replay buffer output",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetReplayBufferStatus");
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Replay buffer is ${response.outputActive ? "active" : "inactive"}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting replay buffer status: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-replay-buffer-status",
+    title: "Get Replay Buffer Status",
+    description: "Gets the status of the replay buffer output",
+    requestType: "GetReplayBufferStatus",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // ToggleReplayBuffer tool
   server.registerTool(
@@ -201,172 +131,54 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // StopReplayBuffer tool
-  server.registerTool(
-    "obs-stop-replay-buffer",
-    {
-      title: "Stop Replay Buffer",
-      description: "Stops the replay buffer output",
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("StopReplayBuffer");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Replay buffer stopped"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error stopping replay buffer: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-stop-replay-buffer",
+    title: "Stop Replay Buffer",
+    description: "Stops the replay buffer output",
+    requestType: "StopReplayBuffer",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    successMessage: () => "Replay buffer stopped",
+  });
 
   // SaveReplayBuffer tool
-  server.registerTool(
-    "obs-save-replay-buffer",
-    {
-      title: "Save Replay Buffer",
-      description: "Saves the contents of the replay buffer output",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("SaveReplayBuffer");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Replay buffer saved"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error saving replay buffer: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-save-replay-buffer",
+    title: "Save Replay Buffer",
+    description: "Saves the contents of the replay buffer output",
+    requestType: "SaveReplayBuffer",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    successMessage: () => "Replay buffer saved",
+  });
 
   // GetLastReplayBufferReplay tool
-  server.registerTool(
-    "obs-get-last-replay-buffer-replay",
-    {
-      title: "Get Last Replay Buffer File",
-      description: "Gets the filename of the last replay buffer save file",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetLastReplayBufferReplay");
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Last replay buffer save file: ${response.savedReplayPath}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting last replay buffer file: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-last-replay-buffer-replay",
+    title: "Get Last Replay Buffer File",
+    description: "Gets the filename of the last replay buffer save file",
+    requestType: "GetLastReplayBufferReplay",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // GetOutputList tool
-  server.registerTool(
-    "obs-get-output-list",
-    {
-      title: "Get Output List",
-      description: "Gets the list of available outputs",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetOutputList");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting output list: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-output-list",
+    title: "Get Output List",
+    description: "Gets the list of available outputs",
+    requestType: "GetOutputList",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // GetOutputStatus tool
-  server.registerTool(
-    "obs-get-output-status",
-    {
-      title: "Get Output Status",
-      description: "Gets the status of an output",
-      inputSchema: z.object({
-              outputName: z.string().describe("Output name")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ outputName }) => {
-      try {
-        const response = await client.sendRequest("GetOutputStatus", { outputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting output status: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-output-status",
+    title: "Get Output Status",
+    description: "Gets the status of an output",
+    requestType: "GetOutputStatus",
+    inputSchema: z.object({
+      outputName: z.string().describe("Output name")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // ToggleOutput tool
   server.registerTool(
@@ -405,147 +217,54 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // StartOutput tool
-  server.registerTool(
-    "obs-start-output",
-    {
-      title: "Start Output",
-      description: "Starts an output",
-      inputSchema: z.object({
-              outputName: z.string().describe("Output name")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    },
-    async ({ outputName }) => {
-      try {
-        await client.sendRequest("StartOutput", { outputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Output '${outputName}' started`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error starting output: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-start-output",
+    title: "Start Output",
+    description: "Starts an output",
+    requestType: "StartOutput",
+    inputSchema: z.object({
+      outputName: z.string().describe("Output name")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    successMessage: ({ outputName }) => `Output '${outputName}' started`,
+  });
 
   // StopOutput tool
-  server.registerTool(
-    "obs-stop-output",
-    {
-      title: "Stop Output",
-      description: "Stops an output",
-      inputSchema: z.object({
-              outputName: z.string().describe("Output name")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-    },
-    async ({ outputName }) => {
-      try {
-        await client.sendRequest("StopOutput", { outputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Output '${outputName}' stopped`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error stopping output: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-stop-output",
+    title: "Stop Output",
+    description: "Stops an output",
+    requestType: "StopOutput",
+    inputSchema: z.object({
+      outputName: z.string().describe("Output name")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    successMessage: ({ outputName }) => `Output '${outputName}' stopped`,
+  });
 
   // GetOutputSettings tool
-  server.registerTool(
-    "obs-get-output-settings",
-    {
-      title: "Get Output Settings",
-      description: "Gets the settings of an output",
-      inputSchema: z.object({
-              outputName: z.string().describe("Output name")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ outputName }) => {
-      try {
-        const response = await client.sendRequest("GetOutputSettings", { outputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting output settings: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-output-settings",
+    title: "Get Output Settings",
+    description: "Gets the settings of an output",
+    requestType: "GetOutputSettings",
+    inputSchema: z.object({
+      outputName: z.string().describe("Output name")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetOutputSettings tool
-  server.registerTool(
-    "obs-set-output-settings",
-    {
-      title: "Set Output Settings",
-      description: "Sets the settings of an output",
-      inputSchema: z.object({
-              outputName: z.string().describe("Output name"),
-              outputSettings: z.record(z.string(), z.unknown()).describe("Output settings")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ outputName, outputSettings }) => {
-      try {
-        await client.sendRequest("SetOutputSettings", { outputName, outputSettings });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Settings updated for output '${outputName}'`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error setting output settings: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-output-settings",
+    title: "Set Output Settings",
+    description: "Sets the settings of an output",
+    requestType: "SetOutputSettings",
+    inputSchema: z.object({
+      outputName: z.string().describe("Output name"),
+      outputSettings: z.record(z.string(), z.unknown()).describe("Output settings")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ outputName }) => `Settings updated for output '${outputName}'`,
+  });
 }

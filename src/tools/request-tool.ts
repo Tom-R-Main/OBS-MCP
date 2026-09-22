@@ -43,11 +43,18 @@ type RequestToolDefinition = {
   inputSchema?: ZodObject;
   annotations: ToolAnnotations;
   responseMode?: "json" | "success";
+  /** Replaces the JSON response with a confirmation built from the arguments. */
+  successMessage?: (args: Record<string, any>) => string;
   /** Returns a refusal message when the request must not reach OBS. */
   guard?: (client: OBSWebSocketClient, args: Record<string, unknown>) => Promise<string | undefined>;
 };
 
-function formatResponse(definition: RequestToolDefinition, response: unknown): string {
+function formatResponse(
+  definition: RequestToolDefinition,
+  response: unknown,
+  requestData: Record<string, unknown>,
+): string {
+  if (definition.successMessage) return definition.successMessage(requestData);
   if (definition.responseMode === "success") {
     return `${definition.title} completed successfully`;
   }
@@ -70,7 +77,7 @@ async function executeRequest(
     }
     const response = await client.sendRequest(definition.requestType, requestData);
     return {
-      content: [{ type: "text" as const, text: formatResponse(definition, response) }],
+      content: [{ type: "text" as const, text: formatResponse(definition, response, requestData ?? {}) }],
     };
   } catch (error) {
     return {

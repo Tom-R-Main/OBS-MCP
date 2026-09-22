@@ -6,41 +6,18 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetRecordStatus tool
-  server.registerTool(
-    "obs-get-record-status",
-    {
-      title: "Get Record Status",
-      description: "Gets the status of the record output",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetRecordStatus");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting record status: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-record-status",
+    title: "Get Record Status",
+    description: "Gets the status of the record output",
+    requestType: "GetRecordStatus",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // ToggleRecord tool
   server.registerTool(
@@ -120,136 +97,44 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // ToggleRecordPause tool
-  server.registerTool(
-    "obs-toggle-record-pause",
-    {
-      title: "Toggle Record Pause",
-      description: "Toggles pause on the record output",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("ToggleRecordPause");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Recording pause toggled"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error toggling record pause: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-toggle-record-pause",
+    title: "Toggle Record Pause",
+    description: "Toggles pause on the record output",
+    requestType: "ToggleRecordPause",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    successMessage: () => "Recording pause toggled",
+  });
 
   // PauseRecord tool
-  server.registerTool(
-    "obs-pause-record",
-    {
-      title: "Pause Recording",
-      description: "Pauses the record output",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("PauseRecord");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Recording paused"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error pausing recording: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-pause-record",
+    title: "Pause Recording",
+    description: "Pauses the record output",
+    requestType: "PauseRecord",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: () => "Recording paused",
+  });
 
   // ResumeRecord tool
-  server.registerTool(
-    "obs-resume-record",
-    {
-      title: "Resume Recording",
-      description: "Resumes the record output",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("ResumeRecord");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Recording resumed"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error resuming recording: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-resume-record",
+    title: "Resume Recording",
+    description: "Resumes the record output",
+    requestType: "ResumeRecord",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: () => "Recording resumed",
+  });
 
   // SplitRecordFile tool
-  server.registerTool(
-    "obs-split-record-file",
-    {
-      title: "Split Record File",
-      description: "Splits the current file being recorded into a new file",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    },
-    async () => {
-      try {
-        await client.sendRequest("SplitRecordFile");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Recording file split"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error splitting record file: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-split-record-file",
+    title: "Split Record File",
+    description: "Splits the current file being recorded into a new file",
+    requestType: "SplitRecordFile",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    successMessage: () => "Recording file split",
+  });
 
   // CreateRecordChapter tool
   server.registerTool(
