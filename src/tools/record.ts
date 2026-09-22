@@ -48,7 +48,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     {
       title: "Toggle Recording",
       description: "Toggles the status of the record output",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
     async () => {
       try {
@@ -92,7 +92,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     {
       title: "Stop Recording",
       description: "Stops the record output",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async () => {
       try {

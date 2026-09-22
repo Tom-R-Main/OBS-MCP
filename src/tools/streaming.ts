@@ -59,7 +59,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     {
       title: "Stop Stream",
       description: "Stop streaming in OBS",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
     async () => {
       try {
@@ -92,7 +92,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     {
       title: "Toggle Stream",
       description: "Toggle the streaming state in OBS",
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
     async () => {
       try {
