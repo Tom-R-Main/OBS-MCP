@@ -95,6 +95,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_WEBSOCKET_URL` | No | `ws://localhost:4455` | Address of the OBS WebSocket server |
 | `OBS_WEBSOCKET_PASSWORD` | Only when OBS authentication is enabled | None | Password configured in OBS |
 | `OBS_MCP_MAX_SCREENSHOT_BYTES` | No | `4194304` | Maximum decoded size of a screenshot returned through MCP; the hard ceiling is 6 MiB |
+| `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
 

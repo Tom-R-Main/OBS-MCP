@@ -7,10 +7,8 @@
  */
 
 import { startServer } from "./server.js";
+import { logger } from "./logger.js";
 
-const logger = {
-  error: (message: string) => console.error(message),
-};
 
 // Set up better error handling
 process.on("uncaughtException", (error) => {
