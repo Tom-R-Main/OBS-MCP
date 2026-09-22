@@ -19,9 +19,20 @@
   "support": "https://github.com/Tom-R-Main/OBS-MCP/issues",
   "license": "GPL-2.0-only",
   "tools_generated": true,
-  "keywords": ["obs", "streaming", "recording", "video", "broadcast", "scenes"],
+  "keywords": [
+    "obs",
+    "streaming",
+    "recording",
+    "video",
+    "broadcast",
+    "scenes"
+  ],
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "node": ">=20.19.0"
     }
@@ -31,10 +42,14 @@
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/index.js"],
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
       "env": {
         "OBS_WEBSOCKET_URL": "${user_config.obs_websocket_url}",
-        "OBS_WEBSOCKET_PASSWORD": "${user_config.obs_websocket_password}"
+        "OBS_WEBSOCKET_PASSWORD": "${user_config.obs_websocket_password}",
+        "OBS_MCP_TOOLSETS": "${user_config.obs_mcp_toolsets}",
+        "OBS_MCP_READ_ONLY": "${user_config.obs_mcp_read_only}"
       }
     }
   },
@@ -52,6 +67,20 @@
       "description": "Password from OBS WebSocket Server Settings. Leave empty if authentication is disabled.",
       "required": false,
       "sensitive": true
+    },
+    "obs_mcp_toolsets": {
+      "type": "string",
+      "title": "Tool groups",
+      "description": "Comma-separated tool groups to expose: all, core, or any of general, scenes, scene-items, sources, inputs, media, filters, transitions, record, stream, outputs, config, ui, protocol.",
+      "required": false,
+      "default": "all"
+    },
+    "obs_mcp_read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Expose only tools that do not change OBS.",
+      "required": false,
+      "default": false
     }
   }
 }

@@ -467,6 +467,44 @@ describe("compiled stdio MCP boundary", () => {
     await vi.waitFor(() => expect(fake.openConnectionCount).toBe(0));
   });
 
+  it("registers only the configured tool groups in read-only mode", async () => {
+    const fake = await FakeOBSServer.start();
+    fakeServers.push(fake);
+    const { client, stderr } = await connectClient(fake, "modern", {
+      OBS_MCP_TOOLSETS: "core",
+      OBS_MCP_READ_ONLY: "true",
+    });
+
+    const { tools } = await client.listTools();
+    const names = tools.map(({ name }) => name);
+    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.length).toBeLessThan(TOOL_COUNT);
+    expect(tools.every(({ annotations }) => annotations?.readOnlyHint === true)).toBe(true);
+    expect(names).toEqual(expect.arrayContaining(["obs-get-status", "obs-preflight"]));
+    expect(names).not.toContain("obs-start-record");
+    expect(names).not.toContain("obs-get-stream-status");
+    await vi.waitFor(() => expect(stderr.join("")).toMatch(/Registering \d+ of \d+ tools \(read-only\)/));
+  });
+
+  it("refuses to start with an unknown tool group or tool name", async () => {
+    const environments: Record<string, string>[] = [
+      { OBS_MCP_TOOLSETS: "scenez" },
+      { OBS_MCP_TOOLS: "obs-start-recording" },
+    ];
+    for (const environment of environments) {
+      const child = spawn(process.execPath, [cliPath], {
+        cwd: projectRoot,
+        env: childEnvironment("ws://127.0.0.1:1", undefined, environment),
+      });
+      let stderr = "";
+      child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+      const [code] = await once(child, "exit") as [number | null];
+
+      expect(code).toBe(1);
+      expect(stderr).toMatch(/scenez|obs-start-recording/);
+    }
+  });
+
   it("exits on stdin EOF while OBS is offline", async () => {
     const port = await reservePort();
     const child = spawnRawChild(`ws://127.0.0.1:${port}`);

@@ -24,26 +24,42 @@ import * as protocolExtensions from "./protocol-extensions.js";
 import * as protocol from "./protocol.js";
 import * as preflight from "./preflight.js";
 import { withStructuredToolResults } from "./results.js";
+import { ALL_TOOLS, scopedServer, type RegisteredTool, type ToolFilter, type ToolGroup } from "./toolsets.js";
 
-// Export the initialization function for all tools
-export function initialize(server: McpServer, client: OBSWebSocketClient): void {
+const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client: OBSWebSocketClient): void }]> = [
+  ["general", general],
+  ["scenes", scenes],
+  ["sources", sources],
+  ["scene-items", sceneItems],
+  ["stream", streaming],
+  ["transitions", transitions],
+  ["config", config],
+  ["filters", filters],
+  ["inputs", inputs],
+  ["media", mediaInputs],
+  ["outputs", outputs],
+  ["record", record],
+  ["ui", ui],
+  ["protocol", protocolExtensions], // Regrouped per tool in toolsets.ts.
+  ["protocol", protocol],
+  ["record", preflight],
+];
+
+/**
+ * Registers the tools the filter includes and returns every tool with its
+ * group and whether it was registered.
+ */
+export function initialize(
+  server: McpServer,
+  client: OBSWebSocketClient,
+  filter: ToolFilter = ALL_TOOLS,
+): RegisteredTool[] {
   const structuredServer = withStructuredToolResults(server);
-  general.initialize(structuredServer, client);
-  scenes.initialize(structuredServer, client);
-  sources.initialize(structuredServer, client);
-  sceneItems.initialize(structuredServer, client);
-  streaming.initialize(structuredServer, client);
-  transitions.initialize(structuredServer, client);
-  config.initialize(structuredServer, client);
-  filters.initialize(structuredServer, client);
-  inputs.initialize(structuredServer, client);
-  mediaInputs.initialize(structuredServer, client);
-  outputs.initialize(structuredServer, client);
-  record.initialize(structuredServer, client);
-  ui.initialize(structuredServer, client);
-  protocolExtensions.initialize(structuredServer, client);
-  protocol.initialize(structuredServer, client);
-  preflight.initialize(structuredServer, client);
+  const registry: RegisteredTool[] = [];
+  for (const [group, module] of MODULES) {
+    module.initialize(scopedServer(structuredServer, group, filter, registry), client);
+  }
+  return registry;
 }
 
 // Export tool modules
