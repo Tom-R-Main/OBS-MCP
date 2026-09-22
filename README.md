@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 155 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 156 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -101,7 +101,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 155 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 156 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -109,6 +109,7 @@ The 155 tools are organized around the OBS protocol rather than a smaller opinio
 - recording, streaming, replay buffer, virtual camera, and output settings
 - transitions, transition overrides, the transition cursor, and the T-Bar
 - canvases, screenshots, profiles, scene collections, and persistent data
+- a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
 - protocol description and the guarded generic request fallback
 
 Tool discovery works without an OBS connection. Calls that need OBS return an MCP error until the WebSocket connection is ready.
@@ -162,7 +163,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 155 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 156 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

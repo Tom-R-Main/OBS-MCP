@@ -14,6 +14,7 @@ import { unpackExtension, validateManifest } from "@anthropic-ai/mcpb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listTools } from "../../scripts/list-tools.mjs";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
+import { TOOL_COUNT } from "../support/tool-count.js";
 
 type ArtifactManifest = {
   version: string;
@@ -71,8 +72,8 @@ describe("MCPB artifact", () => {
     const artifactToolNames = manifest.tools.map(({ name }) => name);
 
     expect(manifest.version).toBe(packageMetadata.version);
-    expect(artifactToolNames).toHaveLength(155);
-    expect(new Set(artifactToolNames).size).toBe(155);
+    expect(artifactToolNames).toHaveLength(TOOL_COUNT);
+    expect(new Set(artifactToolNames).size).toBe(TOOL_COUNT);
     expect(artifactToolNames).toEqual(sourceTools.map(({ name }) => name));
 
     for (const relativePath of [
@@ -111,7 +112,7 @@ describe("MCPB artifact", () => {
     await client.connect(transport);
     clients.push(client);
 
-    expect((await client.listTools()).tools).toHaveLength(155);
+    expect((await client.listTools()).tools).toHaveLength(TOOL_COUNT);
     await waitForObsConnected(client);
     const version = await client.callTool({ name: "obs-get-version", arguments: {} });
     expect(version.isError).not.toBe(true);

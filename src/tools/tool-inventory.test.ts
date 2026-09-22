@@ -33,7 +33,7 @@ describe("tool contract snapshot", () => {
         .map(({ name }) => name);
       expect(unsafe).toEqual([]);
       const readOnlyMutators = contract
-        .filter(({ name, annotations }) => annotations?.readOnlyHint && !/^obs-(get|list|test|describe)-|^obs-sleep$/.test(name))
+        .filter(({ name, annotations }) => annotations?.readOnlyHint && !/^obs-(get|list|test|describe)-|^obs-(sleep|preflight)$/.test(name))
         .map(({ name }) => name);
       expect(readOnlyMutators).toEqual([]);
       await expect(`${JSON.stringify(contract, null, 2)}\n`)

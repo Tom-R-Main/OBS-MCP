@@ -384,6 +384,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     async ({ parameterCategory, parameterName, parameterValue }) => {
       try {
         await client.sendRequest("SetProfileParameter", { parameterCategory, parameterName, parameterValue });
+        if (OUTPUT_PARAMETER_CATEGORIES.has(parameterCategory)) client.markOutputSettingsPending();
         const warning = OUTPUT_PARAMETER_CATEGORIES.has(parameterCategory)
           ? ". Warning: OBS applies output settings only when it rebuilds its outputs; restart OBS before starting an output"
           : "";

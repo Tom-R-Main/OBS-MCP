@@ -196,6 +196,8 @@ export class FakeOBSServer {
    */
   respondWith(requestType: string, responder: FakeOBSResponder): void {
     this.responders.set(requestType, responder);
+    // Advertised on the next GetVersion, so wire responders before connecting.
+    if (!this.availableRequests.includes(requestType)) this.availableRequests.push(requestType);
   }
 
   async waitForFrame(
