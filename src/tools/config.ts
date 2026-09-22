@@ -7,6 +7,8 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 
+const OUTPUT_PARAMETER_CATEGORIES = new Set(["Output", "SimpleOutput", "AdvOut"]);
+
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetPersistentData tool
   server.registerTool(
@@ -371,7 +373,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-set-profile-parameter",
     {
       title: "Set Profile Parameter",
-      description: "Sets the value of a parameter in the current profile's configuration",
+      description: "Sets the value of a parameter in the current profile's configuration. OBS does not rebuild its outputs after this call, so changes to output settings (categories Output, SimpleOutput, AdvOut) take effect only after OBS restarts or its settings are applied in the OBS window",
       inputSchema: z.object({
               parameterCategory: z.string().describe("Category of the parameter to set"),
               parameterName: z.string().describe("Name of the parameter to set"),
@@ -382,11 +384,14 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     async ({ parameterCategory, parameterName, parameterValue }) => {
       try {
         await client.sendRequest("SetProfileParameter", { parameterCategory, parameterName, parameterValue });
+        const warning = OUTPUT_PARAMETER_CATEGORIES.has(parameterCategory)
+          ? ". Warning: OBS applies output settings only when it rebuilds its outputs; restart OBS before starting an output"
+          : "";
         return {
           content: [
             {
               type: "text",
-              text: `Successfully set parameter '${parameterName}' in category '${parameterCategory}'`
+              text: `Successfully set parameter '${parameterName}' in category '${parameterCategory}'${warning}`
             }
           ]
         };

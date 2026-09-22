@@ -46,8 +46,12 @@ describe("pinned OBS WebSocket protocol", () => {
       }
     }
 
+    // OBS only honors Sleep inside a request batch; obs-sleep waits in the server instead.
+    const batchOnlyRequests = new Set(["Sleep"]);
     const officialRequests = new Set(
-      OBS_PROTOCOL_REQUESTS.map(({ requestType }) => requestType),
+      OBS_PROTOCOL_REQUESTS
+        .map(({ requestType }) => requestType)
+        .filter((requestType) => !batchOnlyRequests.has(requestType)),
     );
     expect([...wrappedRequests].filter((name) => !officialRequests.has(name))).toEqual([]);
     expect([...officialRequests].filter((name) => !wrappedRequests.has(name))).toEqual([]);

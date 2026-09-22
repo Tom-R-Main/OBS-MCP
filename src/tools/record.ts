@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetRecordStatus tool
@@ -79,32 +80,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-start-record",
     {
       title: "Start Recording",
-      description: "Starts the record output",
+      description: "Starts the record output and waits until OBS confirms it is active",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async () => {
-      try {
-        await client.sendRequest("StartRecord");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Recording started"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error starting recording: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
+    async () => startOutputAndConfirm(client, RECORD_OUTPUT)
   );
 
   // StopRecord tool

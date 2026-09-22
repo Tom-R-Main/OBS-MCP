@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { startOutputAndConfirm, STREAM_OUTPUT } from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetStreamStatus tool
@@ -46,32 +47,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-start-stream",
     {
       title: "Start Stream",
-      description: "Start streaming in OBS",
+      description: "Start streaming in OBS and wait until OBS confirms the stream is active",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async () => {
-      try {
-        await client.sendRequest("StartStream");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Successfully started streaming"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error starting stream: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
+    async () => startOutputAndConfirm(client, STREAM_OUTPUT)
   );
 
   // StopStream tool

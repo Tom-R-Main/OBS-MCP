@@ -15,6 +15,7 @@ type JsonObject = Record<string, unknown>;
 
 const enabled = process.env.OBS_MCP_LIVE_TEST === "1";
 const mutationsEnabled = process.env.OBS_MCP_LIVE_MUTATION === "1";
+const recordingEnabled = mutationsEnabled && process.env.OBS_MCP_LIVE_RECORD === "1";
 const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
 const cliPath = fileURLToPath(new URL("../../build/index.js", import.meta.url));
 
@@ -137,4 +138,21 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     const remainingScenes = Array.isArray(afterRemove.scenes) ? afterRemove.scenes : [];
     expect(remainingScenes).not.toContainEqual(expect.objectContaining({ sceneName }));
   });
+
+  it.skipIf(!recordingEnabled)("records a short clip only after OBS confirms the output", async () => {
+    const collection = await call("obs-get-scene-collection-list");
+    expect(collection.currentSceneCollectionName).toBe(process.env.OBS_MCP_LIVE_SCENE_COLLECTION);
+    const record = await call("obs-get-record-status");
+    expect(record.outputActive, "Recording must be inactive for the live recording test").toBe(false);
+
+    const started = await call("obs-start-record");
+    try {
+      expect(started.message).toMatch(/^Recording started/);
+      expect((await call("obs-get-record-status")).outputActive).toBe(true);
+      await call("obs-sleep", { sleepMillis: 1_000 });
+    } finally {
+      const stopped = await call("obs-stop-record");
+      expect(stopped.message).toMatch(/^Recording stopped, saved to: /);
+    }
+  }, 20_000);
 });

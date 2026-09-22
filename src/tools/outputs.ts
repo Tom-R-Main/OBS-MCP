@@ -6,6 +6,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import {
+  REPLAY_BUFFER_OUTPUT,
+  startOutputAndConfirm,
+  VIRTUAL_CAM_OUTPUT,
+} from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetVirtualCamStatus tool
@@ -79,32 +84,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-start-virtual-cam",
     {
       title: "Start Virtual Camera",
-      description: "Starts the virtualcam output",
+      description: "Starts the virtualcam output and waits until OBS confirms it is active",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async () => {
-      try {
-        await client.sendRequest("StartVirtualCam");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Virtual camera started"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error starting virtual camera: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
+    async () => startOutputAndConfirm(client, VIRTUAL_CAM_OUTPUT)
   );
 
   // StopVirtualCam tool
@@ -211,32 +194,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     "obs-start-replay-buffer",
     {
       title: "Start Replay Buffer",
-      description: "Starts the replay buffer output",
+      description: "Starts the replay buffer output and waits until OBS confirms it is active",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async () => {
-      try {
-        await client.sendRequest("StartReplayBuffer");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Replay buffer started"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error starting replay buffer: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
+    async () => startOutputAndConfirm(client, REPLAY_BUFFER_OUTPUT)
   );
 
   // StopReplayBuffer tool

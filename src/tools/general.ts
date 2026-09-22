@@ -8,6 +8,8 @@ import { OBSWebSocketClient } from "../client.js";
 import { PACKAGE_VERSION } from "../version.js";
 import { z } from "zod";
 
+const MAX_SLEEP_MILLIS = 50_000;
+
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // Get server status
   server.registerTool(
@@ -56,18 +58,6 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
-      if (!client.isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Not connected to OBS WebSocket"
-            }
-          ],
-          isError: true
-        };
-      }
-
       try {
         const version = await client.sendRequest("GetVersion");
         return {
@@ -101,18 +91,6 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async () => {
-      if (!client.isConnected()) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Not connected to OBS WebSocket"
-            }
-          ],
-          isError: true
-        };
-      }
-
       try {
         // Try a simple request to test the connection
         await client.sendRequest("GetVersion");
@@ -382,36 +360,47 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     }
   );
 
-  // Sleep tool
+  // Sleep tool. OBS only honors its Sleep request inside a request batch, so a
+  // standalone call always failed; wait in the server to pace tool sequences.
   server.registerTool(
     "obs-sleep",
     {
       title: "OBS Sleep",
-      description: "Sleeps for a time duration or number of frames",
+      description: "Waits for a time duration or a number of OBS video frames before returning. Use it to pace sequences such as holding a recorded shot on screen.",
       inputSchema: z.object({
-              sleepMillis: z.number().optional().describe("Number of milliseconds to sleep for"),
-              sleepFrames: z.number().optional().describe("Number of frames to sleep for")
+              sleepMillis: z.number().int().min(0).max(MAX_SLEEP_MILLIS).optional().describe("Number of milliseconds to sleep for"),
+              sleepFrames: z.number().int().min(0).max(10_000).optional().describe("Number of video frames to sleep for, at the current OBS frame rate")
             }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ sleepMillis, sleepFrames }) => {
+      if ((sleepMillis === undefined) === (sleepFrames === undefined)) {
+        return {
+          content: [{ type: "text", text: "Provide exactly one of sleepMillis or sleepFrames" }],
+          isError: true
+        };
+      }
+
       try {
-        const params: Record<string, unknown> = {};
-
-        if (sleepMillis !== undefined) {
-          params.sleepMillis = sleepMillis;
-        }
-
+        let millis = sleepMillis ?? 0;
         if (sleepFrames !== undefined) {
-          params.sleepFrames = sleepFrames;
+          const video = await client.sendRequest("GetVideoSettings");
+          const fps = video.fpsNumerator / video.fpsDenominator;
+          if (!Number.isFinite(fps) || fps <= 0) {
+            throw new Error("OBS reported an invalid frame rate");
+          }
+          millis = Math.round((sleepFrames / fps) * 1000);
+        }
+        if (millis > MAX_SLEEP_MILLIS) {
+          throw new Error(`Sleep cannot exceed ${MAX_SLEEP_MILLIS}ms`);
         }
 
-        await client.sendRequest("Sleep", params);
+        await new Promise((resolve) => setTimeout(resolve, millis));
         return {
           content: [
             {
               type: "text",
-              text: "Sleep operation completed successfully"
+              text: `Slept for ${millis}ms`
             }
           ]
         };
