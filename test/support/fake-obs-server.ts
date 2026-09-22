@@ -47,6 +47,7 @@ export type FakeOBSOptions = {
   availableRequests?: readonly string[];
   obsStudioVersion?: string;
   obsWebSocketVersion?: string;
+  platform?: string;
 };
 
 type ResponseStatus = {
@@ -123,6 +124,7 @@ export class FakeOBSServer {
   private readonly autoGetVersion: boolean;
   private readonly obsStudioVersion: string;
   private readonly obsWebSocketVersion: string;
+  private readonly platform: string;
   private nextConnectionId = 1;
   private nextCursor = 1;
   private closed = false;
@@ -133,6 +135,7 @@ export class FakeOBSServer {
     this.autoGetVersion = options.autoGetVersion ?? true;
     this.obsStudioVersion = options.obsStudioVersion ?? "32.2.2";
     this.obsWebSocketVersion = options.obsWebSocketVersion ?? "5.7.0";
+    this.platform = options.platform ?? "macos";
     this.availableRequests = Array.from(new Set(["GetVersion", ...(options.availableRequests ?? [])]));
 
     const address = server.address() as AddressInfo;
@@ -415,7 +418,7 @@ export class FakeOBSServer {
       rpcVersion: 1,
       availableRequests: this.availableRequests,
       supportedImageFormats: ["png", "jpeg", "webp"],
-      platform: "macos",
+      platform: this.platform,
       platformDescription: "Fake OBS Studio",
     };
   }
