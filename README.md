@@ -115,6 +115,8 @@ The 156 tools are organized around the OBS protocol rather than a smaller opinio
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
 - protocol description and the guarded generic request fallback
 
+Tools that send a single OBS request declare an `outputSchema` generated from the pinned protocol, so clients receive typed `structuredContent` with the documented response fields. Fields are optional and nullable because OBS omits newer fields in older versions and returns undocumented nulls.
+
 Tool discovery works without an OBS connection. Calls that need OBS return an MCP error until the WebSocket connection is ready.
 
 ### Choosing tools

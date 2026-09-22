@@ -116,6 +116,25 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     }
   });
 
+  it("returns results that match every read-only tool's declared output schema", async () => {
+    if (!client) throw new Error("Live MCP client is not connected");
+    const { tools } = await client.listTools();
+    const candidates = tools.filter(({ annotations, outputSchema, inputSchema }) => (
+      annotations?.readOnlyHint === true
+      && outputSchema !== undefined
+      && (inputSchema.required ?? []).length === 0
+    ));
+    expect(candidates.length).toBeGreaterThan(20);
+
+    const mismatches: string[] = [];
+    for (const tool of candidates) {
+      const result = await client.callTool({ name: tool.name, arguments: {} });
+      const text = textContent(result as CallToolResult);
+      if (/Output validation error/.test(text)) mismatches.push(`${tool.name}: ${text}`);
+    }
+    expect(mismatches).toEqual([]);
+  }, 60_000);
+
   it.skipIf(!mutationsEnabled)("creates and removes one scene in the approved collection", async () => {
     const expectedCollection = process.env.OBS_MCP_LIVE_SCENE_COLLECTION;
     if (!expectedCollection) {

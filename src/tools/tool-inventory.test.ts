@@ -16,7 +16,7 @@ import { initialize } from "./index.js";
 const DESTRUCTIVE_NAME = /^obs-(remove-.+|stop-(stream|record|output|virtual-cam|replay-buffer)|toggle-(stream|record|output|virtual-cam|replay-buffer))$/;
 
 describe("tool contract snapshot", () => {
-  it("keeps tool names, input schemas, and annotations stable", async () => {
+  it("keeps tool names, input and output schemas, and annotations stable", async () => {
     const server = new McpServer({ name: "obs-mcp-test", version: "0.0.0" });
     const client = new Client({ name: "obs-mcp-test-client", version: "0.0.0" });
     initialize(server, new OBSWebSocketClient("ws://127.0.0.1:1"));
@@ -26,7 +26,7 @@ describe("tool contract snapshot", () => {
     try {
       const { tools } = await client.listTools();
       const contract = tools
-        .map(({ name, title, inputSchema, annotations }) => ({ name, title, inputSchema, annotations }))
+        .map(({ name, title, inputSchema, outputSchema, annotations }) => ({ name, title, inputSchema, outputSchema, annotations }))
         .sort((a, b) => a.name.localeCompare(b.name));
       const unsafe = contract
         .filter(({ name, annotations }) => DESTRUCTIVE_NAME.test(name) && !annotations?.destructiveHint)

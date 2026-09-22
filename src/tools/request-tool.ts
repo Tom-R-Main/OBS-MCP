@@ -6,6 +6,7 @@
 import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import type { ZodObject } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
+import { MESSAGE_OUTPUT_SCHEMA, responseOutputSchema } from "./output-schema.js";
 
 export const READ_ONLY_TOOL = {
   readOnlyHint: true,
@@ -49,17 +50,23 @@ type RequestToolDefinition = {
   guard?: (client: OBSWebSocketClient, args: Record<string, unknown>) => Promise<string | undefined>;
 };
 
-function formatResponse(
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function returnsMessage(definition: RequestToolDefinition): boolean {
+  return definition.successMessage !== undefined || definition.responseMode === "success";
+}
+
+function structuredResponse(
   definition: RequestToolDefinition,
   response: unknown,
   requestData: Record<string, unknown>,
-): string {
-  if (definition.successMessage) return definition.successMessage(requestData);
-  if (definition.responseMode === "success") {
-    return `${definition.title} completed successfully`;
-  }
-
-  return JSON.stringify(response, null, 2);
+): Record<string, unknown> {
+  if (!returnsMessage(definition)) return isObject(response) ? response : {};
+  return {
+    message: definition.successMessage?.(requestData) ?? `${definition.title} completed successfully`,
+  };
 }
 
 async function executeRequest(
@@ -76,8 +83,15 @@ async function executeRequest(
       };
     }
     const response = await client.sendRequest(definition.requestType, requestData);
+    const structuredContent = structuredResponse(definition, response, requestData ?? {});
     return {
-      content: [{ type: "text" as const, text: formatResponse(definition, response, requestData ?? {}) }],
+      content: [{
+        type: "text" as const,
+        text: returnsMessage(definition)
+          ? String(structuredContent.message)
+          : JSON.stringify(structuredContent, null, 2),
+      }],
+      structuredContent,
     };
   } catch (error) {
     return {
@@ -96,11 +110,15 @@ export function registerObsRequestTool(
   definition: RequestToolDefinition,
 ): void {
   const { name, title, description, inputSchema, annotations } = definition;
+  const outputSchema = returnsMessage(definition)
+    ? MESSAGE_OUTPUT_SCHEMA
+    : responseOutputSchema(definition.requestType);
+  const outputConfig = outputSchema ? { outputSchema } : {};
 
   if (inputSchema) {
     server.registerTool(
       name,
-      { title, description, inputSchema, annotations },
+      { title, description, inputSchema, annotations, ...outputConfig },
       async (args) => executeRequest(
         client,
         definition,
@@ -112,7 +130,7 @@ export function registerObsRequestTool(
 
   server.registerTool(
     name,
-    { title, description, annotations },
+    { title, description, annotations, ...outputConfig },
     async () => executeRequest(client, definition),
   );
 }

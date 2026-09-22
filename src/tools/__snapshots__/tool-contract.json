@@ -19,6 +19,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -158,6 +172,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -205,6 +233,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -227,6 +269,20 @@
         "sceneCollectionName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -382,6 +438,24 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemId": {
+          "description": "Numeric ID of the duplicated scene item",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -395,6 +469,31 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "canvases": {
+          "description": "Array of canvases",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -410,6 +509,57 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneName": {
+          "description": "Current program scene name",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sceneUuid": {
+          "description": "Current program scene UUID",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentProgramSceneName": {
+          "description": "Current program scene name (Deprecated)",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentProgramSceneUuid": {
+          "description": "Current program scene UUID (Deprecated)",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -423,6 +573,94 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionName": {
+          "description": "Name of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionUuid": {
+          "description": "UUID of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionKind": {
+          "description": "Kind of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionFixed": {
+          "description": "Whether the transition uses a fixed (unconfigurable) duration",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionDuration": {
+          "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionConfigurable": {
+          "description": "Whether the transition supports being configured",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionSettings": {
+          "description": "Object of settings for the transition. `null` if transition is not configurable",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -447,6 +685,28 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "defaultFilterSettings": {
+          "description": "Object of default settings for the filter kind",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -461,6 +721,27 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sourceFilterKinds": {
+          "description": "Array of source filter kinds",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -474,6 +755,27 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "groups": {
+          "description": "Array of group names",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -503,6 +805,31 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItems": {
+          "description": "Array of scene items in the group",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -516,6 +843,27 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "hotkeys": {
+          "description": "Array of hotkey names",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -540,6 +888,24 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputAudioBalance": {
+          "description": "Audio balance value from 0.0-1.0",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -563,6 +929,24 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "monitorType": {
+          "description": "Audio monitor type",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -585,6 +969,24 @@
         "inputName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputAudioSyncOffset": {
+          "description": "Audio sync offset in milliseconds",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -610,6 +1012,28 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputAudioTracks": {
+          "description": "Object of audio tracks and associated enable states",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -632,6 +1056,28 @@
         "inputKind"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "defaultInputSettings": {
+          "description": "Object of default settings for the input kind",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -657,6 +1103,24 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputDeinterlaceFieldOrder": {
+          "description": "Deinterlace field order of the input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -680,6 +1144,24 @@
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputDeinterlaceMode": {
+          "description": "Deinterlace mode of the input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -744,6 +1226,24 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputMuted": {
+          "description": "Whether the input is muted",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -775,6 +1275,31 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "propertyItems": {
+          "description": "Array of items in the list property",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -797,6 +1322,39 @@
         "inputName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputSettings": {
+          "description": "Object of settings for the input",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputKind": {
+          "description": "The kind of the input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -821,6 +1379,35 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "inputVolumeMul": {
+          "description": "Volume setting in mul",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputVolumeDb": {
+          "description": "Volume setting in dB",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -834,6 +1421,24 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "savedReplayPath": {
+          "description": "File path",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -858,6 +1463,46 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "mediaState": {
+          "description": "State of the media input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mediaDuration": {
+          "description": "Total duration of the playing media in milliseconds. `null` if not playing",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mediaCursor": {
+          "description": "Position of the cursor in milliseconds. `null` if not playing",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -872,6 +1517,31 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "monitors": {
+          "description": "a list of detected monitors with some information",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -885,6 +1555,31 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputs": {
+          "description": "Array of outputs",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -909,6 +1604,28 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputSettings": {
+          "description": "Output settings",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -931,6 +1648,101 @@
         "outputName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputActive": {
+          "description": "Whether the output is active",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputReconnecting": {
+          "description": "Whether the output is reconnecting",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTimecode": {
+          "description": "Current formatted timecode string for the output",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputDuration": {
+          "description": "Current duration in milliseconds for the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputCongestion": {
+          "description": "Congestion of the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputBytes": {
+          "description": "Number of bytes sent by the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputSkippedFrames": {
+          "description": "Number of frames skipped by the output's process",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTotalFrames": {
+          "description": "Total number of frames delivered by the output's process",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -960,6 +1772,16 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "slotValue": {
+          "description": "Value associated with the slot. `null` if not set"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -974,6 +1796,57 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneName": {
+          "description": "Current preview scene name",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sceneUuid": {
+          "description": "Current preview scene UUID",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentPreviewSceneName": {
+          "description": "Current preview scene name",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentPreviewSceneUuid": {
+          "description": "Current preview scene UUID",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -987,6 +1860,38 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "currentProfileName": {
+          "description": "The name of the current profile",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profiles": {
+          "description": "Array of all available profiles",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1016,6 +1921,35 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "parameterValue": {
+          "description": "Value associated with the parameter. `null` if not set and no default",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "defaultParameterValue": {
+          "description": "Default value associated with the parameter. `null` if no default",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1029,6 +1963,24 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "recordDirectory": {
+          "description": "Output directory",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1044,6 +1996,68 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputActive": {
+          "description": "Whether the output is active",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputPaused": {
+          "description": "Whether the output is paused",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTimecode": {
+          "description": "Current formatted timecode string for the output",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputDuration": {
+          "description": "Current duration in milliseconds for the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputBytes": {
+          "description": "Number of bytes sent by the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1058,6 +2072,24 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputActive": {
+          "description": "Whether the output is active",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1071,6 +2103,38 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "currentSceneCollectionName": {
+          "description": "The name of the current scene collection",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sceneCollections": {
+          "description": "Array of all available scene collections",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1109,6 +2173,24 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemBlendMode": {
+          "description": "Current blend mode",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1145,6 +2227,24 @@
         "sceneItemId"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemEnabled": {
+          "description": "Whether the scene item is enabled. `true` for enabled, `false` for disabled",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1188,6 +2288,24 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemId": {
+          "description": "Numeric ID of the scene item",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1224,6 +2342,24 @@
         "sceneItemId"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemIndex": {
+          "description": "Index position of the scene item",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1262,6 +2398,24 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemLocked": {
+          "description": "Whether the scene item is locked. `true` for locked, `false` for unlocked",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1298,6 +2452,35 @@
         "sceneItemId"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sourceName": {
+          "description": "Name of the source associated with the scene item",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceUuid": {
+          "description": "UUID of the source associated with the scene item",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1336,6 +2519,28 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItemTransform": {
+          "description": "Object containing scene item transform info",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1364,6 +2569,31 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneItems": {
+          "description": "Array of scene items in the scene",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1383,6 +2613,75 @@
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "currentProgramSceneName": {
+          "description": "Current program scene name. Can be `null` if non-main canvas or internal state desync",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentProgramSceneUuid": {
+          "description": "Current program scene UUID. Can be `null` if non-main canvas or internal state desync",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentPreviewSceneName": {
+          "description": "Current preview scene name. `null` if not in studio mode or non-main canvas",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentPreviewSceneUuid": {
+          "description": "Current preview scene UUID. `null` if not in studio mode or non-main canvas",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scenes": {
+          "description": "Array of scenes",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1412,6 +2711,35 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionName": {
+          "description": "Name of the overridden scene transition, else `null`",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionDuration": {
+          "description": "Duration of the overridden scene transition, else `null`",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1439,6 +2767,35 @@
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "videoActive": {
+          "description": "Whether the source is showing in Program",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "videoShowing": {
+          "description": "Whether the source is showing in the UI (Preview, Projector, Properties)",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1472,6 +2829,61 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "filterEnabled": {
+          "description": "Whether the filter is enabled",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filterIndex": {
+          "description": "Index of the filter in the list, beginning at 0",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filterKind": {
+          "description": "The kind of filter",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "filterSettings": {
+          "description": "Settings object associated with the filter",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1498,6 +2910,31 @@
         "sourceName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "description": "Array of filters",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1554,6 +2991,25 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "mimeType": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "mimeType",
+        "sizeBytes"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1568,6 +3024,79 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "desktop1": {
+          "description": "Name of the Desktop Audio input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "desktop2": {
+          "description": "Name of the Desktop Audio 2 input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mic1": {
+          "description": "Name of the Mic/Auxiliary Audio input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mic2": {
+          "description": "Name of the Mic/Auxiliary Audio 2 input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mic3": {
+          "description": "Name of the Mic/Auxiliary Audio 3 input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mic4": {
+          "description": "Name of the Mic/Auxiliary Audio 4 input",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1581,6 +3110,134 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "cpuUsage": {
+          "description": "Current CPU usage in percent",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memoryUsage": {
+          "description": "Amount of memory in MB currently being used by OBS",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "availableDiskSpace": {
+          "description": "Available disk space on the device being used for recording storage",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "activeFps": {
+          "description": "Current FPS being rendered",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "averageFrameRenderTime": {
+          "description": "Average time in milliseconds that OBS is taking to render a frame",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renderSkippedFrames": {
+          "description": "Number of frames skipped by OBS in the render thread",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renderTotalFrames": {
+          "description": "Total number of frames outputted by the render thread",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputSkippedFrames": {
+          "description": "Number of frames skipped by OBS in the output thread",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTotalFrames": {
+          "description": "Total number of frames outputted by the output thread",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "webSocketSessionIncomingMessages": {
+          "description": "Total number of messages received by obs-websocket from the client",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "webSocketSessionOutgoingMessages": {
+          "description": "Total number of messages sent by obs-websocket to the client",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1610,6 +3267,39 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "streamServiceType": {
+          "description": "Stream service type, like `rtmp_custom` or `rtmp_common`",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "streamServiceSettings": {
+          "description": "Stream service settings",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1623,6 +3313,101 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputActive": {
+          "description": "Whether the output is active",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputReconnecting": {
+          "description": "Whether the output is currently reconnecting",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTimecode": {
+          "description": "Current formatted timecode string for the output",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputDuration": {
+          "description": "Current duration in milliseconds for the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputCongestion": {
+          "description": "Congestion of the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputBytes": {
+          "description": "Number of bytes sent by the output",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputSkippedFrames": {
+          "description": "Number of frames skipped by the output's process",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputTotalFrames": {
+          "description": "Total number of frames delivered by the output's process",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1638,6 +3423,24 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "studioModeEnabled": {
+          "description": "Whether studio mode is enabled",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1651,6 +3454,24 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionCursor": {
+          "description": "Cursor position, between 0.0 and 1.0",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1666,6 +3487,94 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionName": {
+          "description": "Name of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionUuid": {
+          "description": "UUID of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionKind": {
+          "description": "Kind of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionFixed": {
+          "description": "Whether the transition uses a fixed (unconfigurable) duration",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionDuration": {
+          "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionConfigurable": {
+          "description": "Whether the transition supports being configured",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionSettings": {
+          "description": "Object of settings for the transition. `null` if transition is not configurable",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1679,6 +3588,94 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionName": {
+          "description": "Name of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionUuid": {
+          "description": "UUID of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionKind": {
+          "description": "Kind of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionFixed": {
+          "description": "Whether the transition uses a fixed (unconfigurable) duration",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionDuration": {
+          "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionConfigurable": {
+          "description": "Whether the transition supports being configured",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionSettings": {
+          "description": "Object of settings for the transition. `null` if transition is not configurable",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1694,6 +3691,27 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionKinds": {
+          "description": "Array of transition kinds",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1707,6 +3725,64 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "currentSceneTransitionName": {
+          "description": "Name of the current scene transition. Can be null",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentSceneTransitionUuid": {
+          "description": "UUID of the current scene transition. Can be null",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currentSceneTransitionKind": {
+          "description": "Kind of the current scene transition. Can be null",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitions": {
+          "description": "Array of transitions",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1722,6 +3798,94 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "transitionName": {
+          "description": "Name of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionUuid": {
+          "description": "UUID of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionKind": {
+          "description": "Kind of the transition",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionFixed": {
+          "description": "Whether the transition uses a fixed (unconfigurable) duration",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionDuration": {
+          "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionConfigurable": {
+          "description": "Whether the transition supports being configured",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transitionSettings": {
+          "description": "Object of settings for the transition. `null` if transition is not configurable",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1735,6 +3899,96 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "obsVersion": {
+          "description": "Current OBS Studio version",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "obsWebSocketVersion": {
+          "description": "Current obs-websocket version",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rpcVersion": {
+          "description": "Current latest obs-websocket RPC version",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "availableRequests": {
+          "description": "Array of available RPC requests for the currently negotiated RPC version",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "supportedImageFormats": {
+          "description": "Image formats available in `GetSourceScreenshot` and `SaveSourceScreenshot` requests.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "platform": {
+          "description": "Name of the platform. Usually `windows`, `macos`, or `ubuntu` (linux flavor). Not guaranteed to be any of those",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "platformDescription": {
+          "description": "Description of the platform, like `Windows 10 (10.0)`",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1750,6 +4004,79 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "fpsNumerator": {
+          "description": "Numerator of the fractional FPS value",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fpsDenominator": {
+          "description": "Denominator of the fractional FPS value",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "baseWidth": {
+          "description": "Width of the base (canvas) resolution in pixels",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "baseHeight": {
+          "description": "Height of the base (canvas) resolution in pixels",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputWidth": {
+          "description": "Width of the output resolution in pixels",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outputHeight": {
+          "description": "Height of the output resolution in pixels",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
+    },
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -1763,6 +4090,24 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "outputActive": {
+          "description": "Whether the output is active",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": {}
     },
     "annotations": {
       "readOnlyHint": true,
@@ -1791,6 +4136,20 @@
         "mediaCursorOffset"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -1950,6 +4309,20 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2009,6 +4382,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -2032,6 +4419,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -2054,6 +4455,20 @@
         "profileName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2081,6 +4496,20 @@
         "sceneName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2119,6 +4548,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -2151,6 +4594,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -2165,6 +4622,20 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2178,6 +4649,20 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2231,6 +4716,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -2253,6 +4752,20 @@
         "captionText"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2277,6 +4790,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2299,6 +4826,20 @@
         "sceneName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2323,6 +4864,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2345,6 +4900,20 @@
         "transitionName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2376,6 +4945,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2403,6 +4986,20 @@
         "monitorType"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2433,6 +5030,20 @@
         "inputAudioSyncOffset"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2487,6 +5098,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2520,6 +5145,20 @@
         "inputDeinterlaceFieldOrder"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2562,6 +5201,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2590,6 +5243,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2617,6 +5284,20 @@
         "newInputName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2718,6 +5399,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2749,6 +5444,20 @@
         "outputSettings"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2782,6 +5491,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2804,6 +5527,20 @@
         "sceneName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -2868,6 +5605,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -2917,6 +5668,20 @@
         "sceneItemBlendMode"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3004,6 +5769,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -3045,6 +5824,20 @@
         "sceneItemLocked"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3163,6 +5956,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -3215,6 +6022,20 @@
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -3251,6 +6072,20 @@
         "filterEnabled"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3290,6 +6125,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -3326,6 +6175,20 @@
         "newFilterName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3404,6 +6267,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -3426,6 +6303,20 @@
         "studioModeEnabled"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3456,6 +6347,20 @@
         "position"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3507,6 +6412,20 @@
         "transitionSettings"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3600,6 +6519,20 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -3622,6 +6555,20 @@
         "outputName"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3702,6 +6649,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -3730,6 +6691,20 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -3744,6 +6719,20 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": true,
@@ -3757,6 +6746,20 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3845,6 +6848,20 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
@@ -3993,6 +7010,20 @@
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -4007,6 +7038,20 @@
       "type": "object",
       "properties": {}
     },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
@@ -4020,6 +7065,20 @@
     "inputSchema": {
       "type": "object",
       "properties": {}
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Confirmation of the completed action"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
     },
     "annotations": {
       "readOnlyHint": false,
