@@ -98,6 +98,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_TOOLSETS` | No | all tools | Comma-separated tool groups to register: `all`, `core`, or any group listed under [Choosing tools](#choosing-tools) |
 | `OBS_MCP_TOOLS` | No | none | Comma-separated tool names to register in addition to `OBS_MCP_TOOLSETS` |
 | `OBS_MCP_READ_ONLY` | No | `false` | Register only read-only tools; overrides both lists |
+| `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before stopping or toggling a stream or recording (see [Confirming live actions](#confirming-live-actions)) |
 | `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
@@ -144,6 +145,25 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `protocol` | `obs-describe-request` and the generic `obs-call-request` |
 
 `core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (81 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 38-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+
+### Resources and prompts
+
+Resources give clients that support them a live view without tool calls. Each one duplicates a read-only tool, since many clients read resources rarely or not at all.
+
+| URI | Contents | Updated on |
+|---|---|---|
+| `obs://status` | connection, recording, streaming, program scene | output and scene changes |
+| `obs://scenes` | `GetSceneList` | scenes added, removed, renamed, or switched |
+| `obs://scene/{sceneName}/items` | `GetSceneItemList` | items added, removed, reordered, shown, hidden, locked |
+| `obs://scene/{sceneName}/screenshot` | 960px JPEG of the scene | (read on demand) |
+
+Clients on the 2025 protocol receive `notifications/resources/updated` for URIs they subscribe to; 2026-07-28 clients choose them on their `subscriptions/listen` stream.
+
+Two prompts appear as slash commands in clients that show MCP prompts: `record-demo` (capture a window silently, preflight, record a clip) and `pre-stream-check` (a read-only go/no-go review).
+
+### Confirming live actions
+
+With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, and `obs-toggle-record` ask before they run. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
 
 ## Where it fits
 

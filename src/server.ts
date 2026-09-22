@@ -101,7 +101,7 @@ export function createServer(): McpServer {
     version: PACKAGE_VERSION,
   });
 
-  tools.initialize(server, obsClient, toolFilter ?? ALL_TOOLS);
+  tools.initialize(server, obsClient, { filter: toolFilter ?? ALL_TOOLS });
   return server;
 }
 
@@ -110,7 +110,7 @@ function loadToolFilter(): ToolFilter {
   const registry = tools.initialize(
     new McpServer({ name: "obs-mcp-validation", version: PACKAGE_VERSION }),
     obsClient,
-    filter,
+    { filter, resourcesAndPrompts: false },
   );
   assertKnownTools(filter, registry);
   const count = registry.filter(({ registered }) => registered).length;

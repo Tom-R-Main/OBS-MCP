@@ -138,10 +138,11 @@ describe("startOutputAndConfirm", () => {
   it("removes its event listener after completing", async () => {
     fakeObs.queueSuccess("StartRecord");
     fakeObs.queueSuccess("GetRecordStatus", { outputActive: true });
+    const before = obsClient.listenerCount("RecordStateChanged");
 
     await startOutputAndConfirm(obsClient, fastRecord);
 
-    expect(obsClient.listenerCount("RecordStateChanged")).toBe(0);
+    expect(obsClient.listenerCount("RecordStateChanged")).toBe(before);
   });
 });
 

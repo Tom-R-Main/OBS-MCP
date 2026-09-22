@@ -24,7 +24,10 @@ import * as protocolExtensions from "./protocol-extensions.js";
 import * as protocol from "./protocol.js";
 import * as preflight from "./preflight.js";
 import * as workflows from "./workflows.js";
+import * as resources from "./resources.js";
+import * as prompts from "./prompts.js";
 import { withStructuredToolResults } from "./results.js";
+import { liveConfirmationEnabled, withLiveConfirmation } from "./confirm.js";
 import { ALL_TOOLS, scopedServer, type RegisteredTool, type ToolFilter, type ToolGroup } from "./toolsets.js";
 
 const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client: OBSWebSocketClient): void }]> = [
@@ -51,15 +54,29 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
  * Registers the tools the filter includes and returns every tool with its
  * group and whether it was registered.
  */
+export type InitializeOptions = {
+  filter?: ToolFilter;
+  /** Defaults to OBS_MCP_CONFIRM_LIVE. */
+  confirmLive?: boolean;
+  /** Resources and prompts; off for servers built only to inspect the tool list. */
+  resourcesAndPrompts?: boolean;
+};
+
 export function initialize(
   server: McpServer,
   client: OBSWebSocketClient,
-  filter: ToolFilter = ALL_TOOLS,
+  { filter = ALL_TOOLS, confirmLive = liveConfirmationEnabled(), resourcesAndPrompts = true }: InitializeOptions = {},
 ): RegisteredTool[] {
+  // Registration passes through: group filter -> live confirmation -> structured results -> server.
   const structuredServer = withStructuredToolResults(server);
+  const confirmingServer = confirmLive ? withLiveConfirmation(structuredServer) : structuredServer;
   const registry: RegisteredTool[] = [];
   for (const [group, module] of MODULES) {
-    module.initialize(scopedServer(structuredServer, group, filter, registry), client);
+    module.initialize(scopedServer(confirmingServer, group, filter, registry), client);
+  }
+  if (resourcesAndPrompts) {
+    resources.initialize(server, client);
+    prompts.initialize(server);
   }
   return registry;
 }

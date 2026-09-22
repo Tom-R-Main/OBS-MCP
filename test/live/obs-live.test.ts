@@ -135,6 +135,25 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     expect(mismatches).toEqual([]);
   }, 60_000);
 
+  it("reads status, scene, and scene item resources from real OBS", async () => {
+    if (!client) throw new Error("Live MCP client is not connected");
+    const read = async (uri: string) => {
+      const { contents } = await client!.readResource({ uri });
+      const [first] = contents as { text?: string }[];
+      return JSON.parse(first?.text ?? "null") as JsonObject;
+    };
+
+    const status = await read("obs://status");
+    const scenes = await read("obs://scenes");
+    const { resources } = await client.listResources();
+    const itemsUri = resources.map(({ uri }) => uri).find((uri) => uri.endsWith("/items"));
+
+    expect(status.connection).toEqual(expect.objectContaining({ connected: true }));
+    expect(scenes.scenes).toEqual(expect.any(Array));
+    expect(itemsUri, "expected at least one scene").toBeDefined();
+    expect((await read(itemsUri!)).sceneItems).toEqual(expect.any(Array));
+  });
+
   it.skipIf(!mutationsEnabled)("creates and removes one scene in the approved collection", async () => {
     const expectedCollection = process.env.OBS_MCP_LIVE_SCENE_COLLECTION;
     if (!expectedCollection) {

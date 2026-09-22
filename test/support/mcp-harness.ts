@@ -24,12 +24,29 @@ export function resultText(result: CallToolResult): string {
     .join("\n");
 }
 
-export async function startMcpHarness(options: FakeOBSOptions = {}): Promise<McpHarness> {
-  const fakeObs = await FakeOBSServer.start(options);
+export type HarnessOptions = FakeOBSOptions & {
+  /** Register tools with OBS_MCP_CONFIRM_LIVE behavior. */
+  confirmLive?: boolean;
+  /** Declare form elicitation and answer every elicitation with this. */
+  onElicit?: (message: string) => {
+    action: "accept" | "decline" | "cancel";
+    content?: Record<string, string | number | boolean | string[]>;
+  };
+};
+
+export async function startMcpHarness(options: HarnessOptions = {}): Promise<McpHarness> {
+  const { confirmLive = false, onElicit, ...fakeOptions } = options;
+  const fakeObs = await FakeOBSServer.start(fakeOptions);
   const obsClient = new OBSWebSocketClient(fakeObs.url);
   const mcpServer = new McpServer({ name: "obs-mcp-test", version: "0.0.0" });
-  const mcpClient = new Client({ name: "obs-mcp-test-client", version: "0.0.0" });
-  initialize(mcpServer, obsClient);
+  const mcpClient = new Client(
+    { name: "obs-mcp-test-client", version: "0.0.0" },
+    onElicit ? { capabilities: { elicitation: { form: {} } } } : {},
+  );
+  if (onElicit) {
+    mcpClient.setRequestHandler("elicitation/create", async (request) => onElicit(request.params.message));
+  }
+  initialize(mcpServer, obsClient, { confirmLive });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([mcpServer.connect(serverTransport), mcpClient.connect(clientTransport)]);
 
