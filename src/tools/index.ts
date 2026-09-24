@@ -25,6 +25,7 @@ import * as protocol from "./protocol.js";
 import * as preflight from "./preflight.js";
 import * as workflows from "./workflows.js";
 import * as takes from "./takes.js";
+import * as trim from "./trim.js";
 import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import { withStructuredToolResults } from "./results.js";
@@ -50,6 +51,7 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["record", preflight],
   ["record", workflows],
   ["record", takes],
+  ["record", trim],
 ];
 
 /**
@@ -104,5 +106,6 @@ export {
   protocol,
   preflight,
   workflows,
-  takes
+  takes,
+  trim
 };

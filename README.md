@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 163 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 165 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -106,7 +106,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 163 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 165 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -117,6 +117,7 @@ The 163 tools are organized around the OBS protocol rather than a smaller opinio
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
 - `obs-take-start`, `obs-take-mark`, `obs-take-status`, and `obs-take-stop` for a watched recording of any length, with a chapter per step (see [Watching a take](#watching-a-take))
+- `obs-trim-take`, which cuts dead time out of a recording, and `obs-contact-sheet`, which tiles frames from it into one image (see [Trimming a take](#trimming-a-take))
 - `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
 - protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message: in order, one per rendered frame (so a change to two sources lands on the same frame), or all at once, with `Sleep` between them
@@ -139,14 +140,14 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `media` | media input playback |
 | `filters` | source filters |
 | `transitions` | transitions, overrides, the T-Bar |
-| `record` | recording, chapters, `obs-preflight`, `obs-record-clip`, and the `obs-take-*` tools |
+| `record` | recording, chapters, `obs-preflight`, `obs-record-clip`, the `obs-take-*` tools, `obs-trim-take`, and `obs-contact-sheet` |
 | `stream` | streaming and captions |
 | `outputs` | virtual camera, replay buffer, and generic outputs |
 | `config` | profiles, scene collections, video settings, persistent data |
 | `ui` | studio mode, dialogs, projectors |
 | `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
-`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (85 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 39-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (87 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 40-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
 ### Resources and prompts
 
@@ -203,9 +204,19 @@ While a take records, the server watches OBS instead of waiting for the file:
 
 - **Audio**: it subscribes to OBS's `InputVolumeMeters` events for the length of the take and records each input's loudest level after volume and mute. An input on a recorded track that rises above −60 dBFS is logged, and with `expectSilent` it is a problem. Muted inputs and inputs on unrecorded tracks are not.
 - **Frames**: it polls `GetStats` every 2 seconds and warns when OBS misses frames rendering or the encoder skips them.
-- **Picture**: once a second it takes a 32-pixel-wide PPM screenshot of the program scene. Two black samples in a row raise a warning (a capture that lost its window or permission looks like this). Stretches of 3 seconds or more with no change are recorded as stills, which mark dead time to trim.
+- **Picture**: once a second it takes a 96-pixel-wide PPM screenshot of the program scene. Two black samples in a row raise a warning (a capture that lost its window or permission looks like this). Stretches of 3 seconds or more where the picture holds still are recorded as stills, which mark dead time to trim. A spinner or a shimmering "thinking" label counts as still; text that appears and stays does not (see below).
 
 The result lists the findings, and when OBS records to this machine the server writes them next to the recording as `<name>.take.json`, with chapter times and OBS events (scene switches, mutes, output state) in seconds from the start. `obs://take/current` shows the same data while the take runs.
+
+### Trimming a take
+
+`obs-trim-take` finds dead time: stretches where the picture holds still (and, if the recording has sound, where it is also silent). It samples the video twice a second at 96 pixels wide and looks for steps: pixels whose median over the three samples before a moment differs from their median over the three after it. Text that appears and stays is a step. A spinner, a shimmering "thinking" label, or a blinking cursor comes and goes, so waiting on one still counts as dead time. On a 1080p ChatGPT recording, this separated waiting from streaming answers where ffmpeg's `freezedetect` could not with any single noise threshold.
+
+By default, a still stretch of 4 seconds or more loses its middle, keeping 1 second at each side. Nothing is cut from 3 seconds before to 1.5 seconds after each chapter start, or in the last 3 seconds, so each step's finished result stays on screen long enough to read. Chapters come from the file, or from the take log when the file has none, and are moved to their new times.
+
+Without `apply: true` it returns only the plan: the cuts, the new length, and the new chapter times. With it, the tool writes `<name>.trimmed.mp4` next to the original, which it never changes, and returns a contact sheet with a frame either side of each seam. It re-encodes with libx264 (or VideoToolbox), so cuts land on exact frames.
+
+`obs-contact-sheet` tiles frames from a recording into one JPEG: one second after each chapter start by default, or at the times you give. Both tools work only on files inside OBS's recording directory, and need `ffmpeg` and `ffprobe` on `PATH`.
 
 ## Troubleshooting
 
@@ -236,7 +247,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 163 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 165 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

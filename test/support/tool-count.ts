@@ -5,4 +5,4 @@
  */
 
 /** Number of tools the server registers with no tool filtering configured. */
-export const TOOL_COUNT = 163;
+export const TOOL_COUNT = 165;

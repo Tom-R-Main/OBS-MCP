@@ -12,8 +12,15 @@ export type FrameSample = { width: number; height: number; luma: Uint8Array };
 
 /** Brightest pixel below this means the frame is black. */
 const BLANK_MAX_LUMA = 16;
-/** Mean per-pixel change below this means the frame did not change. */
-const STILL_MEAN_DELTA = 1;
+/**
+ * A frame changed when at least CHANGED_PIXELS pixels moved by more than
+ * CHANGE_LUMA levels. Tuned on a 1080p screen recording sampled 96px wide:
+ * streaming text changes a few pixels strongly, while encoder noise and a
+ * blinking cursor change many pixels slightly. A mean difference missed
+ * streaming text entirely.
+ */
+const CHANGE_LUMA = 12;
+const CHANGED_PIXELS = 2;
 
 /** Decodes a binary (P6) PPM, as a buffer or a base64 data URI, into luma. */
 export function decodePpm(input: Buffer | string): FrameSample {
@@ -66,10 +73,99 @@ export function isBlank(sample: FrameSample): boolean {
 }
 
 export function isSameFrame(a: FrameSample, b: FrameSample): boolean {
-  if (a.width !== b.width || a.height !== b.height || a.luma.length === 0) return false;
-  let total = 0;
-  for (let index = 0; index < a.luma.length; index++) total += Math.abs((a.luma[index] ?? 0) - (b.luma[index] ?? 0));
-  return total / a.luma.length < STILL_MEAN_DELTA;
+  if (a.width !== b.width || a.height !== b.height) return false;
+  return isSameLuma(a.luma, b.luma);
+}
+
+/** isSameFrame for two equally sized luma buffers. */
+export function isSameLuma(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length === 0 || a.length !== b.length) return false;
+  let changed = 0;
+  for (let index = 0; index < a.length; index++) {
+    if (Math.abs((a[index] ?? 0) - (b[index] ?? 0)) > CHANGE_LUMA && ++changed >= CHANGED_PIXELS) return false;
+  }
+  return true;
+}
+
+export type StillSpan = { start: number; end: number };
+
+/** Samples compared on each side of a moment: the median of three ignores a one-sample blip. */
+const STEP_WINDOW = 3;
+
+function median3(a: number, b: number, c: number): number {
+  return Math.max(Math.min(a, b), Math.min(Math.max(a, b), c));
+}
+
+/**
+ * Finds stretches where the picture holds still, from samples pushed in time
+ * order. The picture changes at a moment when, for at least CHANGED_PIXELS
+ * pixels, the median of the three samples before it and the median of the
+ * three after it differ by more than CHANGE_LUMA. Text that appears and stays
+ * is such a step; a shimmering "thinking" label, a spinner, or a blinking
+ * cursor is a blip, so waiting on one still counts as still. Decisions lag
+ * the newest sample by three samples.
+ */
+export class StillTracker {
+  readonly spans: StillSpan[] = [];
+  private samples: Sample[] = [];
+  private stillFrom: number | null = null;
+  private lastTime: number | null = null;
+
+  constructor(private readonly minStillSeconds: number) {}
+
+  /** Start of the stretch the picture has held still since, once it is long enough to report. */
+  stillSince(): number | null {
+    return this.stillFrom !== null && this.lastTime !== null && this.lastTime - this.stillFrom >= this.minStillSeconds
+      ? this.stillFrom
+      : null;
+  }
+
+  push(time: number, luma: Uint8Array): void {
+    if (this.samples.length > 0 && this.samples[0]!.luma.length !== luma.length) this.samples = [];
+    this.stillFrom ??= time;
+    this.lastTime = time;
+    this.samples.push({ time, luma });
+    if (this.samples.length < STEP_WINDOW * 2) return;
+
+    const [b0, b1, b2, a0, a1, a2] = this.samples as [Sample, Sample, Sample, Sample, Sample, Sample];
+    const before = medianLuma(b0.luma, b1.luma, b2.luma);
+    const after = medianLuma(a0.luma, a1.luma, a2.luma);
+    if (!isSameLuma(before, after)) {
+      // The medians place the step within a sample or so; pin it to the first
+      // sample that left the old picture and the first that shows the new one.
+      const changedAt = [b1, b2, a0, a1].find((sample) => !isSameLuma(before, sample.luma))?.time ?? a0.time;
+      let settled = a0;
+      for (const sample of [b2, b1]) {
+        if (!isSameLuma(after, sample.luma)) break;
+        settled = sample;
+      }
+      this.close(changedAt);
+      this.stillFrom = Math.max(changedAt, settled.time);
+    }
+    this.samples.shift();
+  }
+
+  /** Ends the current stretch at `time`, e.g. at the end of the video or a scene switch. */
+  finish(time: number): StillSpan[] {
+    this.close(time);
+    this.stillFrom = null;
+    this.samples = [];
+    return this.spans;
+  }
+
+  private close(time: number): void {
+    if (this.stillFrom !== null && time - this.stillFrom >= this.minStillSeconds) {
+      this.spans.push({ start: this.stillFrom, end: time });
+    }
+  }
+}
+
+type Sample = { time: number; luma: Uint8Array };
+
+function medianLuma(a: Uint8Array, b: Uint8Array, c: Uint8Array): Uint8Array {
+  const median = new Uint8Array(a.length);
+  for (let index = 0; index < a.length; index++) median[index] = median3(a[index] ?? 0, b[index] ?? 0, c[index] ?? 0);
+  return median;
 }
 
 /** Builds a binary PPM filled with one color, or with a color per pixel. For tests and fakes. */
