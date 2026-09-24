@@ -6946,6 +6946,98 @@
     }
   },
   {
+    "name": "obs-take-mark",
+    "title": "Mark Take",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chapter name"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-take-start",
+    "title": "Start Take",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "expectSilent": {
+          "default": false,
+          "description": "Refuse to start with audible inputs, and treat audio during the take as a problem",
+          "type": "boolean"
+        },
+        "minFreeDiskMb": {
+          "default": 1024,
+          "description": "Minimum free disk space in MB",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lock": {
+          "default": true,
+          "description": "Refuse profile, scene collection, and output setting changes until the take stops",
+          "type": "boolean"
+        },
+        "chapter": {
+          "description": "Name of a chapter to add at the start",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-take-status",
+    "title": "Take Status",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-take-stop",
+    "title": "Stop Take",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-test-connection",
     "title": "Test OBS Connection",
     "inputSchema": {

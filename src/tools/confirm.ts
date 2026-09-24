@@ -19,6 +19,7 @@ export const LIVE_ACTIONS: Readonly<Record<string, string>> = {
   "obs-toggle-stream": "Toggle the live stream? If it is live, this ends the broadcast.",
   "obs-stop-record": "Stop the recording?",
   "obs-toggle-record": "Toggle recording? If it is recording, this ends the take.",
+  "obs-take-stop": "Stop the recording?",
 };
 
 /** OBS requests that end a live broadcast or a take, with the question to ask. */

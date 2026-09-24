@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 159 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 163 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -106,7 +106,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 159 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 163 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -116,6 +116,7 @@ The 159 tools are organized around the OBS protocol rather than a smaller opinio
 - canvases, screenshots, profiles, scene collections, and persistent data
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
+- `obs-take-start`, `obs-take-mark`, `obs-take-status`, and `obs-take-stop` for a watched recording of any length, with a chapter per step (see [Watching a take](#watching-a-take))
 - `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
 - protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message: in order, one per rendered frame (so a change to two sources lands on the same frame), or all at once, with `Sleep` between them
@@ -138,14 +139,14 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `media` | media input playback |
 | `filters` | source filters |
 | `transitions` | transitions, overrides, the T-Bar |
-| `record` | recording, chapters, `obs-preflight`, and `obs-record-clip` |
+| `record` | recording, chapters, `obs-preflight`, `obs-record-clip`, and the `obs-take-*` tools |
 | `stream` | streaming and captions |
 | `outputs` | virtual camera, replay buffer, and generic outputs |
 | `config` | profiles, scene collections, video settings, persistent data |
 | `ui` | studio mode, dialogs, projectors |
 | `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
-`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (81 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 38-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (85 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 39-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
 ### Resources and prompts
 
@@ -165,7 +166,7 @@ Two prompts appear as slash commands in clients that show MCP prompts: `record-d
 
 ### Confirming live actions
 
-With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, and `obs-toggle-record` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
+With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, `obs-toggle-record`, and `obs-take-stop` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
 
 ## Where it fits
 
@@ -188,6 +189,15 @@ Pay particular attention to approvals for tools that:
 `obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StopStream`, `ToggleStream`, `StopRecord`, or `ToggleRecord`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
 
 ### Watching a take
+
+`obs-record-clip` records up to 50 seconds in one call. For anything longer, or a demo whose steps happen while it records, use a take:
+
+1. `obs-take-start` runs the preflight, starts recording, and waits for OBS to confirm. Only one take runs at a time.
+2. `obs-take-mark` adds a named chapter before each step, both in the file (Hybrid MP4/MOV) and in the take log.
+3. `obs-take-status` reports what the take has seen so far.
+4. `obs-take-stop` stops recording, checks the file, and reports.
+
+While a take records, tools that would switch the profile or scene collection, or change output, video, recording directory, or stream service settings, refuse to run, including through `obs-call-request` and `obs-batch`. Stopping and pausing are never refused. Start with `lock: false` to allow those changes.
 
 While a take records, the server watches OBS instead of waiting for the file:
 
@@ -226,7 +236,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 159 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 163 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

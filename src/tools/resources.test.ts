@@ -152,4 +152,17 @@ describe("prompts", () => {
     expect(text).toContain("obs-capture-window");
     expect(text).toContain("obs-record-clip with durationSeconds 20 and expectSilent true");
   });
+
+  it("turns record-demo steps into a take with a chapter per step", async () => {
+    const prompt = await harness.mcpClient.getPrompt({
+      name: "record-demo",
+      arguments: { window: "ChatGPT", steps: "Open settings\n\nAsk about tasks" },
+    });
+    const [message] = prompt.messages;
+    const text = message?.content.type === "text" ? message.content.text : "";
+
+    expect(text).toContain("obs-take-start with expectSilent true");
+    expect(text).toContain("   - Open settings\n   - Ask about tasks");
+    expect(text).not.toContain("obs-record-clip");
+  });
 });
