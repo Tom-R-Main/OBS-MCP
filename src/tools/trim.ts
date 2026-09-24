@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
@@ -51,6 +51,15 @@ function errorResult(text: string): CallToolResult {
 }
 
 const round = (seconds: number) => Math.round(seconds * 100) / 100;
+
+function pathTaken(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function mergeSpans(spans: Span[]): Span[] {
   const sorted = [...spans].sort((a, b) => a.start - b.start);
@@ -195,7 +204,11 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
       "-map", "0:v:0", "-vf", `fps=${SAMPLE_FPS},scale=${SAMPLE_WIDTH}:${height},format=gray`, "-f", "rawvideo", "pipe:1",
       ...silenceArgs,
     ], { stdio: ["ignore", "pipe", "pipe"] });
-    const timer = setTimeout(() => child.kill("SIGKILL"), 300_000);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, 300_000);
     const tracker = new StillTracker(minIdleSeconds);
     let stderr = "";
     let pending: Buffer = Buffer.alloc(0);
@@ -219,6 +232,10 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error("Finding still stretches took longer than 5 minutes; try a shorter recording"));
+        return;
+      }
       if (code !== 0) {
         reject(new Error(`ffmpeg exited with ${code}: ${stderr.trim().split("\n").slice(-2).join(" ")}`));
         return;
@@ -259,7 +276,9 @@ async function videoEncoderArgs(): Promise<string[]> {
 }
 
 function ffmetadata(chapters: Chapter[], duration: number): string {
-  const escape = (text: string) => text.replace(/([=;#\\\n])/g, "\\$1");
+  // ffmetadata ends a line at \r as well as \n: drop control characters, then escape its special characters.
+  // eslint-disable-next-line no-control-regex
+  const escape = (text: string) => text.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/([=;#\\])/g, "\\$1");
   const lines = [";FFMETADATA1"];
   chapters.forEach((chapter, index) => {
     const end = chapters[index + 1]?.at ?? duration;
@@ -405,8 +424,17 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
           false,
         );
         if (outputPath === path) return errorResult("The trimmed copy cannot replace the original");
-        if (existsSync(outputPath)) return errorResult(`${outputPath} already exists; choose another outputPath`);
-        await exportTrimmed(path, outputPath, keep, info.audioStreams, newChapters, plan.trimmedSeconds);
+        // lstat also sees a dangling symlink, which ffmpeg would write through, possibly outside the directory.
+        if (pathTaken(outputPath)) return errorResult(`${outputPath} already exists; choose another outputPath`);
+        // Export under a temporary name so a failed or interrupted export leaves nothing that looks finished.
+        const partial = join(dirname(outputPath), `.${basename(outputPath)}.partial${extname(outputPath)}`);
+        try {
+          await exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds);
+          if (pathTaken(outputPath)) return errorResult(`${outputPath} appeared while exporting; the export is discarded`);
+          renameSync(partial, outputPath);
+        } finally {
+          rmSync(partial, { force: true });
+        }
         const result = await probe(outputPath);
         lines.push(`Exported ${outputPath}: ${round(result.duration)}s, ${result.chapters.length} chapter(s)`);
 

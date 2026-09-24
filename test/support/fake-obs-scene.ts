@@ -178,7 +178,12 @@ export function serveSceneState(fakeObs: FakeOBSServer, state: FakeSceneState): 
   })());
   fakeObs.respondWith("SetSceneItemTransform", (data) => done(() => {
     const target = item(data);
-    target.transform = { ...target.transform, ...(data.sceneItemTransform as JsonObject) };
+    // OBS stores transforms as 32-bit floats and rounds positions to half a pixel.
+    const stored = Object.fromEntries(Object.entries(data.sceneItemTransform as JsonObject).map(([key, value]) => {
+      if (typeof value !== "number" || Number.isInteger(value)) return [key, value];
+      return [key, key === "positionX" || key === "positionY" ? Math.round(value * 2) / 2 : Math.fround(value)];
+    }));
+    target.transform = { ...target.transform, ...stored };
   })());
   fakeObs.respondWith("SetSceneItemEnabled", (data) => done(() => { item(data).enabled = data.sceneItemEnabled as boolean; })());
   fakeObs.respondWith("SetSceneItemLocked", (data) => done(() => { item(data).locked = data.sceneItemLocked as boolean; })());

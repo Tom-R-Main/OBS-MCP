@@ -23,15 +23,23 @@ export const LIVE_ACTIONS: Readonly<Record<string, string>> = {
 };
 
 /** OBS requests that end a live broadcast or a take, with the question to ask. */
-const LIVE_REQUESTS: Readonly<Record<string, string>> = {
-  StopStream: "Stop the live stream?",
-  ToggleStream: "Toggle the live stream? If it is live, this ends the broadcast.",
-  StopRecord: "Stop the recording?",
-  ToggleRecord: "Toggle recording? If it is recording, this ends the take.",
+const LIVE_REQUESTS: Readonly<Record<string, (data: Record<string, unknown>) => string>> = {
+  StopStream: () => "Stop the live stream?",
+  ToggleStream: () => "Toggle the live stream? If it is live, this ends the broadcast.",
+  StopRecord: () => "Stop the recording?",
+  ToggleRecord: () => "Toggle recording? If it is recording, this ends the take.",
+  // The generic output requests reach the stream and recording outputs too (e.g. simple_stream, adv_file_output).
+  StopOutput: ({ outputName }) => `Stop the output ${String(outputName)}? If it is the stream or the recording, this ends it.`,
+  ToggleOutput: ({ outputName }) => `Toggle the output ${String(outputName)}? If it is the stream or the recording, this can end it.`,
 };
 
-function questionForRequests(requestTypes: unknown[]): string | undefined {
-  const questions = [...new Set(requestTypes.map((type) => LIVE_REQUESTS[String(type)]).filter(Boolean))];
+type RequestLike = { requestType?: unknown; requestData?: unknown };
+
+function questionForRequests(requests: RequestLike[]): string | undefined {
+  const questions = [...new Set(requests.map(({ requestType, requestData }) => {
+    const ask = LIVE_REQUESTS[String(requestType)];
+    return ask?.(typeof requestData === "object" && requestData !== null ? requestData as Record<string, unknown> : {});
+  }).filter((question): question is string => Boolean(question)))];
   return questions.length > 0 ? questions.join(" ") : undefined;
 }
 
@@ -40,10 +48,10 @@ function questionForRequests(requestTypes: unknown[]): string | undefined {
  * to ask, or undefined when these arguments need no confirmation.
  */
 export const CONDITIONAL_LIVE_ACTIONS: Readonly<Record<string, (args: Record<string, unknown>) => string | undefined>> = {
-  "obs-call-request": ({ requestType }) => questionForRequests([requestType]),
-  "obs-batch": ({ requests }) => questionForRequests(
-    Array.isArray(requests) ? requests.map((request) => (request as { requestType?: unknown })?.requestType) : [],
-  ),
+  "obs-call-request": ({ requestType, requestData }) => questionForRequests([{ requestType, requestData }]),
+  "obs-batch": ({ requests }) => questionForRequests(Array.isArray(requests) ? requests as RequestLike[] : []),
+  "obs-stop-output": (args) => questionForRequests([{ requestType: "StopOutput", requestData: args }]),
+  "obs-toggle-output": (args) => questionForRequests([{ requestType: "ToggleOutput", requestData: args }]),
 };
 
 const CONFIRM_KEY = "confirm";
@@ -85,8 +93,6 @@ function confirmation(
   confirmArg: boolean | undefined,
   ctx: RequestContext,
 ): "proceed" | ReturnType<typeof inputRequired> | CallToolResult {
-  if (confirmArg === true) return "proceed";
-
   const responses = ctx.mcpReq?.inputResponses;
   const answered = acceptedContent(responses, CONFIRM_KEY, CONFIRM_SCHEMA);
   if (answered) return answered.confirm ? "proceed" : textResult("Cancelled; nothing was changed");
@@ -108,6 +114,9 @@ function confirmation(
       },
     });
   }
+  // Only a client that cannot ask the user relies on the model passing confirm: true;
+  // one that can always asks, so the model cannot approve on the user's behalf.
+  if (confirmArg === true) return "proceed";
   return textResult(
     `${question} This server requires confirmation for live actions and this client cannot ask. `
       + "Ask the user, then call again with confirm: true.",
@@ -134,7 +143,7 @@ export function withLiveConfirmation(server: McpServer): McpServer {
           const hadSchema = config.inputSchema !== undefined;
           const inputSchema = (config.inputSchema ?? z.object({})).extend({
             confirm: z.boolean().optional()
-              .describe("Pass true only after the user has agreed; otherwise the server asks the user"),
+              .describe("For clients that cannot show the user a question: pass true only after the user has agreed. Ignored when the server can ask the user itself"),
           });
           const confirmedCallback = async (args: Record<string, unknown>, ctx: RequestContext) => {
             const { confirm, ...rest } = args;

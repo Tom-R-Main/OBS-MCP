@@ -83,7 +83,8 @@ export function initialize(server: McpServer, registry: readonly RegisteredTool[
         ? "Turn on groups of OBS tools for this session; the client reloads its tool list. See obs-list-toolsets"
         : "Turn off groups of OBS tools for this session to keep the tool list short",
       inputSchema: z.object({ groups: GroupList.describe("Groups from obs-list-toolsets") }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      // Read-only toward OBS: they only change which tools this session lists.
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ groups }): Promise<CallToolResult> => {
       const changed = setGroups(registry, groups, enabled);

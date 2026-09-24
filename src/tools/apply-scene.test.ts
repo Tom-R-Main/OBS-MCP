@@ -85,8 +85,8 @@ describe("obs-apply-scene", () => {
     const batches = harness.fakeObs.history().filter(({ frame }) => frame.op === OBS_OP.RequestBatch).length;
     expect(batches).toBeGreaterThanOrEqual(2);
     expect(result.structuredContent).toMatchObject({ applied: true, converged: true, failures: [] });
-    // A new scene has nothing to undo.
-    expect(result.structuredContent).not.toHaveProperty("snapshotId");
+    // The scene is new, but it reuses existing inputs, whose state is saved.
+    expect(result.structuredContent).toHaveProperty("snapshotId");
   });
 
   it("changes only what differs in an existing scene, and saves a snapshot first", async () => {
@@ -133,6 +133,54 @@ describe("obs-apply-scene", () => {
     expect(resultText(result)).toContain("Webcam does not exist; give its kind to create it");
     expect(resultText(result)).toContain("Chrome is a screen_capture, not a browser_source");
     expect(sent()).toEqual([]);
+  });
+
+  it("stacks the listed sources in front, in order, from any starting order, in one call", async () => {
+    state.inputs.Webcam = { kind: "image_source", settings: {} };
+    state.inputs.Slides = { kind: "image_source", settings: {} };
+    const all = ["Background", "Chrome", "Webcam", "Slides"];
+    const permutations = (list: string[]): string[][] => list.length <= 1 ? [list]
+      : list.flatMap((head, index) => permutations([...list.slice(0, index), ...list.slice(index + 1)]).map((rest) => [head, ...rest]));
+    for (const order of permutations(all)) {
+      state.scenes.Demo = order.map((sourceName, index) => ({ sceneItemId: index + 1, sourceName, enabled: true, locked: false, transform: {} }));
+
+      const result = await harness.call("obs-apply-scene", {
+        sceneName: "Demo",
+        sources: [{ name: "Slides" }, { name: "Chrome" }],
+        order: true,
+        apply: true,
+      });
+
+      const names = state.scenes.Demo.map(({ sourceName }) => sourceName);
+      expect(names.slice(-2), `from ${order.join(",")}`).toEqual(["Slides", "Chrome"]);
+      expect(result.isError, `from ${order.join(",")}: ${resultText(result)}`).toBeFalsy();
+    }
+  });
+
+  it("refuses a source listed twice or named like a scene, before changing anything", async () => {
+    state.scenes["Be Right Back"] = [];
+
+    const twice = await harness.call("obs-apply-scene", { sceneName: "Demo", sources: [{ name: "Chrome" }, { name: "Chrome" }], apply: true });
+    const scene = await harness.call("obs-apply-scene", { sceneName: "Demo", sources: [{ name: "Be Right Back", kind: "image_source" }], apply: true });
+
+    expect(resultText(twice)).toContain("Chrome is listed more than once");
+    expect(resultText(scene)).toContain("Be Right Back is a scene, not an input");
+    expect(sent()).toEqual([]);
+  });
+
+  it("converges on decimal transforms, which OBS keeps as 32-bit floats", async () => {
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo",
+      sources: [{ name: "Chrome", transform: { positionX: 100.1, scaleX: 0.3333, rotation: 12.34 } }],
+      apply: true,
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(resultText(result)).toContain("OBS now matches the spec");
+    expect(resultText(await harness.call("obs-apply-scene", {
+      sceneName: "Demo",
+      sources: [{ name: "Chrome", transform: { positionX: 100.1, scaleX: 0.3333, rotation: 12.34 } }],
+    }))).toBe("Scene Demo already matches");
   });
 
   it("does not warn about an audio file, which has no picture", async () => {

@@ -193,6 +193,10 @@ export function forwardResourceEvents(
       if (isObject(eventData) && typeof eventData.sceneName === "string") onUpdated(sceneItemsUri(eventData.sceneName));
     }]),
     ...["SceneCreated", "SceneRemoved", "SceneNameChanged"].map((event): [string, () => void] => [event, onListChanged]),
+    // A renamed scene's items resource moves to a new URI; tell subscribers of the old one.
+    ["SceneNameChanged", (eventData) => {
+      if (isObject(eventData) && typeof eventData.oldSceneName === "string") onUpdated(sceneItemsUri(eventData.oldSceneName));
+    }],
   ];
   for (const [event, listener] of listeners) client.on(event, listener);
   const onTakeUpdate = () => onUpdated(TAKE_URI);

@@ -92,7 +92,7 @@ async function captureWindow(
   }
   // Changing an existing capture can break a working setup; save it first so obs-restore can undo this.
   const snapshot = existing
-    ? await takeSnapshot(client, { inputs: [args.inputName], scenes: [args.sceneName], label: "before obs-capture-window" })
+    ? await takeSnapshot(client, { inputs: [args.inputName], scenes: [args.sceneName], label: "before obs-capture-window", auto: true })
       .catch(() => undefined)
     : undefined;
   const type = args.window ? SCK_WINDOW_CAPTURE : SCK_APPLICATION_CAPTURE;
@@ -201,6 +201,12 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async (args) => {
+      // A chapter past the end would keep recording until it, beyond what the client waits for.
+      const late = args.chapters.filter(({ atSeconds }) => atSeconds >= args.durationSeconds);
+      if (late.length > 0) {
+        return errorResult(`Not recording: chapter(s) ${late.map(({ name }) => `"${name}"`).join(", ")} start at or after the `
+          + `${args.durationSeconds}s clip ends`);
+      }
       try {
         return await recordClip(client, args);
       } catch (error) {

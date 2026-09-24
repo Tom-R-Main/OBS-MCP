@@ -9,9 +9,9 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventSubscription } from "../client.js";
 import { FakeOBSRequestError } from "../../test/support/fake-obs-server.js";
-import { healthyObsState, servePreflightState, type FakeObsState } from "../../test/support/fake-obs-state.js";
+import { healthyObsState, servePreflightState, serveRecordOutput, type FakeObsState } from "../../test/support/fake-obs-state.js";
 import { resultText, startMcpHarness, type HarnessOptions, type McpHarness } from "../../test/support/mcp-harness.js";
-import { currentTake } from "./takes.js";
+import { currentTake, stopTake } from "./takes.js";
 
 let harness: McpHarness;
 let recordDirectory: string;
@@ -26,15 +26,7 @@ async function startHarness(options: HarnessOptions = {}): Promise<void> {
   harness = await startMcpHarness({ platform: "macos", ...options });
   servePreflightState(harness.fakeObs, () => state);
   const { fakeObs } = harness;
-  fakeObs.respondWith("StartRecord", () => {
-    setTimeout(() => fakeObs.sendEvent("RecordStateChanged", {
-      outputActive: true,
-      outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
-      outputPath: clipPath,
-    }), 5);
-    return {};
-  });
-  fakeObs.respondWith("StopRecord", () => ({ outputPath: clipPath }));
+  serveRecordOutput(fakeObs, () => clipPath);
   fakeObs.respondWith("CreateRecordChapter", () => ({}));
   fakeObs.respondWith("SetCurrentProfile", () => ({}));
   fakeObs.respondWith("SetProfileParameter", () => ({}));
@@ -49,8 +41,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  // Stop directly: a test may have declined the confirmation obs-take-stop asks for.
   const take = currentTake(harness.obsClient);
-  if (take) await harness.call("obs-take-stop", { confirm: true });
+  if (take) await stopTake(harness.obsClient, take);
   await harness.close();
   rmSync(recordDirectory, { recursive: true, force: true });
   vi.restoreAllMocks();
@@ -91,6 +84,35 @@ describe("recording takes", () => {
     expect(sent("StartRecord")).toBe(1);
   });
 
+  it("refuses a second take started while the first is still starting", async () => {
+    await startHarness();
+
+    const [first, second] = await Promise.all([harness.call("obs-take-start"), harness.call("obs-take-start")]);
+
+    const texts = [resultText(first), resultText(second)];
+    expect(texts.filter((text) => text.includes("is recording"))).toHaveLength(1);
+    expect(texts.some((text) => /being started|already recording/.test(text))).toBe(true);
+    expect(sent("StartRecord")).toBe(1);
+  });
+
+  it("waits for OBS to finish the file before reporting it", async () => {
+    await startHarness();
+    // StopRecord answers before the file is finished; only the STOPPED event carries the final path here.
+    harness.fakeObs.respondWith("StopRecord", () => {
+      setTimeout(() => harness.fakeObs.sendEvent("RecordStateChanged", {
+        outputActive: false,
+        outputState: "OBS_WEBSOCKET_OUTPUT_STOPPED",
+        outputPath: clipPath,
+      }), 50);
+      return {};
+    });
+    await harness.call("obs-take-start");
+
+    const stop = await harness.call("obs-take-stop");
+
+    expect(resultText(stop)).toContain(`to ${clipPath}`);
+  });
+
   it("does not start when preflight fails", async () => {
     await startHarness();
     state.recordDirectory = join(recordDirectory, "missing");
@@ -113,6 +135,8 @@ describe("recording takes", () => {
     const readOnly = await harness.call("obs-batch", { requests: [{ requestType: "GetStats" }] });
 
     expect(resultText(profile)).toMatch(/is recording, and changing this now would switch profiles under it/);
+    expect(resultText(await harness.call("obs-set-output-settings", { outputName: "adv_file_output", outputSettings: {} })))
+      .toContain("would change an output's settings");
     expect(resultText(batch)).toContain("would send SetProfileParameter");
     expect(readOnly.isError).toBeFalsy();
     expect(sent("SetCurrentProfile")).toBe(0);

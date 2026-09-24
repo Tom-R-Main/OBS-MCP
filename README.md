@@ -175,7 +175,7 @@ Two prompts appear as slash commands in clients that show MCP prompts: `record-d
 
 ### Confirming live actions
 
-With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, `obs-toggle-record`, and `obs-take-stop` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
+With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, `obs-toggle-record`, `obs-take-stop`, `obs-stop-output`, and `obs-toggle-output` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. The generic output tools are included because the stream and the recording are outputs too. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation, and `confirm: true` from the model does not skip it. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
 
 ## Where it fits
 
@@ -250,7 +250,7 @@ Without `apply: true` it returns the plan. When applying, it creates what is mis
 
 `obs-snapshot` saves the settings, mute, volume, and audio tracks of inputs, and the transform, visibility, lock, and order of scene items: by default the program scene and the inputs in it. `obs-restore` compares OBS with a snapshot and sends only what differs, in one request batch; `dryRun: true` lists the changes first. It cannot recreate a removed input or item, and leaves items added since in place; it reports both. `obs-capture-window` takes a snapshot automatically before it changes an existing capture.
 
-Snapshots are saved in the server's state directory (the last 20, readable only by you), so `obs-restore` works after a restart and from another agent's session. Each server lists only the snapshots of the OBS instance it connects to. They contain input settings, such as file paths and browser source URLs. OBS's own scene collection file is not a substitute: OBS rewrites it while running.
+Snapshots are saved in the server's state directory (the last 20 you take, plus the last 10 taken automatically before a change, readable only by you), so `obs-restore` works after a restart and from another agent's session. Each server lists only the snapshots of the OBS instance it connects to. They contain input settings, such as file paths and browser source URLs. OBS's own scene collection file is not a substitute: OBS rewrites it while running.
 
 ### Sharing one server
 
@@ -258,12 +258,13 @@ By default each agent starts its own server over stdio, with its own OBS connect
 
 ```bash
 OBS_MCP_HTTP_PORT=8765 OBS_MCP_READ_OBS_CONFIG=true node /path/to/OBS-MCP/build/index.js
-claude mcp add --transport http obs http://127.0.0.1:8765/mcp
+claude mcp add --transport http obs 'http://127.0.0.1:8765/mcp?client=claude'
+# In Codex's config, point it at http://127.0.0.1:8765/mcp?client=codex
 ```
 
 The server listens only on 127.0.0.1 and rejects requests whose Host or Origin header is not localhost, which blocks DNS rebinding from web pages. Set `OBS_MCP_HTTP_TOKEN` to also require a bearer token. Each HTTP request is served statelessly, so `OBS_MCP_DYNAMIC_TOOLSETS` is ignored over HTTP.
 
-While agents share a server, `obs-claim-control` gives one of them control of OBS for a set time (30 minutes by default). Until it calls `obs-release-control` or the time runs out, tools that change OBS refuse calls from other clients; reading OBS and stopping outputs always work. `obs-control-status` shows who holds control. `obs-take-start` claims control for the length of the take. Clients are told apart by the name they report (Claude Code and Codex report different names), so two sessions of the same client share control.
+While agents share a server, `obs-claim-control` gives one of them control of OBS for a set time (30 minutes by default). Until it calls `obs-release-control` or the time runs out, tools that change OBS refuse calls from other clients; reading OBS and stopping outputs always work. `obs-control-status` shows who holds control. `obs-take-start` claims control for the length of the take. Clients are told apart by name: the `client` parameter of the URL they connect with, or else the name a 2026-07-28 client sends with each request. Clients using the 2025 protocol over HTTP send each request without a name, so give each agent its own `?client=` name. An unnamed client cannot claim control and is refused while another client holds it. Two agents given the same name share control. The names are not credentials; control is for agents cooperating on one machine, not for keeping out someone who can reach the server.
 
 ## Troubleshooting
 

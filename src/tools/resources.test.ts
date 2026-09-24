@@ -99,6 +99,19 @@ describe("resources", () => {
     expect(updated).toHaveLength(2);
   });
 
+  it("tells subscribers of a renamed scene's items that the old URI changed", async () => {
+    const updated: string[] = [];
+    harness.mcpClient.setNotificationHandler("notifications/resources/updated", async (notification) => {
+      updated.push(notification.params.uri);
+    });
+    await harness.mcpClient.readResource({ uri: "obs://status" });
+    await harness.mcpClient.subscribeResource({ uri: "obs://scene/Be%20Right%20Back/items" });
+
+    harness.fakeObs.sendEvent("SceneNameChanged", { oldSceneName: "Be Right Back", sceneName: "BRB" });
+
+    await vi.waitFor(() => expect(updated).toContain("obs://scene/Be%20Right%20Back/items"));
+  });
+
   it("serves the running take and notifies subscribers when it changes", async () => {
     const updated: string[] = [];
     harness.mcpClient.setNotificationHandler("notifications/resources/updated", async (notification) => {

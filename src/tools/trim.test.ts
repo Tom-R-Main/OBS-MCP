@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -149,6 +149,28 @@ describe.skipIf(!ffmpegAvailable)("obs-trim-take and obs-contact-sheet", () => {
 
     expect(silent).toMatchObject({ cuts: [expect.anything()], audioConsidered: false });
     expect(tone).toMatchObject({ cuts: [], audioConsidered: true });
+  }, 30_000);
+
+  it("keeps chapter names with control characters from breaking the chapter list", async () => {
+    const tricky = join(directory, "tricky.mp4");
+    const metadata = join(directory, "tricky.txt");
+    // A title holding \r would otherwise end the line and start a forged chapter.
+    writeFileSync(metadata, ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=11500\ntitle=Intro\\\r[CHAPTER]\n"
+      + "[CHAPTER]\nTIMEBASE=1/1000\nSTART=11500\nEND=14000\ntitle=Answer\n");
+    execFileSync("ffmpeg", ["-v", "error", "-y", "-i", clip, "-f", "ffmetadata", "-i", metadata, "-map", "0", "-map_chapters", "1", "-c", "copy", tricky]);
+    writeFileSync(join(directory, "tricky.take.json"), "{}");
+
+    const result = await harness.call("obs-trim-take", { path: "tricky.mp4", apply: true, contactSheet: false });
+
+    expect(result.structuredContent).toMatchObject({ outputChapters: 2 });
+  }, 30_000);
+
+  it("refuses an output path that is a dangling symlink", async () => {
+    symlinkSync(join(tmpdir(), "obs-mcp-nowhere", "escape.mp4"), join(directory, "link.mp4"));
+
+    const result = await harness.call("obs-trim-take", { path: "take.mp4", apply: true, outputPath: "link.mp4", contactSheet: false });
+
+    expect(resultText(result)).toContain("already exists");
   }, 30_000);
 
   it("refuses files outside the OBS recording directory", async () => {

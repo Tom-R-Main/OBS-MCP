@@ -3,7 +3,7 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OBS_OP } from "../../test/support/fake-obs-server.js";
@@ -134,6 +134,70 @@ describe("obs-snapshot and obs-restore", () => {
 
     expect(resultText(list)).toContain('"this OBS"');
     expect(resultText(list)).not.toContain("elsewhere");
+  });
+
+  it("restores the saved order however the items were rearranged", async () => {
+    const extra = ["Slides", "Webcam"].map((sourceName, index) => ({ sceneItemId: 3 + index, sourceName, enabled: true, locked: false, transform: {} }));
+    items.push(...extra);
+    inputs.Slides = { kind: "image_source", settings: {} };
+    inputs.Webcam = { kind: "image_source", settings: {} };
+    const saved = items.map(({ sceneItemId }) => sceneItemId);
+    await harness.call("obs-snapshot");
+
+    const permutations = (list: number[]): number[][] => list.length <= 1 ? [list]
+      : list.flatMap((head, index) => permutations([...list.slice(0, index), ...list.slice(index + 1)]).map((rest) => [head, ...rest]));
+    for (const order of permutations(saved)) {
+      const byId = new Map(items.map((item) => [item.sceneItemId, item]));
+      items.splice(0, items.length, ...order.map((id) => byId.get(id)!));
+      await harness.call("obs-restore");
+      expect(items.map(({ sceneItemId }) => sceneItemId), `from ${order.join(",")}`).toEqual(saved);
+    }
+  });
+
+  it("keeps an item added since in its place while restoring the others' order", async () => {
+    await harness.call("obs-snapshot");
+    items.reverse();
+    items.unshift({ sceneItemId: 9, sourceName: "Webcam", enabled: true, locked: false, transform: {} });
+
+    await harness.call("obs-restore");
+
+    expect(items.map(({ sourceName }) => sourceName)).toEqual(["Webcam", "Background", "Chrome"]);
+  });
+
+  it("restores the scenes that still exist when another was deleted", async () => {
+    await harness.call("obs-snapshot", { scenes: ["Demo"], inputs: ["Chrome"] });
+    const file = join(process.env.OBS_MCP_STATE_DIR!, "snapshots.json");
+    const snapshots = JSON.parse(readFileSync(file, "utf8")) as { items: { sceneName: string }[] }[];
+    snapshots[0]!.items.push({ ...snapshots[0]!.items[0]!, sceneName: "Deleted Scene" });
+    writeFileSync(file, JSON.stringify(snapshots));
+    items[1]!.enabled = false;
+
+    const result = await harness.call("obs-restore");
+
+    expect(resultText(result)).toContain("scene Deleted Scene no longer exists");
+    expect(items[1]!.enabled).toBe(true);
+  });
+
+  it("moves an unreadable snapshot file aside instead of overwriting it", async () => {
+    const directory = process.env.OBS_MCP_STATE_DIR!;
+    writeFileSync(join(directory, "snapshots.json"), "{ not json");
+
+    await harness.call("obs-snapshot");
+
+    expect(readdirSync(directory).some((name) => name.startsWith("snapshots.json.unreadable-"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(directory, "snapshots.json"), "utf8"))).toHaveLength(1);
+  });
+
+  it("does not let automatic snapshots push out ones a user took", async () => {
+    await harness.call("obs-snapshot", { label: "mine" });
+    for (let index = 0; index < 12; index += 1) {
+      await harness.call("obs-apply-scene", { sceneName: "Demo", sources: [{ name: "Chrome", volumeDb: -index - 1 }], apply: true });
+    }
+
+    const list = resultText(await harness.call("obs-snapshot", { list: true }));
+
+    expect(list).toContain('"mine"');
+    expect(list.split("\n").filter((line) => line.includes("before obs-apply-scene"))).toHaveLength(10);
   });
 
   it("refuses to restore before any snapshot", async () => {

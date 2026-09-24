@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import {
   createMcpHandler,
   hostHeaderValidationResponse,
@@ -64,9 +65,20 @@ async function send(res: http.ServerResponse, response: Response): Promise<void>
     res.end();
     return;
   }
-  const body = Readable.fromWeb(response.body as import("node:stream/web").ReadableStream);
-  res.on("close", () => body.destroy());
-  body.pipe(res);
+  // pipeline destroys both sides on error or client disconnect instead of throwing an unhandled 'error'.
+  await pipeline(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), res).catch((error: unknown) => {
+    logger.debug(`MCP HTTP response stream ended early: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
+/**
+ * The name a client declares with `?client=<name>` in the URL it connects to.
+ * 2025-era clients cannot otherwise be told apart over stateless HTTP, and
+ * the control lease needs a name.
+ */
+function declaredClient(url: URL): string | undefined {
+  const name = url.searchParams.get("client")?.trim();
+  return name && /^[\w.@:-]{1,64}$/.test(name) ? name : undefined;
 }
 
 /**
@@ -84,8 +96,8 @@ export async function serveHttp(factory: () => McpServer, options: HttpOptions):
   const server = http.createServer((req, res) => {
     void (async () => {
       try {
-        const path = new URL(req.url ?? "/", `http://${LOOPBACK}`).pathname;
-        if (path !== MCP_PATH) {
+        const url = new URL(req.url ?? "/", `http://${LOOPBACK}`);
+        if (url.pathname !== MCP_PATH) {
           res.writeHead(404, { "content-type": "text/plain" }).end(`Not found; the MCP endpoint is ${MCP_PATH}`);
           return;
         }
@@ -99,7 +111,8 @@ export async function serveHttp(factory: () => McpServer, options: HttpOptions):
           res.writeHead(401, { "content-type": "text/plain", "www-authenticate": "Bearer" }).end("Missing or wrong bearer token");
           return;
         }
-        await send(res, await handler.fetch(request));
+        const clientId = declaredClient(url);
+        await send(res, await handler.fetch(request, clientId ? { authInfo: { token: options.token ?? "", clientId, scopes: [] } } : undefined));
       } catch (error) {
         logger.error(`MCP HTTP request failed: ${error instanceof Error ? error.message : String(error)}`);
         if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain" });
