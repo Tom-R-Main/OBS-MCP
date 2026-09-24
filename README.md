@@ -94,6 +94,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | --- | --- | --- | --- |
 | `OBS_WEBSOCKET_URL` | No | `ws://localhost:4455` | Address of the OBS WebSocket server |
 | `OBS_WEBSOCKET_PASSWORD` | Only when OBS authentication is enabled | None | Password configured in OBS |
+| `OBS_MCP_READ_OBS_CONFIG` | No | `false` | When `OBS_WEBSOCKET_PASSWORD` is unset, read the password OBS saved in its own `obs-websocket/config.json`. Only for a server on the same machine and user account as OBS |
 | `OBS_MCP_MAX_SCREENSHOT_BYTES` | No | `4194304` | Maximum decoded size of a screenshot returned through MCP; the hard ceiling is 6 MiB |
 | `OBS_MCP_TOOLSETS` | No | all tools | Comma-separated tool groups to register: `all`, `core`, or any group listed under [Choosing tools](#choosing-tools) |
 | `OBS_MCP_TOOLS` | No | none | Comma-separated tool names to register in addition to `OBS_MCP_TOOLSETS` |
@@ -189,7 +190,7 @@ Pay particular attention to approvals for tools that:
 
 **Tools appear, but OBS calls fail:** make sure OBS is open and its WebSocket server is enabled. The MCP process stays available while it retries the connection.
 
-**Authentication fails:** copy the password from **Tools > WebSocket Server Settings** into `OBS_WEBSOCKET_PASSWORD`, then restart the MCP server process.
+**Authentication fails:** copy the password from **Tools > WebSocket Server Settings** into `OBS_WEBSOCKET_PASSWORD`, then restart the MCP server process. When the server runs on the same machine as OBS, `OBS_MCP_READ_OBS_CONFIG=true` reads the saved password instead, so it never has to be copied into an agent's configuration. The server logs which file it used, never the password.
 
 **The agent cannot see the tools:** restart the agent session or the MCP host so it creates a fresh stdio connection and reloads the tool list.
 
