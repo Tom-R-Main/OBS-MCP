@@ -12,6 +12,7 @@ export const OBS_OP = {
   Hello: 0,
   Identify: 1,
   Identified: 2,
+  Reidentify: 3,
   Event: 5,
   Request: 6,
   RequestResponse: 7,
@@ -53,6 +54,7 @@ export type FakeOBSOptions = {
   obsStudioVersion?: string;
   obsWebSocketVersion?: string;
   platform?: string;
+  supportedImageFormats?: readonly string[];
 };
 
 type ResponseStatus = {
@@ -122,6 +124,7 @@ export class FakeOBSServer {
   private readonly events = new EventEmitter();
   private readonly frames: InternalRecordedFrame[] = [];
   private readonly sockets = new Map<WebSocket, number>();
+  private readonly subscriptions = new Map<number, number>();
   private readonly scripts = new Map<string, ScriptedAction[]>();
   private readonly responders = new Map<string, FakeOBSResponder>();
   private readonly timers = new Set<NodeJS.Timeout>();
@@ -130,6 +133,7 @@ export class FakeOBSServer {
   private readonly obsStudioVersion: string;
   private readonly obsWebSocketVersion: string;
   private readonly platform: string;
+  private readonly supportedImageFormats: readonly string[];
   private nextConnectionId = 1;
   private nextCursor = 1;
   private closed = false;
@@ -141,6 +145,7 @@ export class FakeOBSServer {
     this.obsStudioVersion = options.obsStudioVersion ?? "32.2.2";
     this.obsWebSocketVersion = options.obsWebSocketVersion ?? "5.7.0";
     this.platform = options.platform ?? "macos";
+    this.supportedImageFormats = options.supportedImageFormats ?? ["png", "jpeg", "webp"];
     this.availableRequests = Array.from(new Set(["GetVersion", "Sleep", ...(options.availableRequests ?? [])]));
 
     const address = server.address() as AddressInfo;
@@ -160,6 +165,11 @@ export class FakeOBSServer {
 
   get openConnectionCount(): number {
     return this.sockets.size;
+  }
+
+  /** The event subscriptions a connection last identified with. */
+  eventSubscriptions(connectionId = this.nextConnectionId - 1): number | undefined {
+    return this.subscriptions.get(connectionId);
   }
 
   cursor(): number {
@@ -333,7 +343,17 @@ export class FakeOBSServer {
 
   private handleFrame(record: InternalRecordedFrame): void {
     const { frame, socket } = record;
+    if (frame.op === OBS_OP.Reidentify) {
+      if (typeof frame.d.eventSubscriptions === "number") {
+        this.subscriptions.set(record.connectionId, frame.d.eventSubscriptions);
+      }
+      socket.send(JSON.stringify({ op: OBS_OP.Identified, d: { negotiatedRpcVersion: 1 } }));
+      return;
+    }
     if (frame.op === OBS_OP.Identify) {
+      if (typeof frame.d.eventSubscriptions === "number") {
+        this.subscriptions.set(record.connectionId, frame.d.eventSubscriptions);
+      }
       if (this.password) {
         const expected = expectedAuthentication(this.password, this.salt, this.challenge);
         if (frame.d.authentication !== expected) {
@@ -512,7 +532,7 @@ export class FakeOBSServer {
       obsWebSocketVersion: this.obsWebSocketVersion,
       rpcVersion: 1,
       availableRequests: this.availableRequests,
-      supportedImageFormats: ["png", "jpeg", "webp"],
+      supportedImageFormats: this.supportedImageFormats,
       platform: this.platform,
       platformDescription: "Fake OBS Studio",
     };

@@ -115,7 +115,7 @@ The 159 tools are organized around the OBS protocol rather than a smaller opinio
 - transitions, transition overrides, the transition cursor, and the T-Bar
 - canvases, screenshots, profiles, scene collections, and persistent data
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
-- `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed
+- `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
 - `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
 - protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message, in order or one per rendered frame (so a change to two sources lands on the same frame), with `Sleep` between them. OBS's parallel mode is not offered: in obs-websocket 5.7, concurrent parallel batches deadlock its WebSocket server until OBS restarts
@@ -157,6 +157,7 @@ Resources give clients that support them a live view without tool calls. Each on
 | `obs://scenes` | `GetSceneList` | scenes added, removed, renamed, or switched |
 | `obs://scene/{sceneName}/items` | `GetSceneItemList` | items added, removed, reordered, shown, hidden, locked |
 | `obs://scene/{sceneName}/screenshot` | 960px JPEG of the scene | (read on demand) |
+| `obs://take/current` | the running take: audio levels, skipped frames, black or unchanging picture, chapters, warnings | a warning or chapter |
 
 Clients on the 2025 protocol receive `notifications/resources/updated` for URIs they subscribe to; 2026-07-28 clients choose them on their `subscriptions/listen` stream.
 
@@ -185,6 +186,16 @@ Pay particular attention to approvals for tools that:
 - save files or use the generic `obs-call-request` fallback
 
 `obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StopStream`, `ToggleStream`, `StopRecord`, or `ToggleRecord`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
+
+### Watching a take
+
+While a take records, the server watches OBS instead of waiting for the file:
+
+- **Audio**: it subscribes to OBS's `InputVolumeMeters` events for the length of the take and records each input's loudest level after volume and mute. An input on a recorded track that rises above −60 dBFS is logged, and with `expectSilent` it is a problem. Muted inputs and inputs on unrecorded tracks are not.
+- **Frames**: it polls `GetStats` every 2 seconds and warns when OBS misses frames rendering or the encoder skips them.
+- **Picture**: once a second it takes a 32-pixel-wide PPM screenshot of the program scene. Two black samples in a row raise a warning (a capture that lost its window or permission looks like this). Stretches of 3 seconds or more with no change are recorded as stills, which mark dead time to trim.
+
+The result lists the findings, and when OBS records to this machine the server writes them next to the recording as `<name>.take.json`, with chapter times and OBS events (scene switches, mutes, output state) in seconds from the start. `obs://take/current` shows the same data while the take runs.
 
 ## Troubleshooting
 

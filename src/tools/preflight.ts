@@ -157,7 +157,7 @@ async function checkEncoder(client: OBSWebSocketClient): Promise<PreflightCheck[
   return checks;
 }
 
-async function recordedTracks(client: OBSWebSocketClient): Promise<number[]> {
+export async function recordedTracks(client: OBSWebSocketClient): Promise<number[]> {
   if (await profileParameter(client, "Output", "Mode") !== "Advanced") return [1];
   const mask = Number(await profileParameter(client, "AdvOut", "RecTracks") ?? "1");
   const tracks = [1, 2, 3, 4, 5, 6].filter((track) => (mask & (1 << (track - 1))) !== 0);
