@@ -118,7 +118,7 @@ The 159 tools are organized around the OBS protocol rather than a smaller opinio
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
 - `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
-- protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message: in order, one per rendered frame (so a change to two sources lands on the same frame), or all at once, with `Sleep` between them
+- protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message, in order or one per rendered frame (so a change to two sources lands on the same frame), with `Sleep` between them. OBS's parallel mode is not offered: in obs-websocket 5.7, concurrent parallel batches deadlock its WebSocket server until OBS restarts
 
 Tools that send a single OBS request declare an `outputSchema` generated from the pinned protocol, so clients receive typed `structuredContent` with the documented response fields. Fields are optional and nullable because OBS omits newer fields in older versions and returns undocumented nulls.
 

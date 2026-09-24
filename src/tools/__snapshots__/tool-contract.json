@@ -37,8 +37,7 @@
           "type": "string",
           "enum": [
             "serial-realtime",
-            "serial-frame",
-            "parallel"
+            "serial-frame"
           ]
         },
         "haltOnFailure": {
