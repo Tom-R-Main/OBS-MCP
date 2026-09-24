@@ -5,7 +5,7 @@
  */
 import { EventEmitter } from "node:events";
 import { writeFile } from "node:fs/promises";
-import { EventSubscription, RequestBatchExecutionType, type OBSWebSocketClient } from "../client.js";
+import { EventSubscription, type OBSWebSocketClient } from "../client.js";
 import { logger } from "../logger.js";
 import { decodePpm, isBlank, isSameFrame, type FrameSample } from "./frame-sample.js";
 import { recordedTracks } from "./preflight.js";
@@ -281,7 +281,6 @@ export class TakeMonitor {
       const names = (inputs ?? []).filter(isObject).map(({ inputName }) => inputName).filter((name): name is string => typeof name === "string");
       const results = await this.client.sendBatch(
         names.map((inputName) => ({ requestType: "GetInputAudioTracks", requestData: { inputName } })),
-        { executionType: RequestBatchExecutionType.Parallel },
       );
       names.forEach((name, index) => {
         const result = results[index];

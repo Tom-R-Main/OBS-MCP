@@ -430,11 +430,18 @@ export class FakeOBSServer {
         socket.close(1011, "scripted disconnect");
         return;
       }
-      results.push({ requestType, requestStatus: answer.status, responseData: answer.data });
+      results.push({
+        requestType,
+        ...(typeof request.requestId === "string" ? { requestId: request.requestId } : {}),
+        requestStatus: answer.status,
+        responseData: answer.data,
+      });
       if (!answer.status.result && frame.d.haltOnFailure === true) break;
     }
 
     if (socket.readyState !== WebSocket.OPEN) return;
+    // Real OBS does not return parallel results in request order; neither does the fake.
+    if (executionType === 2) results.reverse();
     socket.send(JSON.stringify({ op: OBS_OP.RequestBatchResponse, d: { requestId: batchRequestId, results } }));
   }
 

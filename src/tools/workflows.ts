@@ -5,7 +5,7 @@
  */
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { RequestBatchExecutionType, type OBSWebSocketClient } from "../client.js";
+import type { OBSWebSocketClient } from "../client.js";
 import { appendInputScreenshot, inputStateResult, readInputState } from "./after-change.js";
 import { markTake, startTake, stopTake } from "./takes.js";
 
@@ -148,7 +148,7 @@ async function captureWindow(
     const [videoResult, itemResult] = await client.sendBatch([
       { requestType: "GetVideoSettings" },
       { requestType: "GetSceneItemId", requestData: { sceneName: args.sceneName, sourceName: args.inputName } },
-    ], { executionType: RequestBatchExecutionType.Parallel });
+    ]);
     for (const result of [videoResult, itemResult]) {
       if (!result?.ok) throw new Error(`${result?.requestType ?? "Request"} failed${result?.comment ? `: ${result.comment}` : ""}`);
     }
