@@ -8,6 +8,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "./client.js";
 import * as tools from "./tools/index.js";
 import { PACKAGE_VERSION } from "./version.js";
+import { ALL_TOOLS, assertKnownTools, parseToolFilter, type ToolFilter } from "./tools/toolsets.js";
 import { logger } from "./logger.js";
 
 // Create the OBS WebSocket client
@@ -91,19 +92,39 @@ obsClient.on("disconnected", () => {
   }
 });
 
+// Parsed once at startup so a bad OBS_MCP_TOOLSETS/OBS_MCP_TOOLS value fails fast.
+let toolFilter: ToolFilter | null = null;
+
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "obs-mcp",
     version: PACKAGE_VERSION,
   });
 
-  tools.initialize(server, obsClient);
+  tools.initialize(server, obsClient, toolFilter ?? ALL_TOOLS);
   return server;
+}
+
+function loadToolFilter(): ToolFilter {
+  const filter = parseToolFilter();
+  const registry = tools.initialize(
+    new McpServer({ name: "obs-mcp-validation", version: PACKAGE_VERSION }),
+    obsClient,
+    filter,
+  );
+  assertKnownTools(filter, registry);
+  const count = registry.filter(({ registered }) => registered).length;
+  if (count === 0) throw new Error("The tool filter excludes every tool");
+  if (filter.groups !== null || filter.readOnly) {
+    logger.log(`Registering ${count} of ${registry.length} tools${filter.readOnly ? " (read-only)" : ""}`);
+  }
+  return filter;
 }
 
 // Set up server startup logic
 export async function startServer(): Promise<void> {
   try {
+    toolFilter = loadToolFilter();
     stdioServer = serveStdio(createServer, {
       onerror: (error) => logger.error(`MCP stdio error: ${error.message}`),
     });

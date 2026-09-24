@@ -6,76 +6,30 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetStudioModeEnabled tool
-  server.registerTool(
-    "obs-get-studio-mode",
-    {
-      title: "Get Studio Mode",
-      description: "Gets whether studio mode is enabled",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetStudioModeEnabled");
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Studio Mode is ${response.studioModeEnabled ? "enabled" : "disabled"}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error checking studio mode: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-studio-mode",
+    title: "Get Studio Mode",
+    description: "Gets whether studio mode is enabled",
+    requestType: "GetStudioModeEnabled",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetStudioModeEnabled tool
-  server.registerTool(
-    "obs-set-studio-mode",
-    {
-      title: "Set Studio Mode",
-      description: "Enables or disables studio mode",
-      inputSchema: z.object({
-              studioModeEnabled: z.boolean().describe("Whether to enable (true) or disable (false) Studio Mode")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ studioModeEnabled }) => {
-      try {
-        await client.sendRequest("SetStudioModeEnabled", { studioModeEnabled });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Studio Mode has been ${studioModeEnabled ? "enabled" : "disabled"}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error setting studio mode: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-studio-mode",
+    title: "Set Studio Mode",
+    description: "Enables or disables studio mode",
+    requestType: "SetStudioModeEnabled",
+    inputSchema: z.object({
+      studioModeEnabled: z.boolean().describe("Whether to enable (true) or disable (false) Studio Mode")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ studioModeEnabled }) => `Studio Mode has been ${studioModeEnabled ? "enabled" : "disabled"}`,
+  });
 
   // OpenInputPropertiesDialog tool
   server.registerTool(
@@ -216,37 +170,13 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetMonitorList tool
-  server.registerTool(
-    "obs-get-monitor-list",
-    {
-      title: "Get Monitor List",
-      description: "Gets a list of connected monitors and information about them",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetMonitorList");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting monitor list: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-monitor-list",
+    title: "Get Monitor List",
+    description: "Gets a list of connected monitors and information about them",
+    requestType: "GetMonitorList",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // OpenVideoMixProjector tool
   server.registerTool(

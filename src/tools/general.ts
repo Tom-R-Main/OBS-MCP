@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { PACKAGE_VERSION } from "../version.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 
 const MAX_SLEEP_MILLIS = 50_000;
 
@@ -50,37 +51,13 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // Get OBS version info
-  server.registerTool(
-    "obs-get-version",
-    {
-      title: "OBS Version Info",
-      description: "Get OBS Studio version information",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const version = await client.sendRequest("GetVersion");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(version, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to get OBS version: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-version",
+    title: "OBS Version Info",
+    description: "Get OBS Studio version information",
+    requestType: "GetVersion",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // Test OBS connection
   server.registerTool(
@@ -117,73 +94,26 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetStats tool
-  server.registerTool(
-    "obs-get-stats",
-    {
-      title: "OBS Statistics",
-      description: "Gets statistics about OBS, obs-websocket, and the current session",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const stats = await client.sendRequest("GetStats");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(stats, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting stats: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-stats",
+    title: "OBS Statistics",
+    description: "Gets statistics about OBS, obs-websocket, and the current session",
+    requestType: "GetStats",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // BroadcastCustomEvent tool
-  server.registerTool(
-    "obs-broadcast-custom-event",
-    {
-      title: "Broadcast Custom Event",
-      description: "Broadcasts a CustomEvent to all WebSocket clients",
-      inputSchema: z.object({
-              eventData: z.record(z.string(), z.unknown()).describe("Data payload to emit to all receivers")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    },
-    async ({ eventData }) => {
-      try {
-        await client.sendRequest("BroadcastCustomEvent", { eventData });
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Custom event broadcast successfully"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error broadcasting custom event: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-broadcast-custom-event",
+    title: "Broadcast Custom Event",
+    description: "Broadcasts a CustomEvent to all WebSocket clients",
+    requestType: "BroadcastCustomEvent",
+    inputSchema: z.object({
+      eventData: z.record(z.string(), z.unknown()).describe("Data payload to emit to all receivers")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    successMessage: () => "Custom event broadcast successfully",
+  });
 
   // CallVendorRequest tool
   server.registerTool(
@@ -233,37 +163,13 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetHotkeyList tool
-  server.registerTool(
-    "obs-get-hotkey-list",
-    {
-      title: "Get Hotkey List",
-      description: "Gets an array of all hotkey names in OBS",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const hotkeyList = await client.sendRequest("GetHotkeyList");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(hotkeyList, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting hotkey list: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-hotkey-list",
+    title: "Get Hotkey List",
+    description: "Gets an array of all hotkey names in OBS",
+    requestType: "GetHotkeyList",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // TriggerHotkeyByName tool
   server.registerTool(

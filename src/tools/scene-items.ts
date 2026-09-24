@@ -6,45 +6,22 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetSceneItemList tool
-  server.registerTool(
-    "obs-get-scene-items",
-    {
-      title: "Get Scene Items",
-      description: "Get a list of all scene items in a scene",
-      inputSchema: z.object({
-              canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
-              sceneName: z.string().optional().describe("Name of the scene to get items from"),
-              sceneUuid: z.string().optional().describe("UUID of the scene to get items from")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ canvasUuid, sceneName, sceneUuid }) => {
-      try {
-        const sceneItems = await client.sendRequest("GetSceneItemList", { canvasUuid, sceneName, sceneUuid });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(sceneItems, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting scene items: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-scene-items",
+    title: "Get Scene Items",
+    description: "Get a list of all scene items in a scene",
+    requestType: "GetSceneItemList",
+    inputSchema: z.object({
+      canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
+      sceneName: z.string().optional().describe("Name of the scene to get items from"),
+      sceneUuid: z.string().optional().describe("UUID of the scene to get items from")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // CreateSceneItem tool
   server.registerTool(
@@ -96,44 +73,20 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // RemoveSceneItem tool
-  server.registerTool(
-    "obs-remove-scene-item",
-    {
-      title: "Remove Scene Item",
-      description: "Remove a scene item from a scene",
-      inputSchema: z.object({
-              canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
-              sceneName: z.string().optional().describe("Name of the scene to remove the item from"),
-              sceneUuid: z.string().optional().describe("UUID of the scene to remove the item from"),
-              sceneItemId: z.number().int().nonnegative().describe("The ID of the scene item to remove")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ canvasUuid, sceneName, sceneUuid, sceneItemId }) => {
-      try {
-        await client.sendRequest("RemoveSceneItem", { canvasUuid, sceneName, sceneUuid, sceneItemId });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully removed item with ID ${sceneItemId} from ${sceneName}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error removing scene item: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-remove-scene-item",
+    title: "Remove Scene Item",
+    description: "Remove a scene item from a scene",
+    requestType: "RemoveSceneItem",
+    inputSchema: z.object({
+      canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
+      sceneName: z.string().optional().describe("Name of the scene to remove the item from"),
+      sceneUuid: z.string().optional().describe("UUID of the scene to remove the item from"),
+      sceneItemId: z.number().int().nonnegative().describe("The ID of the scene item to remove")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ sceneItemId, sceneName }) => `Successfully removed item with ID ${sceneItemId} from ${sceneName}`,
+  });
 
   // SetSceneItemEnabled tool
   server.registerTool(
@@ -183,43 +136,19 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetSceneItemTransform tool
-  server.registerTool(
-    "obs-get-scene-item-transform",
-    {
-      title: "Get Scene Item Transform",
-      description: "Get the position, rotation, scale, or crop of a scene item",
-      inputSchema: z.object({
-              canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
-              sceneName: z.string().optional().describe("Name of the scene containing the item"),
-              sceneUuid: z.string().optional().describe("UUID of the scene containing the item"),
-              sceneItemId: z.number().int().nonnegative().describe("The ID of the scene item")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ canvasUuid, sceneName, sceneUuid, sceneItemId }) => {
-      try {
-        const response = await client.sendRequest("GetSceneItemTransform", { canvasUuid, sceneName, sceneUuid, sceneItemId });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting scene item transform: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-scene-item-transform",
+    title: "Get Scene Item Transform",
+    description: "Get the position, rotation, scale, or crop of a scene item",
+    requestType: "GetSceneItemTransform",
+    inputSchema: z.object({
+      canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
+      sceneName: z.string().optional().describe("Name of the scene containing the item"),
+      sceneUuid: z.string().optional().describe("UUID of the scene containing the item"),
+      sceneItemId: z.number().int().nonnegative().describe("The ID of the scene item")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetSceneItemTransform tool
   server.registerTool(
@@ -306,51 +235,19 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetSceneItemIdByName tool
-  server.registerTool(
-    "obs-get-scene-item-id",
-    {
-      title: "Get Scene Item ID",
-      description: "Get the ID of a scene item by its source name",
-      inputSchema: z.object({
-              canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
-              sceneName: z.string().optional().describe("Name of the scene to search"),
-              sceneUuid: z.string().optional().describe("UUID of the scene to search"),
-              sourceName: z.string().optional().describe("Name of the source to find"),
-              sourceUuid: z.string().optional().describe("UUID of the source to find"),
-              searchOffset: z.number().int().nonnegative().optional().describe("Match offset when the source appears multiple times")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ canvasUuid, sceneName, sceneUuid, sourceName, sourceUuid, searchOffset }) => {
-      try {
-        const response = await client.sendRequest("GetSceneItemId", {
-          canvasUuid,
-          sceneName,
-          sceneUuid,
-          sourceName,
-          sourceUuid,
-          searchOffset
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Scene item ID for ${sourceName} in ${sceneName}: ${response.sceneItemId}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting scene item ID: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-scene-item-id",
+    title: "Get Scene Item ID",
+    description: "Get the ID of a scene item by its source name",
+    requestType: "GetSceneItemId",
+    inputSchema: z.object({
+      canvasUuid: z.string().optional().describe("UUID of the canvas containing the scene"),
+      sceneName: z.string().optional().describe("Name of the scene to search"),
+      sceneUuid: z.string().optional().describe("UUID of the scene to search"),
+      sourceName: z.string().optional().describe("Name of the source to find"),
+      sourceUuid: z.string().optional().describe("UUID of the source to find"),
+      searchOffset: z.number().int().nonnegative().optional().describe("Match offset when the source appears multiple times")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 }

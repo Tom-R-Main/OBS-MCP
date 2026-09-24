@@ -6,41 +6,18 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 import { startOutputAndConfirm, STREAM_OUTPUT } from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetStreamStatus tool
-  server.registerTool(
-    "obs-get-stream-status",
-    {
-      title: "Get Stream Status",
-      description: "Get the current streaming status",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const status = await client.sendRequest("GetStreamStatus");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(status, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting stream status: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-stream-status",
+    title: "Get Stream Status",
+    description: "Get the current streaming status",
+    requestType: "GetStreamStatus",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // StartStream tool
   server.registerTool(
@@ -54,37 +31,14 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // StopStream tool
-  server.registerTool(
-    "obs-stop-stream",
-    {
-      title: "Stop Stream",
-      description: "Stop streaming in OBS",
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-    },
-    async () => {
-      try {
-        await client.sendRequest("StopStream");
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Successfully stopped streaming"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error stopping stream: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-stop-stream",
+    title: "Stop Stream",
+    description: "Stop streaming in OBS",
+    requestType: "StopStream",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    successMessage: () => "Successfully stopped streaming",
+  });
 
   // ToggleStream tool
   server.registerTool(
@@ -120,38 +74,15 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // SendStreamCaption tool
-  server.registerTool(
-    "obs-send-stream-caption",
-    {
-      title: "Send Stream Caption",
-      description: "Sends CEA-608 caption text over the stream output",
-      inputSchema: z.object({
-              captionText: z.string().describe("Caption text to send")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    },
-    async ({ captionText }) => {
-      try {
-        await client.sendRequest("SendStreamCaption", { captionText });
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Successfully sent stream caption"
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error sending stream caption: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-send-stream-caption",
+    title: "Send Stream Caption",
+    description: "Sends CEA-608 caption text over the stream output",
+    requestType: "SendStreamCaption",
+    inputSchema: z.object({
+      captionText: z.string().describe("Caption text to send")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    successMessage: () => "Successfully sent stream caption",
+  });
 }

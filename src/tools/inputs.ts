@@ -6,6 +6,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
+import { registerObsRequestTool } from "./request-tool.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetInputList tool
@@ -91,37 +92,13 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetSpecialInputs tool
-  server.registerTool(
-    "obs-get-special-inputs",
-    {
-      title: "Get Special Inputs",
-      description: "Gets the names of all special inputs",
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async () => {
-      try {
-        const response = await client.sendRequest("GetSpecialInputs");
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting special inputs: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-special-inputs",
+    title: "Get Special Inputs",
+    description: "Gets the names of all special inputs",
+    requestType: "GetSpecialInputs",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // CreateInput tool
   server.registerTool(
@@ -173,149 +150,55 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // RemoveInput tool
-  server.registerTool(
-    "obs-remove-input",
-    {
-      title: "Remove Input",
-      description: "Removes an existing input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to remove")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        await client.sendRequest("RemoveInput", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully removed input: ${inputName}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error removing input: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-remove-input",
+    title: "Remove Input",
+    description: "Removes an existing input",
+    requestType: "RemoveInput",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to remove")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ inputName }) => `Successfully removed input: ${inputName}`,
+  });
 
   // SetInputName tool
-  server.registerTool(
-    "obs-set-input-name",
-    {
-      title: "Rename Input",
-      description: "Sets the name of an input (rename)",
-      inputSchema: z.object({
-              inputName: z.string().describe("Current input name"),
-              newInputName: z.string().describe("New name for the input")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName, newInputName }) => {
-      try {
-        await client.sendRequest("SetInputName", { inputName, newInputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully renamed input '${inputName}' to '${newInputName}'`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error renaming input: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-input-name",
+    title: "Rename Input",
+    description: "Sets the name of an input (rename)",
+    requestType: "SetInputName",
+    inputSchema: z.object({
+      inputName: z.string().describe("Current input name"),
+      newInputName: z.string().describe("New name for the input")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ inputName, newInputName }) => `Successfully renamed input '${inputName}' to '${newInputName}'`,
+  });
 
   // GetInputDefaultSettings tool
-  server.registerTool(
-    "obs-get-input-default-settings",
-    {
-      title: "Get Input Default Settings",
-      description: "Gets the default settings for an input kind",
-      inputSchema: z.object({
-              inputKind: z.string().describe("Input kind to get the default settings for")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputKind }) => {
-      try {
-        const response = await client.sendRequest("GetInputDefaultSettings", { inputKind });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input default settings: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-default-settings",
+    title: "Get Input Default Settings",
+    description: "Gets the default settings for an input kind",
+    requestType: "GetInputDefaultSettings",
+    inputSchema: z.object({
+      inputKind: z.string().describe("Input kind to get the default settings for")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // GetInputSettings tool
-  server.registerTool(
-    "obs-get-input-settings",
-    {
-      title: "Get Input Settings",
-      description: "Gets the settings of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to get the settings of")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        const response = await client.sendRequest("GetInputSettings", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input settings: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-settings",
+    title: "Get Input Settings",
+    description: "Gets the settings of an input",
+    requestType: "GetInputSettings",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to get the settings of")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetInputSettings tool
   server.registerTool(
@@ -361,77 +244,30 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetInputMute tool
-  server.registerTool(
-    "obs-get-input-mute",
-    {
-      title: "Get Input Mute State",
-      description: "Gets the audio mute state of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of input to get the mute state of")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        const response = await client.sendRequest("GetInputMute", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Input '${inputName}' is ${response.inputMuted ? "muted" : "unmuted"}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input mute state: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-mute",
+    title: "Get Input Mute State",
+    description: "Gets the audio mute state of an input",
+    requestType: "GetInputMute",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of input to get the mute state of")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetInputMute tool
-  server.registerTool(
-    "obs-set-input-mute",
-    {
-      title: "Set Input Mute",
-      description: "Sets the audio mute state of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to set the mute state of"),
-              inputMuted: z.boolean().describe("Whether to mute the input or not")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName, inputMuted }) => {
-      try {
-        await client.sendRequest("SetInputMute", { inputName, inputMuted });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully ${inputMuted ? "muted" : "unmuted"} input: ${inputName}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error setting input mute state: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-input-mute",
+    title: "Set Input Mute",
+    description: "Sets the audio mute state of an input",
+    requestType: "SetInputMute",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to set the mute state of"),
+      inputMuted: z.boolean().describe("Whether to mute the input or not")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ inputMuted, inputName }) => `Successfully ${inputMuted ? "muted" : "unmuted"} input: ${inputName}`,
+  });
 
   // ToggleInputMute tool
   server.registerTool(
@@ -470,40 +306,16 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetInputVolume tool
-  server.registerTool(
-    "obs-get-input-volume",
-    {
-      title: "Get Input Volume",
-      description: "Gets the current volume setting of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to get the volume of")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        const response = await client.sendRequest("GetInputVolume", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(response, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input volume: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-volume",
+    title: "Get Input Volume",
+    description: "Gets the current volume setting of an input",
+    requestType: "GetInputVolume",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to get the volume of")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetInputVolume tool
   server.registerTool(
@@ -556,221 +368,80 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   );
 
   // GetInputAudioBalance tool
-  server.registerTool(
-    "obs-get-input-audio-balance",
-    {
-      title: "Get Input Audio Balance",
-      description: "Gets the audio balance of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to get the audio balance of")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        const response = await client.sendRequest("GetInputAudioBalance", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Audio balance for input '${inputName}': ${response.inputAudioBalance}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input audio balance: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-audio-balance",
+    title: "Get Input Audio Balance",
+    description: "Gets the audio balance of an input",
+    requestType: "GetInputAudioBalance",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to get the audio balance of")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetInputAudioBalance tool
-  server.registerTool(
-    "obs-set-input-audio-balance",
-    {
-      title: "Set Input Audio Balance",
-      description: "Sets the audio balance of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to set the audio balance of"),
-              inputAudioBalance: z.number().min(0).max(1).describe("New audio balance value (0.0-1.0)")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName, inputAudioBalance }) => {
-      try {
-        await client.sendRequest("SetInputAudioBalance", { inputName, inputAudioBalance });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully set audio balance to ${inputAudioBalance} for input: ${inputName}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error setting input audio balance: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-input-audio-balance",
+    title: "Set Input Audio Balance",
+    description: "Sets the audio balance of an input",
+    requestType: "SetInputAudioBalance",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to set the audio balance of"),
+      inputAudioBalance: z.number().min(0).max(1).describe("New audio balance value (0.0-1.0)")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ inputAudioBalance, inputName }) => `Successfully set audio balance to ${inputAudioBalance} for input: ${inputName}`,
+  });
 
   // GetInputAudioSyncOffset tool
-  server.registerTool(
-    "obs-get-input-audio-sync-offset",
-    {
-      title: "Get Input Audio Sync Offset",
-      description: "Gets the audio sync offset of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to get the audio sync offset of")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        const response = await client.sendRequest("GetInputAudioSyncOffset", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Audio sync offset for input '${inputName}': ${response.inputAudioSyncOffset}ms`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input audio sync offset: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-audio-sync-offset",
+    title: "Get Input Audio Sync Offset",
+    description: "Gets the audio sync offset of an input",
+    requestType: "GetInputAudioSyncOffset",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to get the audio sync offset of")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetInputAudioSyncOffset tool
-  server.registerTool(
-    "obs-set-input-audio-sync-offset",
-    {
-      title: "Set Input Audio Sync Offset",
-      description: "Sets the audio sync offset of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to set the audio sync offset of"),
-              inputAudioSyncOffset: z.number().min(-950).max(20000).describe("New audio sync offset in milliseconds")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName, inputAudioSyncOffset }) => {
-      try {
-        await client.sendRequest("SetInputAudioSyncOffset", { inputName, inputAudioSyncOffset });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully set audio sync offset to ${inputAudioSyncOffset}ms for input: ${inputName}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error setting input audio sync offset: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-input-audio-sync-offset",
+    title: "Set Input Audio Sync Offset",
+    description: "Sets the audio sync offset of an input",
+    requestType: "SetInputAudioSyncOffset",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to set the audio sync offset of"),
+      inputAudioSyncOffset: z.number().min(-950).max(20000).describe("New audio sync offset in milliseconds")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ inputAudioSyncOffset, inputName }) => `Successfully set audio sync offset to ${inputAudioSyncOffset}ms for input: ${inputName}`,
+  });
 
   // GetInputAudioMonitorType tool
-  server.registerTool(
-    "obs-get-input-audio-monitor-type",
-    {
-      title: "Get Input Audio Monitor Type",
-      description: "Gets the audio monitor type of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to get the audio monitor type of")
-            }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName }) => {
-      try {
-        const response = await client.sendRequest("GetInputAudioMonitorType", { inputName });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Audio monitor type for input '${inputName}': ${response.monitorType}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error getting input audio monitor type: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-get-input-audio-monitor-type",
+    title: "Get Input Audio Monitor Type",
+    description: "Gets the audio monitor type of an input",
+    requestType: "GetInputAudioMonitorType",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to get the audio monitor type of")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  });
 
   // SetInputAudioMonitorType tool
-  server.registerTool(
-    "obs-set-input-audio-monitor-type",
-    {
-      title: "Set Input Audio Monitor Type",
-      description: "Sets the audio monitor type of an input",
-      inputSchema: z.object({
-              inputName: z.string().describe("Name of the input to set the audio monitor type of"),
-              monitorType: z.string().describe("Audio monitor type (OBS_MONITORING_TYPE_NONE, OBS_MONITORING_TYPE_MONITOR_ONLY, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)")
-            }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    },
-    async ({ inputName, monitorType }) => {
-      try {
-        await client.sendRequest("SetInputAudioMonitorType", { inputName, monitorType });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Successfully set audio monitor type to ${monitorType} for input: ${inputName}`
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error setting input audio monitor type: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-    }
-  );
+  registerObsRequestTool(server, client, {
+    name: "obs-set-input-audio-monitor-type",
+    title: "Set Input Audio Monitor Type",
+    description: "Sets the audio monitor type of an input",
+    requestType: "SetInputAudioMonitorType",
+    inputSchema: z.object({
+      inputName: z.string().describe("Name of the input to set the audio monitor type of"),
+      monitorType: z.string().describe("Audio monitor type (OBS_MONITORING_TYPE_NONE, OBS_MONITORING_TYPE_MONITOR_ONLY, OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    successMessage: ({ inputName, monitorType }) => `Successfully set audio monitor type to ${monitorType} for input: ${inputName}`,
+  });
 }

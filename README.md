@@ -95,6 +95,9 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_WEBSOCKET_URL` | No | `ws://localhost:4455` | Address of the OBS WebSocket server |
 | `OBS_WEBSOCKET_PASSWORD` | Only when OBS authentication is enabled | None | Password configured in OBS |
 | `OBS_MCP_MAX_SCREENSHOT_BYTES` | No | `4194304` | Maximum decoded size of a screenshot returned through MCP; the hard ceiling is 6 MiB |
+| `OBS_MCP_TOOLSETS` | No | all tools | Comma-separated tool groups to register: `all`, `core`, or any group listed under [Choosing tools](#choosing-tools) |
+| `OBS_MCP_TOOLS` | No | none | Comma-separated tool names to register in addition to `OBS_MCP_TOOLSETS` |
+| `OBS_MCP_READ_ONLY` | No | `false` | Register only read-only tools; overrides both lists |
 | `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
@@ -112,7 +115,32 @@ The 156 tools are organized around the OBS protocol rather than a smaller opinio
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
 - protocol description and the guarded generic request fallback
 
+Tools that send a single OBS request declare an `outputSchema` generated from the pinned protocol, so clients receive typed `structuredContent` with the documented response fields. Fields are optional and nullable because OBS omits newer fields in older versions and returns undocumented nulls.
+
 Tool discovery works without an OBS connection. Calls that need OBS return an MCP error until the WebSocket connection is ready.
+
+### Choosing tools
+
+Every tool is registered by default. Clients load each registered tool's definition into the model's context, so a smaller set is cheaper and easier for the model to choose from.
+
+| Group | Covers |
+|---|---|
+| `general` | status, version, statistics, hotkeys, vendor requests, custom events, sleep |
+| `scenes` | scenes, canvases, program and preview scene |
+| `scene-items` | scene items, groups, transforms, ordering, locking, blend modes |
+| `sources` | source screenshots and active state |
+| `inputs` | inputs, input settings and properties, audio, deinterlacing |
+| `media` | media input playback |
+| `filters` | source filters |
+| `transitions` | transitions, overrides, the T-Bar |
+| `record` | recording, chapters, and `obs-preflight` |
+| `stream` | streaming and captions |
+| `outputs` | virtual camera, replay buffer, and generic outputs |
+| `config` | profiles, scene collections, video settings, persistent data |
+| `ui` | studio mode, dialogs, projectors |
+| `protocol` | `obs-describe-request` and the generic `obs-call-request` |
+
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (79 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 38-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
 ## Where it fits
 
