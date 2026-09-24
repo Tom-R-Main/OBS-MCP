@@ -12,19 +12,21 @@ const PNG_1X1 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEB
 let harness: McpHarness;
 let size: { sourceWidth: number; sourceHeight: number };
 let settings: Record<string, unknown>;
+let inputKind: string;
 
 beforeEach(async () => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   harness = await startMcpHarness();
   size = { sourceWidth: 1512, sourceHeight: 949 };
   settings = { type: 1, window: 31875 };
+  inputKind = "screen_capture";
   const { fakeObs } = harness;
   fakeObs.respondWith("SetInputSettings", (data) => {
     settings = { ...settings, ...(data.inputSettings as Record<string, unknown>) };
     return {};
   });
   fakeObs.respondWith("CreateInput", () => ({ inputUuid: "uuid", sceneItemId: 7 }));
-  fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "screen_capture", inputSettings: settings }));
+  fakeObs.respondWith("GetInputSettings", () => ({ inputKind, inputSettings: settings }));
   fakeObs.respondWith("GetCurrentProgramScene", () => ({ currentProgramSceneName: "Demo" }));
   fakeObs.respondWith("GetSceneItemList", () => ({
     sceneItems: [
@@ -64,6 +66,17 @@ describe("obs-set-input-settings", () => {
     const result = await harness.call("obs-set-input-settings", { inputName: "Chrome", inputSettings: { type: 2 } });
 
     expect(result.structuredContent).toMatchObject({ appearances: [{ sourceWidth: 1512 }], warnings: [] });
+  });
+
+  it("does not wait for or warn about an audio-only input's 0×0 size", async () => {
+    size = { sourceWidth: 0, sourceHeight: 0 };
+    inputKind = "coreaudio_input_capture";
+    const started = Date.now();
+
+    const result = await harness.call("obs-set-input-settings", { inputName: "Chrome", inputSettings: { device_id: "default" } });
+
+    expect(resultText(result)).not.toContain("renders at 0×0");
+    expect(Date.now() - started).toBeLessThan(500);
   });
 
   it("warns when the input still renders at 0×0", async () => {

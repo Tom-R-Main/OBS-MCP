@@ -7,6 +7,7 @@ import { accessSync, constants, statSync } from "node:fs";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
+import { withoutAudioOnly } from "./audio-only.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
 
 export type PreflightStatus = "pass" | "warn" | "fail" | "unknown";
@@ -223,12 +224,13 @@ async function checkSceneItems(client: OBSWebSocketClient): Promise<PreflightChe
     const result = looked[index];
     return [item, result?.ok && isObject(result.responseData) ? result.responseData.sceneItemTransform : undefined];
   }));
-  const blank = visible
+  // Audio-only sources (microphones, audio files) are always 0×0.
+  const blank = await withoutAudioOnly(client, visible
     .filter((item) => {
       const transform = isObject(item.sceneItemTransform) ? item.sceneItemTransform : transforms.get(item);
       return isObject(transform) && (transform.sourceWidth === 0 || transform.sourceHeight === 0);
     })
-    .map((item) => String(item.sourceName ?? item.sceneItemId));
+    .map((item) => ({ name: String(item.sourceName ?? item.sceneItemId), inputKind: item.inputKind })));
 
   if (items.length === 0) {
     return { id: "scene-items", status: "warn", message: `Program scene ${sceneName} is empty` };

@@ -151,6 +151,15 @@ describe("obs-preflight", () => {
     expect(byId("scene-items")).toMatchObject({ status: "warn", message: expect.stringContaining("Chrome") });
   });
 
+  it("ignores audio-only sources, which are always 0×0", async () => {
+    state.inputs.push({ inputName: "Mic", inputKind: "coreaudio_input_capture", muted: true, tracks: { 1: true } });
+    state.sceneItems.push({ sceneItemId: 3, sourceName: "Mic", sceneItemEnabled: true, sourceWidth: 0, sourceHeight: 0 });
+
+    const { byId } = await preflight();
+
+    expect(byId("scene-items")?.status).toBe("pass");
+  });
+
   it("ignores hidden 0×0 sources", async () => {
     state.sceneItems[1] = { sceneItemId: 2, sourceName: "Chrome", sceneItemEnabled: false, sourceWidth: 0, sourceHeight: 0 };
     const { byId } = await preflight();

@@ -6,6 +6,7 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { BatchRequest, BatchResult, OBSWebSocketClient } from "../client.js";
+import { withoutAudioOnly } from "./audio-only.js";
 import { readInputs, readItems, same, takeSnapshot, type InputState, type ItemState } from "./snapshots.js";
 
 type JsonObject = Record<string, unknown>;
@@ -243,11 +244,12 @@ function describe(actions: SceneAction[]): string[] {
 
 async function blankItems(client: OBSWebSocketClient, sceneName: string, names: string[]): Promise<string[]> {
   const items = await client.sendRequest("GetSceneItemList", { sceneName }) as JsonObject;
-  return (Array.isArray(items.sceneItems) ? items.sceneItems : [])
+  const blank = (Array.isArray(items.sceneItems) ? items.sceneItems : [])
     .filter(isObject)
     .filter((item) => names.includes(String(item.sourceName)) && item.sceneItemEnabled !== false)
     .filter((item) => isObject(item.sceneItemTransform) && (item.sceneItemTransform.sourceWidth === 0 || item.sceneItemTransform.sourceHeight === 0))
-    .map((item) => String(item.sourceName));
+    .map((item) => ({ name: String(item.sourceName), inputKind: item.inputKind }));
+  return withoutAudioOnly(client, blank);
 }
 
 export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, apply: boolean): Promise<CallToolResult> {
