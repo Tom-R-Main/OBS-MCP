@@ -23,6 +23,7 @@ import * as ui from "./ui.js";
 import * as protocolExtensions from "./protocol-extensions.js";
 import * as protocol from "./protocol.js";
 import * as preflight from "./preflight.js";
+import * as workflows from "./workflows.js";
 import { withStructuredToolResults } from "./results.js";
 import { ALL_TOOLS, scopedServer, type RegisteredTool, type ToolFilter, type ToolGroup } from "./toolsets.js";
 
@@ -43,6 +44,7 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["protocol", protocolExtensions], // Regrouped per tool in toolsets.ts.
   ["protocol", protocol],
   ["record", preflight],
+  ["record", workflows],
 ];
 
 /**
@@ -79,5 +81,6 @@ export {
   ui,
   protocolExtensions,
   protocol,
-  preflight
+  preflight,
+  workflows
 };

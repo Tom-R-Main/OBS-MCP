@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 156 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 158 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -104,7 +104,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 156 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 158 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -113,6 +113,9 @@ The 156 tools are organized around the OBS protocol rather than a smaller opinio
 - transitions, transition overrides, the transition cursor, and the T-Bar
 - canvases, screenshots, profiles, scene collections, and persistent data
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
+- `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed
+- `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
+- input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
 - protocol description and the guarded generic request fallback
 
 Tools that send a single OBS request declare an `outputSchema` generated from the pinned protocol, so clients receive typed `structuredContent` with the documented response fields. Fields are optional and nullable because OBS omits newer fields in older versions and returns undocumented nulls.
@@ -129,18 +132,18 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `scenes` | scenes, canvases, program and preview scene |
 | `scene-items` | scene items, groups, transforms, ordering, locking, blend modes |
 | `sources` | source screenshots and active state |
-| `inputs` | inputs, input settings and properties, audio, deinterlacing |
+| `inputs` | inputs, input settings and properties, audio, deinterlacing, and `obs-capture-window` |
 | `media` | media input playback |
 | `filters` | source filters |
 | `transitions` | transitions, overrides, the T-Bar |
-| `record` | recording, chapters, and `obs-preflight` |
+| `record` | recording, chapters, `obs-preflight`, and `obs-record-clip` |
 | `stream` | streaming and captions |
 | `outputs` | virtual camera, replay buffer, and generic outputs |
 | `config` | profiles, scene collections, video settings, persistent data |
 | `ui` | studio mode, dialogs, projectors |
 | `protocol` | `obs-describe-request` and the generic `obs-call-request` |
 
-`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (79 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 38-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (81 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 38-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
 ## Where it fits
 
@@ -191,7 +194,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 156 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 158 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

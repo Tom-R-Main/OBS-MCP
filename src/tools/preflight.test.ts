@@ -10,89 +10,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSRequestError } from "../../test/support/fake-obs-server.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
 import type { PreflightCheck } from "./preflight.js";
-
-type FakeInput = {
-  inputName: string;
-  inputKind: string;
-  muted?: boolean; // undefined means the input has no audio
-  tracks?: Record<string, boolean>;
-};
-
-type FakeSceneItem = {
-  sceneItemId: number;
-  sourceName: string;
-  sceneItemEnabled: boolean;
-  sourceWidth: number;
-  sourceHeight: number;
-};
-
-/** A healthy OBS that preflight should pass; each test breaks one thing. */
-type FakeState = {
-  recording: boolean;
-  recordDirectory: string;
-  availableDiskSpace: number;
-  profile: Record<string, string>;
-  inputs: FakeInput[];
-  sceneItems: FakeSceneItem[];
-};
+import { healthyObsState, servePreflightState, type FakeObsState } from "../../test/support/fake-obs-state.js";
 
 let harness: McpHarness;
 let recordDirectory: string;
-let state: FakeState;
-
-function healthyState(): FakeState {
-  return {
-    recording: false,
-    recordDirectory,
-    availableDiskSpace: 50_000,
-    profile: {
-      "Output/Mode": "Simple",
-      "SimpleOutput/RecQuality": "Small",
-      "SimpleOutput/RecEncoder": "apple_h264",
-    },
-    inputs: [
-      { inputName: "Chrome", inputKind: "screen_capture", muted: true, tracks: { 1: false } },
-      { inputName: "Background", inputKind: "color_source_v3" },
-    ],
-    sceneItems: [
-      { sceneItemId: 1, sourceName: "Background", sceneItemEnabled: true, sourceWidth: 1920, sourceHeight: 1080 },
-      { sceneItemId: 2, sourceName: "Chrome", sceneItemEnabled: true, sourceWidth: 1512, sourceHeight: 949 },
-    ],
-  };
-}
-
-function findInput(requestData: Record<string, unknown>): FakeInput {
-  const input = state.inputs.find(({ inputName }) => inputName === requestData.inputName);
-  if (!input) throw new FakeOBSRequestError(600, "No source was found");
-  return input;
-}
+let state: FakeObsState;
 
 function wireFakeObs(): void {
-  const { fakeObs } = harness;
-  fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: state.recording }));
-  fakeObs.respondWith("GetRecordDirectory", () => ({ recordDirectory: state.recordDirectory }));
-  fakeObs.respondWith("GetStats", () => ({ availableDiskSpace: state.availableDiskSpace }));
-  fakeObs.respondWith("GetProfileParameter", ({ parameterCategory, parameterName }) => ({
-    parameterValue: state.profile[`${String(parameterCategory)}/${String(parameterName)}`] ?? null,
-    defaultParameterValue: null,
-  }));
-  fakeObs.respondWith("GetInputList", () => ({
-    inputs: state.inputs.map(({ inputName, inputKind }) => ({ inputName, inputKind })),
-  }));
-  fakeObs.respondWith("GetInputMute", (data) => {
-    const input = findInput(data);
-    if (input.muted === undefined) throw new FakeOBSRequestError(604, "The specified input does not support audio");
-    return { inputMuted: input.muted };
-  });
-  fakeObs.respondWith("GetInputAudioTracks", (data) => ({ inputAudioTracks: findInput(data).tracks ?? {} }));
-  fakeObs.respondWith("GetCurrentProgramScene", () => ({ currentProgramSceneName: "Demo" }));
-  fakeObs.respondWith("GetSceneItemList", () => ({
-    sceneItems: state.sceneItems.map(({ sourceWidth, sourceHeight, ...item }) => ({
-      ...item,
-      sceneItemTransform: { sourceWidth, sourceHeight },
-    })),
-  }));
-  fakeObs.respondWith("SetProfileParameter", () => ({}));
+  servePreflightState(harness.fakeObs, () => state);
+  harness.fakeObs.respondWith("SetProfileParameter", () => ({}));
 }
 
 async function preflight(args: Record<string, unknown> = {}) {
@@ -106,7 +32,7 @@ async function preflight(args: Record<string, unknown> = {}) {
 beforeEach(async () => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   recordDirectory = mkdtempSync(join(tmpdir(), "obs-mcp-preflight-"));
-  state = healthyState();
+  state = healthyObsState(recordDirectory);
   harness = await startMcpHarness({ obsStudioVersion: "32.2.2" });
   wireFakeObs();
 });

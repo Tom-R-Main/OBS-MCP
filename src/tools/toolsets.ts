@@ -133,6 +133,7 @@ const GROUP_OVERRIDES: Record<string, ToolGroup> = {
   "obs-get-transition-kind-list": "transitions",
   "obs-get-transition-cursor": "transitions",
   "obs-set-tbar-position": "transitions",
+  "obs-capture-window": "inputs",
 };
 
 /**

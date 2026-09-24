@@ -108,6 +108,61 @@
     }
   },
   {
+    "name": "obs-capture-window",
+    "title": "Capture Window (macOS)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneName": {
+          "type": "string",
+          "description": "Scene to add the input to if it does not exist"
+        },
+        "inputName": {
+          "type": "string",
+          "description": "Name of the screen_capture input to create or reuse"
+        },
+        "window": {
+          "description": "Case-insensitive part of \"[App] Title\", or the window ID",
+          "type": "string"
+        },
+        "application": {
+          "description": "Case-insensitive part of the app name, or its bundle ID",
+          "type": "string"
+        },
+        "displayUuid": {
+          "description": "Display UUID; defaults to the first display OBS lists",
+          "type": "string"
+        },
+        "silent": {
+          "default": true,
+          "description": "Mute the capture and remove it from every audio track",
+          "type": "boolean"
+        },
+        "fit": {
+          "default": true,
+          "description": "Scale the capture to fit the canvas, centered",
+          "type": "boolean"
+        },
+        "includeScreenshot": {
+          "default": false,
+          "description": "Also return a screenshot of the capture",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sceneName",
+        "inputName"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-create-input",
     "title": "Create Input",
     "inputSchema": {
@@ -139,6 +194,10 @@
         },
         "sceneItemEnabled": {
           "description": "Whether to set the created scene item to enabled or disabled",
+          "type": "boolean"
+        },
+        "includeScreenshot": {
+          "description": "Also return a screenshot of the input after creating it",
           "type": "boolean"
         }
       },
@@ -4404,6 +4463,60 @@
     }
   },
   {
+    "name": "obs-record-clip",
+    "title": "Record Clip",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "durationSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 50,
+          "description": "Clip length in seconds"
+        },
+        "chapters": {
+          "default": [],
+          "description": "Chapter markers; need the Hybrid MP4 or Hybrid MOV recording format",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "atSeconds": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Seconds after the start"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Chapter name"
+              }
+            },
+            "required": [
+              "atSeconds",
+              "name"
+            ]
+          }
+        },
+        "expectSilent": {
+          "default": false,
+          "description": "Refuse to record with audible inputs, and check the file's audio is silent",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "durationSeconds"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-remove-input",
     "title": "Remove Input",
     "inputSchema": {
@@ -5326,6 +5439,10 @@
         },
         "overlay": {
           "description": "True to apply settings on top of existing ones, False to reset to defaults first",
+          "type": "boolean"
+        },
+        "includeScreenshot": {
+          "description": "Also return a screenshot of the input after the change",
           "type": "boolean"
         }
       },
