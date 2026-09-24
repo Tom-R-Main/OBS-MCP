@@ -96,6 +96,30 @@ describe("live action confirmation", () => {
     expect((await call("obs-stop-record", { confirm: true })).isError).toBeFalsy();
   });
 
+  it("asks before generic tools send a live request, and only then", async () => {
+    const questions: string[] = [];
+    const { call } = await start({
+      confirmLive: true,
+      onElicit: (message) => {
+        questions.push(message);
+        return { action: "decline" };
+      },
+    });
+    harness!.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: true }));
+
+    const quiet = await call("obs-batch", { requests: [{ requestType: "GetRecordStatus" }] });
+    const batch = await call("obs-batch", {
+      requests: [{ requestType: "GetRecordStatus" }, { requestType: "StopRecord" }],
+    });
+    const single = await call("obs-call-request", { requestType: "StopStream" });
+
+    expect(quiet.isError).toBeFalsy();
+    expect(questions).toEqual(["Stop the recording?", "Stop the live stream?"]);
+    expect(resultText(batch)).toContain("Cancelled");
+    expect(sent("StopRecord")).toBe(false);
+    expect(sent("StopStream")).toBe(false);
+  });
+
   it("confirms through the 2026-07-28 input_required round trip", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fakeObs = await FakeOBSServer.start();

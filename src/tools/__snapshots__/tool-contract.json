@@ -1,5 +1,65 @@
 [
   {
+    "name": "obs-batch",
+    "title": "Run OBS Requests in a Batch",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requestType": {
+                "type": "string",
+                "description": "Exact OBS WebSocket request type"
+              },
+              "requestData": {
+                "description": "Request fields defined by obs-describe-request",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "requestType"
+            ]
+          },
+          "description": "Requests in the order OBS should run them"
+        },
+        "executionType": {
+          "default": "serial-realtime",
+          "description": "How OBS runs the requests",
+          "type": "string",
+          "enum": [
+            "serial-realtime",
+            "serial-frame",
+            "parallel"
+          ]
+        },
+        "haltOnFailure": {
+          "default": false,
+          "description": "Skip the remaining requests after one fails",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requests"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
     "name": "obs-broadcast-custom-event",
     "title": "Broadcast Custom Event",
     "inputSchema": {

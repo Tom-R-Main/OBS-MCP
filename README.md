@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 158 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 159 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -106,7 +106,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 158 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 159 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -118,7 +118,7 @@ The 158 tools are organized around the OBS protocol rather than a smaller opinio
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed
 - `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
-- protocol description and the guarded generic request fallback
+- protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message: in order, one per rendered frame (so a change to two sources lands on the same frame), or all at once, with `Sleep` between them
 
 Tools that send a single OBS request declare an `outputSchema` generated from the pinned protocol, so clients receive typed `structuredContent` with the documented response fields. Fields are optional and nullable because OBS omits newer fields in older versions and returns undocumented nulls.
 
@@ -143,7 +143,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `outputs` | virtual camera, replay buffer, and generic outputs |
 | `config` | profiles, scene collections, video settings, persistent data |
 | `ui` | studio mode, dialogs, projectors |
-| `protocol` | `obs-describe-request` and the generic `obs-call-request` |
+| `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
 `core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (81 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 38-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
@@ -164,7 +164,7 @@ Two prompts appear as slash commands in clients that show MCP prompts: `record-d
 
 ### Confirming live actions
 
-With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, and `obs-toggle-record` ask before they run. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
+With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, and `obs-toggle-record` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
 
 ## Where it fits
 
@@ -184,7 +184,7 @@ Pay particular attention to approvals for tools that:
 - invoke vendor requests
 - save files or use the generic `obs-call-request` fallback
 
-`obs-call-request` accepts only request types in the bundled OBS protocol, but its payload is intentionally generic. It is always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
+`obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StopStream`, `ToggleStream`, `StopRecord`, or `ToggleRecord`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
 
 ## Troubleshooting
 
@@ -215,7 +215,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 158 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 159 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 
@@ -225,7 +225,7 @@ The live suite is separate from `npm run check` and CI. By default it is skipped
 OBS_MCP_LIVE_TEST=1 npm run test:obs-live
 ```
 
-The read-only lane checks the OBS version, scenes, active scene collection, streaming state, and recording state through the compiled MCP stdio server.
+The read-only lane checks the OBS version, scenes, active scene collection, streaming state, recording state, resources, and read-only request batches through the compiled MCP stdio server. On the machine running OBS, add `OBS_MCP_READ_OBS_CONFIG=1` instead of exporting the password.
 
 There is also a narrowly bounded mutation test. Use a disposable scene collection, select it in OBS first, and make sure streaming and recording are stopped. Then run:
 

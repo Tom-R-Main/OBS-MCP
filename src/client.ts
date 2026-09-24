@@ -38,6 +38,34 @@ export enum EventSubscription {
   All = (1 << 12) - 1,
 }
 
+/** How OBS runs the requests in a batch (RequestBatchExecutionType). */
+export enum RequestBatchExecutionType {
+  /** One after another, as fast as possible. */
+  SerialRealtime = 0,
+  /** One per rendered video frame; Sleep counts frames. */
+  SerialFrame = 1,
+  /** All at once; Sleep is not allowed. */
+  Parallel = 2,
+}
+
+export type BatchRequest = { requestType: string; requestData?: unknown };
+
+export type BatchResult = {
+  requestType: string;
+  ok: boolean;
+  code: number;
+  comment?: string;
+  responseData: unknown;
+};
+
+export type BatchOptions = {
+  executionType?: RequestBatchExecutionType;
+  /** Stop at the first failed request; later requests get no result. */
+  haltOnFailure?: boolean;
+  /** Defaults to 10 s plus the batch's own Sleep time. */
+  timeout?: number;
+};
+
 type JsonObject = Record<string, unknown>;
 type BaseMessage = { op: number; d: JsonObject };
 
@@ -138,6 +166,40 @@ function parseRequestResponse(data: JsonObject): RequestResponseData | null {
     },
     ...(data.responseData === undefined ? {} : { responseData: data.responseData }),
   };
+}
+
+function parseBatchResponse(data: JsonObject): { requestId: string; results: BatchResult[] } | null {
+  if (typeof data.requestId !== "string" || !Array.isArray(data.results)) return null;
+  const results: BatchResult[] = [];
+  for (const result of data.results) {
+    if (
+      !isObject(result)
+      || typeof result.requestType !== "string"
+      || !isObject(result.requestStatus)
+      || typeof result.requestStatus.result !== "boolean"
+      || typeof result.requestStatus.code !== "number"
+    ) return null;
+    const { comment } = result.requestStatus;
+    results.push({
+      requestType: result.requestType,
+      ok: result.requestStatus.result,
+      code: result.requestStatus.code,
+      ...(typeof comment === "string" ? { comment } : {}),
+      responseData: result.responseData ?? {},
+    });
+  }
+  return { requestId: data.requestId, results };
+}
+
+/** Wall-clock time a batch spends in Sleep requests, assuming 30 fps for frames. */
+function batchSleepMillis(requests: readonly BatchRequest[]): number {
+  let total = 0;
+  for (const { requestType, requestData } of requests) {
+    if (requestType !== "Sleep" || !isObject(requestData)) continue;
+    if (typeof requestData.sleepMillis === "number") total += requestData.sleepMillis;
+    if (typeof requestData.sleepFrames === "number") total += (requestData.sleepFrames / 30) * 1000;
+  }
+  return total;
 }
 
 function parseEvent(data: JsonObject): EventData | null {
@@ -242,6 +304,47 @@ export class OBSWebSocketClient extends EventEmitter {
     requestData?: unknown,
     timeout = 10_000,
   ): Promise<T> {
+    const socket = await this.readySocket();
+    this.assertAdvertised(requestType);
+    return this.sendTracked<T>(socket, requestType, timeout, (requestId) => ({
+      op: OpCode.Request,
+      d: {
+        requestType,
+        requestId,
+        ...(requestData === undefined ? {} : { requestData }),
+      },
+    }));
+  }
+
+  /**
+   * Sends several requests in one message. OBS answers each one; a failed
+   * request does not reject the batch, so check each result's `ok`.
+   */
+  public async sendBatch(requests: readonly BatchRequest[], options: BatchOptions = {}): Promise<BatchResult[]> {
+    if (requests.length === 0) return [];
+    const {
+      executionType = RequestBatchExecutionType.SerialRealtime,
+      haltOnFailure = false,
+      timeout = 10_000 + batchSleepMillis(requests),
+    } = options;
+    const socket = await this.readySocket();
+    for (const { requestType } of requests) this.assertAdvertised(requestType);
+
+    return this.sendTracked<BatchResult[]>(socket, "RequestBatch", timeout, (requestId) => ({
+      op: OpCode.RequestBatch,
+      d: {
+        requestId,
+        haltOnFailure,
+        executionType,
+        requests: requests.map(({ requestType, requestData }) => ({
+          requestType,
+          ...(requestData === undefined ? {} : { requestData }),
+        })),
+      },
+    }));
+  }
+
+  private async readySocket(): Promise<WebSocket> {
     if (!this.isConnected()) {
       try {
         await this.connect();
@@ -257,10 +360,21 @@ export class OBSWebSocketClient extends EventEmitter {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error("OBS WebSocket connection was not available after connecting");
     }
+    return socket;
+  }
+
+  private assertAdvertised(requestType: string): void {
     if (this.availableRequests && !this.availableRequests.has(requestType)) {
       throw new Error(`OBS WebSocket does not advertise support for request '${requestType}'`);
     }
+  }
 
+  private sendTracked<T>(
+    socket: WebSocket,
+    requestType: string,
+    timeout: number,
+    buildMessage: (requestId: string) => BaseMessage,
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const requestId = crypto.randomUUID();
       const timeoutId = setTimeout(() => {
@@ -279,17 +393,8 @@ export class OBSWebSocketClient extends EventEmitter {
       };
       this.pendingRequests.set(requestId, pending);
 
-      const message = {
-        op: OpCode.Request,
-        d: {
-          requestType,
-          requestId,
-          ...(requestData === undefined ? {} : { requestData }),
-        },
-      };
-
       try {
-        socket.send(JSON.stringify(message), (error) => {
+        socket.send(JSON.stringify(buildMessage(requestId)), (error) => {
           if (error) this.rejectPending(requestId, asError(error));
         });
       } catch (error) {
@@ -434,6 +539,12 @@ export class OBSWebSocketClient extends EventEmitter {
         else logger.error("Ignoring malformed OBS request response");
         break;
       }
+      case OpCode.RequestBatchResponse: {
+        const batch = parseBatchResponse(message.d);
+        if (batch) this.handleBatchResponse(socket, batch);
+        else logger.error("Ignoring malformed OBS request batch response");
+        break;
+      }
       case OpCode.Event: {
         const event = parseEvent(message.d);
         if (event) this.handleEvent(event);
@@ -460,6 +571,14 @@ export class OBSWebSocketClient extends EventEmitter {
     pending.reject(new Error(
       `OBS request ${response.requestType} failed with code ${response.requestStatus.code}${comment}`,
     ));
+  }
+
+  private handleBatchResponse(socket: WebSocket, batch: { requestId: string; results: BatchResult[] }): void {
+    const pending = this.pendingRequests.get(batch.requestId);
+    if (!pending || pending.socket !== socket) return;
+    this.pendingRequests.delete(batch.requestId);
+    clearTimeout(pending.timeout);
+    pending.resolve(batch.results);
   }
 
   private handleEvent(event: EventData): void {

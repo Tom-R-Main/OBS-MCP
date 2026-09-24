@@ -15,7 +15,12 @@ export const OBS_OP = {
   Event: 5,
   Request: 6,
   RequestResponse: 7,
+  RequestBatch: 8,
+  RequestBatchResponse: 9,
 } as const;
+
+/** Milliseconds per frame when a fake batch sleeps for frames. */
+const FAKE_FRAME_MS = 1000 / 60;
 
 type JsonObject = Record<string, unknown>;
 
@@ -136,7 +141,7 @@ export class FakeOBSServer {
     this.obsStudioVersion = options.obsStudioVersion ?? "32.2.2";
     this.obsWebSocketVersion = options.obsWebSocketVersion ?? "5.7.0";
     this.platform = options.platform ?? "macos";
-    this.availableRequests = Array.from(new Set(["GetVersion", ...(options.availableRequests ?? [])]));
+    this.availableRequests = Array.from(new Set(["GetVersion", "Sleep", ...(options.availableRequests ?? [])]));
 
     const address = server.address() as AddressInfo;
     this.url = `ws://127.0.0.1:${address.port}`;
@@ -343,6 +348,11 @@ export class FakeOBSServer {
       return;
     }
 
+    if (frame.op === OBS_OP.RequestBatch) {
+      void this.handleBatch(record);
+      return;
+    }
+
     if (!this.isRequest(record)) return;
     const action = this.scripts.get(record.frame.d.requestType)?.shift();
     if (action) {
@@ -367,6 +377,84 @@ export class FakeOBSServer {
         code: 100,
       }, this.versionResponse());
     }
+  }
+
+  /**
+   * Answers a request batch from the same scripts and responders as single
+   * requests. Each request in it is recorded in history() as its own Request
+   * frame carrying batchRequestId, so request assertions see batched requests.
+   */
+  private async handleBatch({ frame, socket, connectionId }: InternalRecordedFrame): Promise<void> {
+    const batchRequestId = String(frame.d.requestId);
+    const executionType = typeof frame.d.executionType === "number" ? frame.d.executionType : 0;
+    const requests = Array.isArray(frame.d.requests) ? frame.d.requests.filter(isObject) : [];
+    const results: JsonObject[] = [];
+
+    for (const [index, request] of requests.entries()) {
+      const requestType = String(request.requestType);
+      const requestData = isObject(request.requestData) ? request.requestData : {};
+      const subRecord: InternalRecordedFrame = {
+        cursor: this.nextCursor++,
+        connectionId,
+        socket,
+        frame: {
+          op: OBS_OP.Request,
+          d: { requestType, requestId: `${batchRequestId}#${index}`, requestData, batchRequestId },
+        },
+      };
+      this.frames.push(subRecord);
+      this.events.emit("frame", subRecord);
+
+      const answer = await this.answerBatchedRequest(requestType, requestData, executionType);
+      if (answer === "disconnect") {
+        socket.close(1011, "scripted disconnect");
+        return;
+      }
+      results.push({ requestType, requestStatus: answer.status, responseData: answer.data });
+      if (!answer.status.result && frame.d.haltOnFailure === true) break;
+    }
+
+    if (socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify({ op: OBS_OP.RequestBatchResponse, d: { requestId: batchRequestId, results } }));
+  }
+
+  private async answerBatchedRequest(
+    requestType: string,
+    requestData: JsonObject,
+    executionType: number,
+  ): Promise<{ status: ResponseStatus; data: JsonObject } | "disconnect"> {
+    if (requestType === "Sleep") {
+      if (executionType === 2) {
+        return { status: { result: false, code: 206, comment: "Sleep is not available in parallel batches" }, data: {} };
+      }
+      const millis = typeof requestData.sleepMillis === "number"
+        ? requestData.sleepMillis
+        : Number(requestData.sleepFrames ?? 0) * FAKE_FRAME_MS;
+      await new Promise((resolve) => setTimeout(resolve, millis));
+      return { status: { result: true, code: 100 }, data: {} };
+    }
+
+    const action = this.scripts.get(requestType)?.shift();
+    if (action?.kind === "disconnect") return "disconnect";
+    if (action) return { status: action.status, data: action.data };
+
+    const responder = this.responders.get(requestType);
+    if (responder) {
+      try {
+        return { status: { result: true, code: 100 }, data: responder(requestData) };
+      } catch (error) {
+        return {
+          status: error instanceof FakeOBSRequestError
+            ? { result: false, code: error.code, comment: error.message }
+            : { result: false, code: 500, comment: String(error) },
+          data: {},
+        };
+      }
+    }
+    if (requestType === "GetVersion" && this.autoGetVersion) {
+      return { status: { result: true, code: 100 }, data: this.versionResponse() };
+    }
+    return { status: { result: false, code: 204, comment: `Fake OBS has no answer for ${requestType}` }, data: {} };
   }
 
   private queueAction(requestType: string, action: ScriptedAction): void {

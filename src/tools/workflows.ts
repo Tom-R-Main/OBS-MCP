@@ -7,7 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { OBSWebSocketClient } from "../client.js";
+import { RequestBatchExecutionType, type OBSWebSocketClient } from "../client.js";
 import { appendInputScreenshot, inputStateResult, readInputState } from "./after-change.js";
 import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
 import { runPreflight } from "./preflight.js";
@@ -233,17 +233,25 @@ async function captureWindow(
   const notes: string[] = [`Capturing ${property} ${match.itemName}`];
   if (args.silent) {
     // screen_capture carries the application's audio on macOS 13+.
-    await client.sendRequest("SetInputMute", { inputName: args.inputName, inputMuted: true });
-    await client.sendRequest("SetInputAudioTracks", { inputName: args.inputName, inputAudioTracks: ALL_TRACKS_OFF });
+    const silenced = await client.sendBatch([
+      { requestType: "SetInputMute", requestData: { inputName: args.inputName, inputMuted: true } },
+      { requestType: "SetInputAudioTracks", requestData: { inputName: args.inputName, inputAudioTracks: ALL_TRACKS_OFF } },
+    ], { haltOnFailure: true });
+    const failure = silenced.find(({ ok }) => !ok) ?? (silenced.length < 2 ? silenced[0] : undefined);
+    if (failure) throw new Error(`${failure.requestType} failed with code ${failure.code}${failure.comment ? `: ${failure.comment}` : ""}`);
     notes.push("Muted the capture and removed it from every audio track");
   }
 
   if (args.fit) {
-    const video = await client.sendRequest("GetVideoSettings") as JsonObject;
-    const { sceneItemId } = await client.sendRequest("GetSceneItemId", {
-      sceneName: args.sceneName,
-      sourceName: args.inputName,
-    }) as { sceneItemId: number };
+    const [videoResult, itemResult] = await client.sendBatch([
+      { requestType: "GetVideoSettings" },
+      { requestType: "GetSceneItemId", requestData: { sceneName: args.sceneName, sourceName: args.inputName } },
+    ], { executionType: RequestBatchExecutionType.Parallel });
+    for (const result of [videoResult, itemResult]) {
+      if (!result?.ok) throw new Error(`${result?.requestType ?? "Request"} failed${result?.comment ? `: ${result.comment}` : ""}`);
+    }
+    const video = videoResult!.responseData as JsonObject;
+    const { sceneItemId } = itemResult!.responseData as { sceneItemId: number };
     await client.sendRequest("SetSceneItemTransform", {
       sceneName: args.sceneName,
       sceneItemId,

@@ -21,6 +21,30 @@ export const LIVE_ACTIONS: Readonly<Record<string, string>> = {
   "obs-toggle-record": "Toggle recording? If it is recording, this ends the take.",
 };
 
+/** OBS requests that end a live broadcast or a take, with the question to ask. */
+const LIVE_REQUESTS: Readonly<Record<string, string>> = {
+  StopStream: "Stop the live stream?",
+  ToggleStream: "Toggle the live stream? If it is live, this ends the broadcast.",
+  StopRecord: "Stop the recording?",
+  ToggleRecord: "Toggle recording? If it is recording, this ends the take.",
+};
+
+function questionForRequests(requestTypes: unknown[]): string | undefined {
+  const questions = [...new Set(requestTypes.map((type) => LIVE_REQUESTS[String(type)]).filter(Boolean))];
+  return questions.length > 0 ? questions.join(" ") : undefined;
+}
+
+/**
+ * Generic tools that are live actions only for some arguments: the question
+ * to ask, or undefined when these arguments need no confirmation.
+ */
+export const CONDITIONAL_LIVE_ACTIONS: Readonly<Record<string, (args: Record<string, unknown>) => string | undefined>> = {
+  "obs-call-request": ({ requestType }) => questionForRequests([requestType]),
+  "obs-batch": ({ requests }) => questionForRequests(
+    Array.isArray(requests) ? requests.map((request) => (request as { requestType?: unknown })?.requestType) : [],
+  ),
+};
+
 const CONFIRM_KEY = "confirm";
 const CONFIRM_SCHEMA = z.object({ confirm: z.boolean().describe("Confirm the action") });
 
@@ -91,7 +115,8 @@ function confirmation(
 }
 
 /**
- * Wraps tool registration so the tools in LIVE_ACTIONS ask before running.
+ * Wraps tool registration so the tools in LIVE_ACTIONS, and the generic
+ * request tools when they carry a live request, ask before running.
  * Adds an optional `confirm` argument to their input schema; the original
  * handler never sees it.
  */
@@ -101,8 +126,9 @@ export function withLiveConfirmation(server: McpServer): McpServer {
       if (property === "registerTool") {
         const registerTool = Reflect.get(target, property, target) as (...args: unknown[]) => unknown;
         return (name: string, config: { inputSchema?: ZodObject }, callback: (...args: unknown[]) => unknown) => {
-          const question = LIVE_ACTIONS[name];
-          if (!question) return Reflect.apply(registerTool, target, [name, config, callback]);
+          const fixedQuestion = LIVE_ACTIONS[name];
+          const questionFor = CONDITIONAL_LIVE_ACTIONS[name];
+          if (!fixedQuestion && !questionFor) return Reflect.apply(registerTool, target, [name, config, callback]);
 
           const hadSchema = config.inputSchema !== undefined;
           const inputSchema = (config.inputSchema ?? z.object({})).extend({
@@ -111,6 +137,8 @@ export function withLiveConfirmation(server: McpServer): McpServer {
           });
           const confirmedCallback = async (args: Record<string, unknown>, ctx: RequestContext) => {
             const { confirm, ...rest } = args;
+            const question = fixedQuestion ?? questionFor?.(rest);
+            if (!question) return hadSchema ? callback(rest, ctx) : callback(ctx);
             const decision = confirmation(target, question, confirm as boolean | undefined, ctx);
             if (decision !== "proceed") return decision;
             return hadSchema ? callback(rest, ctx) : callback(ctx);
