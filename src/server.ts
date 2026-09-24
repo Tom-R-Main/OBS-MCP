@@ -10,11 +10,12 @@ import * as tools from "./tools/index.js";
 import { PACKAGE_VERSION } from "./version.js";
 import { ALL_TOOLS, assertKnownTools, parseToolFilter, type ToolFilter } from "./tools/toolsets.js";
 import { logger } from "./logger.js";
+import { resolveObsPassword } from "./obs-config.js";
 
 // Create the OBS WebSocket client
 const obsClient = new OBSWebSocketClient(
   process.env.OBS_WEBSOCKET_URL || "ws://localhost:4455",
-  process.env.OBS_WEBSOCKET_PASSWORD || null
+  resolveObsPassword(),
 );
 
 export let serverConnected = false;
@@ -72,7 +73,7 @@ async function attemptOBSConnection(): Promise<void> {
 
       if (reconnectAttempts === 1) {
         logger.error("The MCP server will remain available while OBS is offline.");
-        logger.error("Verify OBS is running and OBS_WEBSOCKET_URL/OBS_WEBSOCKET_PASSWORD are correct.");
+        logger.error("Verify OBS is running and OBS_WEBSOCKET_URL/OBS_WEBSOCKET_PASSWORD are correct (or set OBS_MCP_READ_OBS_CONFIG=true to use the password OBS saved).");
       }
 
       scheduleReconnect();

@@ -50,7 +50,8 @@
         "OBS_WEBSOCKET_PASSWORD": "${user_config.obs_websocket_password}",
         "OBS_MCP_TOOLSETS": "${user_config.obs_mcp_toolsets}",
         "OBS_MCP_READ_ONLY": "${user_config.obs_mcp_read_only}",
-        "OBS_MCP_CONFIRM_LIVE": "${user_config.obs_mcp_confirm_live}"
+        "OBS_MCP_CONFIRM_LIVE": "${user_config.obs_mcp_confirm_live}",
+        "OBS_MCP_READ_OBS_CONFIG": "${user_config.obs_mcp_read_obs_config}"
       }
     }
   },
@@ -87,6 +88,13 @@
       "type": "boolean",
       "title": "Confirm live actions",
       "description": "Ask before stopping or toggling a stream or recording.",
+      "required": false,
+      "default": false
+    },
+    "obs_mcp_read_obs_config": {
+      "type": "boolean",
+      "title": "Use the password saved in OBS",
+      "description": "When no password is entered above, read the one OBS saved on this computer.",
       "required": false,
       "default": false
     }

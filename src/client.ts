@@ -480,7 +480,7 @@ export class OBSWebSocketClient extends EventEmitter {
     if (hello.authentication) {
       if (!this.password) {
         return Promise.reject(new Error(
-          "Password required for authentication but not provided. Set OBS_WEBSOCKET_PASSWORD environment variable.",
+          "Password required for authentication but not provided. Set OBS_WEBSOCKET_PASSWORD, or OBS_MCP_READ_OBS_CONFIG=true to use the password saved in OBS.",
         ));
       }
       authentication = this.generateAuthenticationString(

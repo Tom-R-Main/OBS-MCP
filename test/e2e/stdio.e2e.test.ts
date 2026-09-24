@@ -5,7 +5,10 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter, once } from "node:events";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/client";
 import {
@@ -15,6 +18,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
 import { TOOL_COUNT } from "../support/tool-count.js";
+import { obsWebSocketConfigPaths } from "../../src/obs-config.js";
 
 type JsonObject = Record<string, unknown>;
 type JsonRpcMessage = JsonObject & { id?: string | number };
@@ -484,6 +488,30 @@ describe("compiled stdio MCP boundary", () => {
     expect(names).not.toContain("obs-start-record");
     expect(names).not.toContain("obs-get-stream-status");
     await vi.waitFor(() => expect(stderr.join("")).toMatch(/Registering \d+ of \d+ tools \(read-only\)/));
+  });
+
+  it("authenticates with the password OBS saved when asked to", async () => {
+    const home = mkdtempSync(join(tmpdir(), "obs-mcp-home-"));
+    try {
+      const environment = { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, ".config"), APPDATA: join(home, "AppData") };
+      const [configPath] = obsWebSocketConfigPaths(environment, process.platform, home);
+      mkdirSync(dirname(configPath!), { recursive: true });
+      writeFileSync(configPath!, JSON.stringify({ auth_required: true, server_password: testPassword }));
+      const fake = await FakeOBSServer.start({ password: testPassword });
+      fakeServers.push(fake);
+
+      const { client, stderr } = await connectClient(fake, "modern", {
+        ...environment,
+        OBS_WEBSOCKET_PASSWORD: "",
+        OBS_MCP_READ_OBS_CONFIG: "true",
+      });
+
+      await waitForObsConnected(client);
+      expect(stderr.join("")).toContain("Using the OBS WebSocket password from");
+      expect(stderr.join("")).not.toContain("[REDACTED]");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("refuses to start with an unknown tool group or tool name", async () => {
