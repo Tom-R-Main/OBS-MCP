@@ -79,6 +79,7 @@ export function servePreflightState(fakeObs: FakeOBSServer, getState: () => Fake
   fakeObs.respondWith("GetSceneItemList", () => ({
     sceneItems: getState().sceneItems.map(({ sourceWidth, sourceHeight, ...item }) => ({
       ...item,
+      inputKind: getState().inputs.find(({ inputName }) => inputName === item.sourceName)?.inputKind,
       sceneItemTransform: { sourceWidth, sourceHeight },
     })),
   }));

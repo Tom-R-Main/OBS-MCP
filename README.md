@@ -103,6 +103,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before stopping or toggling a stream or recording (see [Confirming live actions](#confirming-live-actions)) |
 | `OBS_MCP_HTTP_PORT` | No | none (stdio) | Serve MCP over Streamable HTTP at `http://127.0.0.1:<port>/mcp` instead of stdio, so several agents share one server (see [Sharing one server](#sharing-one-server)); `0` picks a free port |
 | `OBS_MCP_HTTP_TOKEN` | No | none | With `OBS_MCP_HTTP_PORT`, require `Authorization: Bearer <token>` on every request |
+| `OBS_MCP_STATE_DIR` | No | `~/Library/Application Support/obs-mcp` (macOS), `%LOCALAPPDATA%\obs-mcp` (Windows), `$XDG_STATE_HOME/obs-mcp` (Linux) | Where snapshots are saved |
 | `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
@@ -249,7 +250,7 @@ Without `apply: true` it returns the plan. When applying, it creates what is mis
 
 `obs-snapshot` saves the settings, mute, volume, and audio tracks of inputs, and the transform, visibility, lock, and order of scene items: by default the program scene and the inputs in it. `obs-restore` compares OBS with a snapshot and sends only what differs, in one request batch; `dryRun: true` lists the changes first. It cannot recreate a removed input or item, and leaves items added since in place; it reports both. `obs-capture-window` takes a snapshot automatically before it changes an existing capture.
 
-Snapshots are kept in the server's memory, the last 10, and are lost when it restarts. OBS's own scene collection file is not a substitute: OBS rewrites it while running.
+Snapshots are saved in the server's state directory (the last 20, readable only by you), so `obs-restore` works after a restart and from another agent's session. Each server lists only the snapshots of the OBS instance it connects to. They contain input settings, such as file paths and browser source URLs. OBS's own scene collection file is not a substitute: OBS rewrites it while running.
 
 ### Sharing one server
 

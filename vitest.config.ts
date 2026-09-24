@@ -4,5 +4,6 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "test/unit/**/*.test.ts"],
     exclude: ["test/e2e/**", "test/package/**", "test/live/**"],
+    setupFiles: ["test/support/isolated-state.ts"],
   },
 });

@@ -4,9 +4,13 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import crypto from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { BatchRequest, OBSWebSocketClient } from "../client.js";
+import { logger } from "../logger.js";
+import { stateDirectory } from "../state-dir.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -33,6 +37,8 @@ export type ItemState = {
 
 export type Snapshot = {
   id: string;
+  /** The OBS WebSocket URL the snapshot was taken from. */
+  obsUrl?: string;
   label?: string;
   takenAt: string;
   inputs: InputState[];
@@ -42,7 +48,9 @@ export type Snapshot = {
 /** A change obs-restore would make, and the request that makes it. */
 export type RestoreChange = { target: string; field: string; request: BatchRequest };
 
-const MAX_SNAPSHOTS = 10;
+/** Kept on disk across every OBS instance, newest last. */
+const MAX_SNAPSHOTS = 20;
+const SNAPSHOT_FILE = "snapshots.json";
 
 /** The transform fields SetSceneItemTransform accepts; the rest are computed by OBS. */
 const WRITABLE_TRANSFORM = [
@@ -78,15 +86,40 @@ function pick(object: JsonObject, keys: string[]): JsonObject {
   return Object.fromEntries(keys.filter((key) => key in object).map((key) => [key, object[key]]));
 }
 
-const snapshotsByClient = new WeakMap<OBSWebSocketClient, Snapshot[]>();
+/**
+ * Snapshots are saved in the state directory so obs-restore works after the
+ * server restarts or from another agent's session. The file holds input
+ * settings, so it is readable only by its owner.
+ */
+function snapshotFile(): string {
+  return join(stateDirectory(), SNAPSHOT_FILE);
+}
 
-function snapshots(client: OBSWebSocketClient): Snapshot[] {
-  let list = snapshotsByClient.get(client);
-  if (!list) {
-    list = [];
-    snapshotsByClient.set(client, list);
+function loadAll(): Snapshot[] {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(snapshotFile(), "utf8"));
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is Snapshot => isObject(entry) && typeof entry.id === "string") : [];
+  } catch {
+    return [];
   }
-  return list;
+}
+
+function saveAll(list: Snapshot[]): void {
+  const path = snapshotFile();
+  try {
+    mkdirSync(stateDirectory(), { recursive: true, mode: 0o700 });
+    const temporary = `${path}.${process.pid}.tmp`;
+    writeFileSync(temporary, `${JSON.stringify(list.slice(-MAX_SNAPSHOTS), null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporary, path);
+  } catch (error) {
+    logger.error(`Could not save snapshots to ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/** Snapshots of the OBS instance this client connects to, oldest first. */
+function snapshots(client: OBSWebSocketClient): Snapshot[] {
+  const url = client.getConnectionStatus().url;
+  return loadAll().filter(({ obsUrl }) => obsUrl === undefined || obsUrl === url);
 }
 
 async function batch(client: OBSWebSocketClient, requests: BatchRequest[]) {
@@ -169,14 +202,13 @@ export async function takeSnapshot(
   }
   const snapshot: Snapshot = {
     id: crypto.randomUUID().slice(0, 8),
+    obsUrl: client.getConnectionStatus().url,
     ...(options.label ? { label: options.label } : {}),
     takenAt: new Date().toISOString(),
     inputs: await readInputs(client, inputNames),
     items,
   };
-  const list = snapshots(client);
-  list.push(snapshot);
-  if (list.length > MAX_SNAPSHOTS) list.shift();
+  saveAll([...loadAll(), snapshot]);
   return snapshot;
 }
 
@@ -272,8 +304,8 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       title: "Snapshot Scene State",
       description: "Save the current settings, mute, volume, and audio tracks of inputs, and the transform, "
         + "visibility, lock, and order of scene items, so obs-restore can undo later changes. Defaults to the "
-        + "program scene and the inputs in it. Snapshots live in this server's memory (the last 10); call with "
-        + "list: true to see them",
+        + "program scene and the inputs in it. Snapshots are saved on disk (the last 20) and survive restarts; call "
+        + "with list: true to see them",
       inputSchema: z.object({
         scenes: z.array(z.string()).optional().describe("Scenes whose items to save"),
         inputs: z.array(z.string()).optional().describe("Inputs to save; defaults to the inputs in the saved scenes"),

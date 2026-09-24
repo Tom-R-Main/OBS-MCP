@@ -3,6 +3,8 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OBS_OP } from "../../test/support/fake-obs-server.js";
 import { demoSceneState, serveSceneState, type FakeSceneInput, type FakeSceneItem } from "../../test/support/fake-obs-scene.js";
@@ -100,6 +102,38 @@ describe("obs-snapshot and obs-restore", () => {
     expect(resultText(restored)).toContain("input Chrome: mute");
     expect(inputs.Chrome!.muted).toBe(true);
     expect(resultText(await harness.call("obs-restore", { snapshotId: "nope" }))).toContain("No snapshot nope");
+  });
+
+  it("keeps snapshots on disk, so a new server can restore them", async () => {
+    const taken = await harness.call("obs-snapshot", { label: "before restart" });
+    const snapshotId = (taken.structuredContent as { snapshotId: string }).snapshotId;
+    const port = Number(new URL(harness.fakeObs.url).port);
+    await harness.close();
+
+    // A new server process, reaching the same OBS at the same address.
+    const state = demoSceneState();
+    state.inputs.Chrome!.muted = false;
+    inputs = state.inputs;
+    items = state.scenes.Demo!;
+    harness = await startMcpHarness({ port });
+    serveSceneState(harness.fakeObs, state);
+
+    const restored = await harness.call("obs-restore", { snapshotId });
+    expect(resultText(restored)).toContain("input Chrome: mute");
+    expect(state.inputs.Chrome!.muted).toBe(true);
+    expect(statSync(join(process.env.OBS_MCP_STATE_DIR!, "snapshots.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("lists only snapshots of the OBS instance this server connects to", async () => {
+    await harness.call("obs-snapshot", { label: "this OBS" });
+    const file = join(process.env.OBS_MCP_STATE_DIR!, "snapshots.json");
+    const saved = JSON.parse(readFileSync(file, "utf8")) as { obsUrl: string }[];
+    writeFileSync(file, JSON.stringify([...saved, { ...saved[0], id: "elsewhere", obsUrl: "ws://studio-pc:4455" }]));
+
+    const list = await harness.call("obs-snapshot", { list: true });
+
+    expect(resultText(list)).toContain('"this OBS"');
+    expect(resultText(list)).not.toContain("elsewhere");
   });
 
   it("refuses to restore before any snapshot", async () => {

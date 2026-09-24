@@ -135,6 +135,17 @@ describe("obs-apply-scene", () => {
     expect(sent()).toEqual([]);
   });
 
+  it("does not warn about an audio file, which has no picture", async () => {
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo",
+      sources: [{ name: "Test Tone", kind: "ffmpeg_source", settings: { is_local_file: true, local_file: "/tmp/tone.wav" }, muted: true }],
+      apply: true,
+    });
+
+    expect(resultText(result)).not.toContain("0×0");
+    expect(result.structuredContent).toMatchObject({ blank: [] });
+  });
+
   it("warns when a source renders at 0×0", async () => {
     const result = await harness.call("obs-apply-scene", {
       sceneName: "Demo",

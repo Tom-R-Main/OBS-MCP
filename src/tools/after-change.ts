@@ -5,6 +5,7 @@
  */
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { OBSWebSocketClient } from "../client.js";
+import { rendersNoVideo } from "./audio-only.js";
 import { screenshotResult } from "./screenshot.js";
 
 type JsonObject = Record<string, unknown>;
@@ -76,25 +77,29 @@ export async function readInputState(
 ): Promise<InputState> {
   const warnings: string[] = [];
   let inputSettings: JsonObject = {};
+  let inputKind: unknown;
   try {
     const response: unknown = await client.sendRequest("GetInputSettings", { inputName });
     if (isObject(response) && isObject(response.inputSettings)) inputSettings = response.inputSettings;
+    if (isObject(response)) inputKind = response.inputKind;
   } catch (error) {
     warnings.push(`Could not read the input back: ${errorMessage(error)}`);
   }
 
+  // A microphone or an audio file is 0×0 by nature; there is nothing to wait for or warn about.
+  const noVideo = rendersNoVideo(inputKind, inputSettings);
   let appearances: InputAppearance[] = [];
   try {
     for (let attempt = 0; attempt < SIZE_SETTLE_ATTEMPTS; attempt += 1) {
       appearances = await programSceneAppearances(client, inputName);
-      if (!appearances.some(isBlank)) break;
+      if (noVideo || !appearances.some(isBlank)) break;
       if (attempt < SIZE_SETTLE_ATTEMPTS - 1) await new Promise((resolve) => setTimeout(resolve, settleDelayMs));
     }
   } catch (error) {
     warnings.push(`Could not read the program scene: ${errorMessage(error)}`);
   }
 
-  if (appearances.some(isBlank)) {
+  if (!noVideo && appearances.some(isBlank)) {
     warnings.push(
       `${inputName} renders at 0×0 in the program scene. A capture source usually needs a display, `
         + "window, or application selected (macOS screen_capture application capture also needs "

@@ -101,3 +101,14 @@ describe("resolveObsPassword", () => {
     expect(logged()).toContain("/a.json, /b.json");
   });
 });
+
+describe("stateDirectory", () => {
+  it("follows OBS_MCP_STATE_DIR, then each platform's app data folder", async () => {
+    const { stateDirectory } = await import("./state-dir.js");
+
+    expect(stateDirectory({ OBS_MCP_STATE_DIR: "/custom" }, "darwin", "/Users/me")).toBe("/custom");
+    expect(stateDirectory({}, "darwin", "/Users/me")).toBe("/Users/me/Library/Application Support/obs-mcp");
+    expect(stateDirectory({ XDG_STATE_HOME: "/state" }, "linux", "/home/me")).toBe("/state/obs-mcp");
+    expect(stateDirectory({}, "linux", "/home/me")).toBe("/home/me/.local/state/obs-mcp");
+  });
+});
