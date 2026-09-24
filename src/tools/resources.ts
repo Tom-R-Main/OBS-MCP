@@ -65,7 +65,16 @@ async function sceneNames(client: OBSWebSocketClient): Promise<string[]> {
  * notifications. Every resource duplicates a read-only tool, because few
  * clients read resources or honor subscriptions.
  */
-export function initialize(server: McpServer, client: OBSWebSocketClient): void {
+export type ResourceOptions = {
+  /**
+   * Forward OBS events to this server's session as resource notifications.
+   * Off for the per-request servers behind HTTP, which forward once through
+   * the handler's event bus instead (see forwardResourceEvents).
+   */
+  sessionNotifications?: boolean;
+};
+
+export function initialize(server: McpServer, client: OBSWebSocketClient, { sessionNotifications = true }: ResourceOptions = {}): void {
   server.registerResource(
     "status",
     STATUS_URI,
@@ -157,7 +166,41 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     },
   );
 
-  forwardEvents(server, client);
+  if (sessionNotifications) {
+    forwardEvents(server, client);
+  } else {
+    // Stateless per-request servers cannot remember a 2025-style subscription;
+    // modern clients receive updates on their subscriptions/listen stream.
+    server.server.registerCapabilities({ resources: { subscribe: true, listChanged: true } });
+    server.server.setRequestHandler("resources/subscribe", async () => ({}));
+    server.server.setRequestHandler("resources/unsubscribe", async () => ({}));
+  }
+}
+
+/**
+ * Calls onUpdated with each resource URI that OBS events change, and
+ * onListChanged when scenes come and go. Returns a function that stops.
+ */
+export function forwardResourceEvents(
+  client: OBSWebSocketClient,
+  onUpdated: (uri: string) => void,
+  onListChanged: () => void,
+): () => void {
+  const listeners: [string, (eventData: unknown) => void][] = [
+    ...STATUS_EVENTS.map((event): [string, () => void] => [event, () => onUpdated(STATUS_URI)]),
+    ...SCENE_LIST_EVENTS.map((event): [string, () => void] => [event, () => onUpdated(SCENES_URI)]),
+    ...SCENE_ITEM_EVENTS.map((event): [string, (eventData: unknown) => void] => [event, (eventData) => {
+      if (isObject(eventData) && typeof eventData.sceneName === "string") onUpdated(sceneItemsUri(eventData.sceneName));
+    }]),
+    ...["SceneCreated", "SceneRemoved", "SceneNameChanged"].map((event): [string, () => void] => [event, onListChanged]),
+  ];
+  for (const [event, listener] of listeners) client.on(event, listener);
+  const onTakeUpdate = () => onUpdated(TAKE_URI);
+  takeUpdates.on("update", onTakeUpdate);
+  return () => {
+    for (const [event, listener] of listeners) client.off(event, listener);
+    takeUpdates.off("update", onTakeUpdate);
+  };
 }
 
 /**
@@ -183,27 +226,12 @@ function forwardEvents(server: McpServer, client: OBSWebSocketClient): void {
     if (legacySession && !subscriptions.has(uri)) return;
     void lowLevel.sendResourceUpdated({ uri }).catch(() => undefined);
   };
-
-  const listeners: [string, (eventData: unknown) => void][] = [
-    ...STATUS_EVENTS.map((event): [string, () => void] => [event, () => notify(STATUS_URI)]),
-    ...SCENE_LIST_EVENTS.map((event): [string, () => void] => [event, () => notify(SCENES_URI)]),
-    ...SCENE_ITEM_EVENTS.map((event): [string, (eventData: unknown) => void] => [event, (eventData) => {
-      if (isObject(eventData) && typeof eventData.sceneName === "string") notify(sceneItemsUri(eventData.sceneName));
-    }]),
-    ...["SceneCreated", "SceneRemoved", "SceneNameChanged"].map((event): [string, () => void] => [
-      event,
-      () => void lowLevel.sendResourceListChanged().catch(() => undefined),
-    ]),
-  ];
-  for (const [event, listener] of listeners) client.on(event, listener);
-  const onTakeUpdate = () => notify(TAKE_URI);
-  takeUpdates.on("update", onTakeUpdate);
+  const stop = forwardResourceEvents(client, notify, () => void lowLevel.sendResourceListChanged().catch(() => undefined));
 
   // serveStdio builds a server per session; drop this session's listeners with it.
   const previousOnClose = lowLevel.onclose;
   lowLevel.onclose = () => {
-    for (const [event, listener] of listeners) client.off(event, listener);
-    takeUpdates.off("update", onTakeUpdate);
+    stop();
     previousOnClose?.();
   };
 }
