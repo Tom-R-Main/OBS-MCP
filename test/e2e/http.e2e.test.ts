@@ -106,6 +106,7 @@ describe("compiled HTTP server", () => {
     const port = new URL(url).port;
 
     expect(await rawPost(url, { host: "evil.example", authorization: "Bearer local-secret" })).toBe(403);
+    expect(await rawPost(url, { host: `127.0.0.1:${port}`, origin: "https://evil.example", authorization: "Bearer local-secret" })).toBe(403);
     expect(await rawPost(url, { host: `127.0.0.1:${port}` })).toBe(401);
     expect(await rawPost(url, { host: `127.0.0.1:${port}`, authorization: "Bearer wrong-secret!" })).toBe(401);
     expect(await rawPost(url.replace("/mcp", "/other"), { host: `127.0.0.1:${port}` })).toBe(404);

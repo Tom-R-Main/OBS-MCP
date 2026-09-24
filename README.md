@@ -262,7 +262,7 @@ claude mcp add --transport http obs 'http://127.0.0.1:8765/mcp?client=claude'
 # In Codex's config, point it at http://127.0.0.1:8765/mcp?client=codex
 ```
 
-The server listens only on 127.0.0.1 and rejects requests whose Host or Origin header is not localhost, which blocks DNS rebinding from web pages. Set `OBS_MCP_HTTP_TOKEN` to also require a bearer token. Each HTTP request is served statelessly, so `OBS_MCP_DYNAMIC_TOOLSETS` is ignored over HTTP.
+The server listens only on 127.0.0.1 and rejects requests whose Host or Origin header is not localhost, which blocks DNS rebinding from web pages. Without `OBS_MCP_HTTP_TOKEN`, any program running on the machine can control OBS through the server; set it to require a bearer token. Each HTTP request is served statelessly, so `OBS_MCP_DYNAMIC_TOOLSETS` is ignored over HTTP.
 
 While agents share a server, `obs-claim-control` gives one of them control of OBS for a set time (30 minutes by default). Until it calls `obs-release-control` or the time runs out, tools that change OBS refuse calls from other clients; reading OBS and stopping outputs always work. `obs-control-status` shows who holds control. `obs-take-start` claims control for the length of the take. Clients are told apart by name: the `client` parameter of the URL they connect with, or else the name a 2026-07-28 client sends with each request. Clients using the 2025 protocol over HTTP send each request without a name, so give each agent its own `?client=` name. An unnamed client cannot claim control and is refused while another client holds it. Two agents given the same name share control. The names are not credentials; control is for agents cooperating on one machine, not for keeping out someone who can reach the server.
 

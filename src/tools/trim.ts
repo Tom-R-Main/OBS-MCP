@@ -163,10 +163,10 @@ function parseSilence(stderr: string, duration: number): Span[] {
 
 type Probe = { duration: number; audioStreams: number; chapters: Chapter[]; width?: number; height?: number };
 
-async function probe(path: string): Promise<Probe> {
+async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-show_chapters", path,
-  ], { timeout: 15_000 });
+  ], { timeout: 15_000, signal });
   const data = JSON.parse(stdout) as JsonObject;
   const streams = Array.isArray(data.streams) ? data.streams.filter(isObject) : [];
   const video = streams.find((stream) => stream.codec_type === "video");
@@ -195,7 +195,7 @@ function takeLogChapters(path: string): Chapter[] {
 }
 
 /** Streams SAMPLE_FPS grayscale frames and returns the stretches where the picture did not change. */
-function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceArgs: string[]): Promise<{ spans: Span[]; stderr: string }> {
+function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceArgs: string[], signal?: AbortSignal): Promise<{ spans: Span[]; stderr: string }> {
   const aspect = info.width && info.height ? info.height / info.width : 9 / 16;
   const height = Math.max(2, Math.round((SAMPLE_WIDTH * aspect) / 2) * 2);
   const frameBytes = SAMPLE_WIDTH * height;
@@ -204,7 +204,7 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
       "-hide_banner", "-nostats", "-i", path,
       "-map", "0:v:0", "-vf", `fps=${SAMPLE_FPS},scale=${SAMPLE_WIDTH}:${height},format=gray`, "-f", "rawvideo", "pipe:1",
       ...silenceArgs,
-    ], { stdio: ["ignore", "pipe", "pipe"] });
+    ], { stdio: ["ignore", "pipe", "pipe"], ...(signal ? { signal } : {}) });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -246,13 +246,13 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
   });
 }
 
-async function detectIdle(path: string, info: Probe, minIdleSeconds: number): Promise<{ idle: Span[]; audible: boolean }> {
+async function detectIdle(path: string, info: Probe, minIdleSeconds: number, signal?: AbortSignal): Promise<{ idle: Span[]; audible: boolean }> {
   // Silence spans only matter if the recording has sound; they keep narration from being cut.
   const withAudio = info.audioStreams > 0;
   const silenceArgs = withAudio
     ? ["-map", "0:a:0", "-af", `silencedetect=n=-50dB:d=${minIdleSeconds}`, "-f", "null", "-"]
     : [];
-  const { spans: still, stderr } = await stillSpans(path, info, minIdleSeconds, silenceArgs);
+  const { spans: still, stderr } = await stillSpans(path, info, minIdleSeconds, silenceArgs, signal);
   if (!withAudio) return { idle: still, audible: false };
   const silent = parseSilence(stderr, info.duration);
   const whollySilent = silent.length === 1 && silent[0]!.start <= 0.1 && silent[0]!.end >= info.duration - 0.1;
@@ -295,6 +295,7 @@ async function exportTrimmed(
   audioStreams: number,
   chapters: Chapter[],
   duration: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   const work = mkdtempSync(join(tmpdir(), "obs-mcp-trim-"));
   try {
@@ -311,28 +312,28 @@ async function exportTrimmed(
       "-hide_banner", "-nostats", "-y", "-i", path, "-f", "ffmetadata", "-i", metadata,
       "-filter_complex", filter, "-map", "[v]", ...(withAudio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []),
       "-map_metadata", "1", "-map_chapters", "1", ...(await videoEncoderArgs()), "-movflags", "+faststart", outputPath,
-    ], { timeout: 600_000, maxBuffer: 32 * 1024 * 1024 });
+    ], { timeout: 600_000, maxBuffer: 32 * 1024 * 1024, signal });
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
 }
 
 /** Grabs one frame per time and tiles them into one JPEG. */
-export async function contactSheet(path: string, times: number[], columns: number, width: number): Promise<Buffer> {
+export async function contactSheet(path: string, times: number[], columns: number, width: number, signal?: AbortSignal): Promise<Buffer> {
   const work = mkdtempSync(join(tmpdir(), "obs-mcp-sheet-"));
   try {
     for (const [index, time] of times.entries()) {
       await execFileAsync("ffmpeg", [
         "-hide_banner", "-v", "error", "-y", "-ss", String(Math.max(0, time)), "-i", path,
         "-frames:v", "1", "-vf", `scale=${width}:-2`, "-q:v", "4", join(work, `${String(index).padStart(3, "0")}.jpg`),
-      ], { timeout: 30_000 });
+      ], { timeout: 30_000, signal });
     }
     const rows = Math.ceil(times.length / columns);
     const sheet = join(work, "sheet.jpg");
     await execFileAsync("ffmpeg", [
       "-hide_banner", "-v", "error", "-y", "-framerate", "1", "-i", join(work, "%03d.jpg"),
       "-vf", `tile=${Math.min(columns, times.length)}x${rows}:padding=4:color=white`, "-frames:v", "1", "-q:v", "4", sheet,
-    ], { timeout: 30_000 });
+    ], { timeout: 30_000, signal });
     return readFileSync(sheet);
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -383,13 +384,15 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async (args): Promise<CallToolResult> => {
+    async (args, ctx): Promise<CallToolResult> => {
+      // Cancelling the tool call stops ffmpeg instead of leaving it running for minutes.
+      const signal = (ctx as { mcpReq?: { signal?: AbortSignal } } | undefined)?.mcpReq?.signal;
       try {
         const path = await recordingFile(client, args.path);
-        const info = await probe(path);
+        const info = await probe(path, signal);
         if (!Number.isFinite(info.duration)) return errorResult(`ffprobe could not read the length of ${path}`);
         const chapters = info.chapters.length > 0 ? info.chapters : takeLogChapters(path);
-        const { idle, audible } = await detectIdle(path, info, args.minIdleSeconds);
+        const { idle, audible } = await detectIdle(path, info, args.minIdleSeconds, signal);
         const { cuts, keep } = planCuts({ ...args, duration: info.duration, idle, chapters });
         const removed = round(cuts.reduce((total, { start, end }) => total + end - start, 0));
         const newChapters = chapters.map(({ at, name }) => ({ at: remapTime(at, cuts), name }));
@@ -432,19 +435,19 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         const partial = join(dirname(outputPath), `.${basename(outputPath)}.${process.pid}-${crypto.randomUUID().slice(0, 8)}.partial${extname(outputPath)}`);
         if (partial === path || pathTaken(partial)) return errorResult("Could not choose a temporary name for the export; try again");
         try {
-          await exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds);
+          await exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal);
           if (pathTaken(outputPath)) return errorResult(`${outputPath} appeared while exporting; the export is discarded`);
           renameSync(partial, outputPath);
         } finally {
           rmSync(partial, { force: true });
         }
-        const result = await probe(outputPath);
+        const result = await probe(outputPath, signal);
         lines.push(`Exported ${outputPath}: ${round(result.duration)}s, ${result.chapters.length} chapter(s)`);
 
         const content: CallToolResult["content"] = [];
         if (args.contactSheet && seams.length > 0) {
           const times = seams.flatMap((seam) => [Math.max(0, seam - 0.5), seam + 0.2]).slice(0, MAX_SHEET_FRAMES);
-          const sheet = await contactSheet(outputPath, times, 4, 320);
+          const sheet = await contactSheet(outputPath, times, 4, 320, signal);
           lines.push(`Contact sheet: frames 0.5s before and 0.2s after each seam, in pairs, left to right: ${times.map((t) => `${round(t)}s`).join(", ")}`);
           content.push({ type: "image", data: sheet.toString("base64"), mimeType: "image/jpeg" });
         }
@@ -476,10 +479,11 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async (args): Promise<CallToolResult> => {
+    async (args, ctx): Promise<CallToolResult> => {
+      const signal = (ctx as { mcpReq?: { signal?: AbortSignal } } | undefined)?.mcpReq?.signal;
       try {
         const path = await recordingFile(client, args.path);
-        const info = await probe(path);
+        const info = await probe(path, signal);
         const chapters = info.chapters.length > 0 ? info.chapters : takeLogChapters(path);
         const times = (args.times ?? (chapters.length > 0
           ? chapters.map(({ at }) => at + 1)
@@ -487,7 +491,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
           .filter((time) => time < info.duration)
           .slice(0, MAX_SHEET_FRAMES);
         if (times.length === 0) return errorResult("No requested time falls inside the recording");
-        const sheet = await contactSheet(path, times, args.columns, args.width);
+        const sheet = await contactSheet(path, times, args.columns, args.width, signal);
         const legend = times.map((time, index) => {
           const chapter = !args.times ? chapters[index]?.name : undefined;
           return `${index + 1}. ${round(time)}s${chapter ? ` ${chapter}` : ""}`;

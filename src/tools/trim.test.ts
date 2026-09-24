@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { healthyObsState, servePreflightState } from "../../test/support/fake-obs-state.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
-import { planCuts, remapTime } from "./trim.js";
+import { contactSheet, planCuts, remapTime } from "./trim.js";
 
 function hasFfmpeg(): boolean {
   try {
@@ -182,6 +182,11 @@ describe.skipIf(!ffmpegAvailable)("obs-trim-take and obs-contact-sheet", () => {
 
     expect(existsSync(lookalike)).toBe(true);
   }, 30_000);
+
+  it("passes the tool call's cancellation to ffmpeg", async () => {
+    // The trim tools hand ctx.mcpReq.signal, which the SDK aborts when the client cancels, to every child process.
+    await expect(contactSheet(clip, [1], 1, 80, AbortSignal.abort())).rejects.toThrow(/abort/i);
+  });
 
   it("refuses files outside the OBS recording directory", async () => {
     const outside = mkdtempSync(join(tmpdir(), "obs-mcp-outside-"));

@@ -91,7 +91,9 @@ async function attemptOBSConnection(): Promise<void> {
 
 obsClient.on("disconnected", () => {
   obsConnected = false;
-  if (!shuttingDown) {
+  // A failed attempt schedules its own retry once it has counted the failure;
+  // scheduling here too would use the count from before it.
+  if (!shuttingDown && !connectionAttempt) {
     logger.log("OBS WebSocket disconnected; scheduling a reconnect.");
     scheduleReconnect();
   }
