@@ -8,6 +8,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "./client.js";
 import * as tools from "./tools/index.js";
 import { PACKAGE_VERSION } from "./version.js";
+import { logger } from "./logger.js";
 
 // Create the OBS WebSocket client
 const obsClient = new OBSWebSocketClient(
@@ -27,11 +28,6 @@ const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 const SHUTDOWN_DEADLINE_MS = 1500;
 
-const logger = {
-  log: (message: string) => console.error(message),
-  error: (message: string) => console.error(message),
-  debug: (message: string) => console.error(message),
-};
 
 function getReconnectDelay(): number {
   return Math.min(

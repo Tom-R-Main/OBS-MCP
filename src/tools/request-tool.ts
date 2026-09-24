@@ -43,6 +43,8 @@ type RequestToolDefinition = {
   inputSchema?: ZodObject;
   annotations: ToolAnnotations;
   responseMode?: "json" | "success";
+  /** Returns a refusal message when the request must not reach OBS. */
+  guard?: (client: OBSWebSocketClient, args: Record<string, unknown>) => Promise<string | undefined>;
 };
 
 function formatResponse(definition: RequestToolDefinition, response: unknown): string {
@@ -59,6 +61,13 @@ async function executeRequest(
   requestData?: Record<string, unknown>,
 ) {
   try {
+    const refusal = await definition.guard?.(client, requestData ?? {});
+    if (refusal) {
+      return {
+        content: [{ type: "text" as const, text: `${definition.title} refused: ${refusal}` }],
+        isError: true,
+      };
+    }
     const response = await client.sendRequest(definition.requestType, requestData);
     return {
       content: [{ type: "text" as const, text: formatResponse(definition, response) }],

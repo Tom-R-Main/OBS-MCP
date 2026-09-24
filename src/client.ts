@@ -6,12 +6,8 @@
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
+import { logger } from "./logger.js";
 
-const logger = {
-  log: (message: string) => console.error(message),
-  error: (message: string) => console.error(message),
-  debug: (message: string) => console.error(message),
-};
 
 enum OpCode {
   Hello = 0,

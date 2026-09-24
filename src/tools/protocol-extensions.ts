@@ -57,6 +57,35 @@ const sceneItemBlendMode = z.enum([
   "OBS_BLEND_DARKEN",
 ]);
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Listing macOS ScreenCaptureKit applications on a screen_capture input with no
+ * display selected crashed OBS 32.2.2 during live testing, so refuse it.
+ */
+async function guardScreenCaptureApplicationList(
+  client: OBSWebSocketClient,
+  args: Record<string, unknown>,
+): Promise<string | undefined> {
+  if (args.propertyName !== "application") return undefined;
+  let settings: unknown;
+  try {
+    settings = await client.sendRequest("GetInputSettings", {
+      ...(typeof args.inputName === "string" ? { inputName: args.inputName } : {}),
+      ...(typeof args.inputUuid === "string" ? { inputUuid: args.inputUuid } : {}),
+    });
+  } catch {
+    return undefined;
+  }
+  if (!isObject(settings) || settings.inputKind !== "screen_capture") return undefined;
+  const inputSettings = isObject(settings.inputSettings) ? settings.inputSettings : {};
+  if (typeof inputSettings.display_uuid === "string" && inputSettings.display_uuid) return undefined;
+  return "listing applications on a screen_capture input with no display selected can crash OBS. "
+    + "Set the input's display_uuid with obs-set-input-settings first.";
+}
+
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   registerObsRequestTool(server, client, {
     name: "obs-get-canvas-list",
@@ -145,6 +174,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       propertyName: z.string().describe("Name of the list property"),
     }),
     annotations: READ_ONLY_TOOL,
+    guard: guardScreenCaptureApplicationList,
   });
 
   registerObsRequestTool(server, client, {

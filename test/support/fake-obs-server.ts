@@ -71,6 +71,18 @@ type DisconnectAction = {
 
 type ScriptedAction = ResponseAction | DisconnectAction;
 
+/**
+ * Answers a request from test-owned state. Return response data for success,
+ * or throw a FakeOBSRequestError to answer with a failed request status.
+ */
+export type FakeOBSResponder = (requestData: JsonObject) => JsonObject;
+
+export class FakeOBSRequestError extends Error {
+  constructor(readonly code: number, comment: string) {
+    super(comment);
+  }
+}
+
 type InternalRecordedFrame = RecordedOBSFrame & { socket: WebSocket };
 
 const DEFAULT_TIMEOUT_MS = 1_000;
@@ -105,6 +117,7 @@ export class FakeOBSServer {
   private readonly frames: InternalRecordedFrame[] = [];
   private readonly sockets = new Map<WebSocket, number>();
   private readonly scripts = new Map<string, ScriptedAction[]>();
+  private readonly responders = new Map<string, FakeOBSResponder>();
   private readonly timers = new Set<NodeJS.Timeout>();
   private readonly availableRequests: string[];
   private readonly autoGetVersion: boolean;
@@ -174,6 +187,15 @@ export class FakeOBSServer {
       reason,
       delayMs,
     });
+  }
+
+  /**
+   * Answers every unscripted request of this type from the responder, so tests
+   * can model OBS state instead of scripting each reply in order. Queued
+   * scripted actions still take precedence.
+   */
+  respondWith(requestType: string, responder: FakeOBSResponder): void {
+    this.responders.set(requestType, responder);
   }
 
   async waitForFrame(
@@ -320,6 +342,18 @@ export class FakeOBSServer {
     const action = this.scripts.get(record.frame.d.requestType)?.shift();
     if (action) {
       this.runAction(record, action);
+      return;
+    }
+    const responder = this.responders.get(record.frame.d.requestType);
+    if (responder) {
+      const requestData = isObject(record.frame.d.requestData) ? record.frame.d.requestData : {};
+      try {
+        this.sendResponse(record, { result: true, code: 100 }, responder(requestData));
+      } catch (error) {
+        this.sendResponse(record, error instanceof FakeOBSRequestError
+          ? { result: false, code: error.code, comment: error.message }
+          : { result: false, code: 500, comment: String(error) }, {});
+      }
       return;
     }
     if (record.frame.d.requestType === "GetVersion" && this.autoGetVersion) {
