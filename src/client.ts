@@ -36,6 +36,11 @@ export enum EventSubscription {
   Ui = 1 << 10,
   Canvases = 1 << 11,
   All = (1 << 12) - 1,
+  // High-volume events are left out of All; subscribe with subscribeHighVolume.
+  InputVolumeMeters = 1 << 16,
+  InputActiveStateChanged = 1 << 17,
+  InputShowStateChanged = 1 << 18,
+  SceneItemTransformChanged = 1 << 19,
 }
 
 /** How OBS runs the requests in a batch (RequestBatchExecutionType). */
@@ -229,6 +234,8 @@ export class OBSWebSocketClient extends EventEmitter {
   private availableRequests: Set<string> | null = null;
   private versionInfo: VersionResponse | null = null;
   private readonly pendingRequests = new Map<string, PendingRequest>();
+  // How many callers want each high-volume subscription bit.
+  private readonly highVolumeCounts = new Map<number, number>();
 
   constructor(url = "ws://localhost:4455", password: string | null = null) {
     super();
@@ -266,6 +273,45 @@ export class OBSWebSocketClient extends EventEmitter {
       availableRequestCount: this.availableRequests?.size ?? null,
       versionInfo: this.versionInfo,
     };
+  }
+
+  /** The event subscriptions this client identifies with. */
+  public eventSubscriptions(): number {
+    let mask: number = EventSubscription.All;
+    for (const [bit, count] of this.highVolumeCounts) if (count > 0) mask |= bit;
+    return mask;
+  }
+
+  /**
+   * Subscribes to a high-volume event such as InputVolumeMeters until the
+   * returned function is called. Callers share one subscription per event;
+   * the last release turns it off. Survives reconnects.
+   */
+  public subscribeHighVolume(event: EventSubscription): () => void {
+    const before = this.eventSubscriptions();
+    this.highVolumeCounts.set(event, (this.highVolumeCounts.get(event) ?? 0) + 1);
+    this.reidentifyIfChanged(before);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const previous = this.eventSubscriptions();
+      const count = (this.highVolumeCounts.get(event) ?? 1) - 1;
+      if (count > 0) this.highVolumeCounts.set(event, count);
+      else this.highVolumeCounts.delete(event);
+      this.reidentifyIfChanged(previous);
+    };
+  }
+
+  private reidentifyIfChanged(before: number): void {
+    const eventSubscriptions = this.eventSubscriptions();
+    const socket = this.ws;
+    if (eventSubscriptions === before || !this.isConnected() || !socket || socket.readyState !== WebSocket.OPEN) return;
+    try {
+      socket.send(JSON.stringify({ op: OpCode.Reidentify, d: { eventSubscriptions } }));
+    } catch (error) {
+      logger.error(`Unable to change OBS event subscriptions: ${asError(error).message}`);
+    }
   }
 
   public markOutputSettingsPending(): void {
@@ -529,8 +575,10 @@ export class OBSWebSocketClient extends EventEmitter {
           logger.error("Ignoring malformed OBS Identified message");
           return;
         }
+        // OBS answers Reidentify with Identified too; only a new session means
+        // OBS may have restarted and rebuilt its outputs.
+        if (!this.identified) this.outputSettingsPending = false;
         this.identified = true;
-        this.outputSettingsPending = false;
         this.emit("identified", socket);
         break;
       case OpCode.RequestResponse: {
@@ -613,7 +661,7 @@ export class OBSWebSocketClient extends EventEmitter {
       op: OpCode.Identify,
       d: {
         rpcVersion: hello.rpcVersion,
-        eventSubscriptions: EventSubscription.All,
+        eventSubscriptions: this.eventSubscriptions(),
         ...(authentication ? { authentication } : {}),
       },
     };

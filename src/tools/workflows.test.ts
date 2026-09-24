@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeOBSRequestError } from "../../test/support/fake-obs-server.js";
+import { FakeOBSRequestError, OBS_OP } from "../../test/support/fake-obs-server.js";
 import { healthyObsState, servePreflightState, type FakeObsState } from "../../test/support/fake-obs-state.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
 
@@ -162,6 +162,34 @@ describe("obs-record-clip", () => {
     expect(resultText(result)).toContain("Expected silence, but the audio peaks at");
     expect(resultText(result)).toContain("shorter than the requested 4s");
   }, 10_000);
+
+  it("flags an input that becomes audible during the take, and writes a take log", async () => {
+    await startHarness();
+    // Muted at the start, so preflight passes; unmuted by someone mid-take.
+    state.inputs[0] = { inputName: "Chrome", inputKind: "screen_capture", muted: true, tracks: { 1: true } };
+
+    const pending = harness.call("obs-record-clip", {
+      durationSeconds: 0.5,
+      expectSilent: true,
+      chapters: [{ atSeconds: 0, name: "Start" }],
+    });
+    await harness.fakeObs.waitForFrame(({ frame }) => frame.op === OBS_OP.Reidentify, { timeoutMs: 2_000 });
+    harness.fakeObs.sendEvent("InputVolumeMeters", {
+      inputs: [{ inputName: "Chrome", inputLevelsMul: [[0.2, 0.5, 0.5]] }],
+    });
+    const result = await pending;
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/Problem: At [\d.]+s: Chrome is audible in the recording at -6 dB/);
+    const takeLog = join(recordDirectory, "clip.take.json");
+    expect(resultText(result)).toContain(`Take log: ${takeLog}`);
+    expect(existsSync(takeLog)).toBe(true);
+    expect(JSON.parse(readFileSync(takeLog, "utf8"))).toMatchObject({
+      recording: clipPath,
+      chapters: [{ name: "Start" }],
+      warnings: [{ kind: "audio" }],
+    });
+  });
 
   it("rejects clips longer than a client timeout allows", async () => {
     await startHarness();

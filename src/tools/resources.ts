@@ -6,11 +6,13 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import type { OBSWebSocketClient } from "../client.js";
 import { screenshotResult } from "./screenshot.js";
+import { activeTake, takeUpdates } from "./take-monitor.js";
 
 type JsonObject = Record<string, unknown>;
 
 export const STATUS_URI = "obs://status";
 export const SCENES_URI = "obs://scenes";
+export const TAKE_URI = "obs://take/current";
 export const sceneItemsUri = (sceneName: string) => `obs://scene/${encodeURIComponent(sceneName)}/items`;
 
 const SCREENSHOT_WIDTH = 960;
@@ -47,7 +49,9 @@ function isObject(value: unknown): value is JsonObject {
 }
 
 function json(uri: string, value: unknown) {
-  return { contents: [{ uri, mimeType: "application/json", text: JSON.stringify(value, null, 2) }] };
+  // Silent audio levels are -Infinity, which JSON cannot carry.
+  const text = JSON.stringify(value, (_key, item: unknown) => (item === -Infinity ? null : item), 2);
+  return { contents: [{ uri, mimeType: "application/json", text }] };
 }
 
 async function sceneNames(client: OBSWebSocketClient): Promise<string[]> {
@@ -83,6 +87,18 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         currentProgramSceneName: isObject(scene) ? scene.currentProgramSceneName : null,
       });
     },
+  );
+
+  server.registerResource(
+    "take",
+    TAKE_URI,
+    {
+      title: "Current take",
+      description: "While obs-record-clip or a recording session runs: audio levels on recorded tracks, skipped "
+        + "frames, black or unchanging picture, chapters, and warnings; updates when a warning is raised",
+      mimeType: "application/json",
+    },
+    async (uri) => json(uri.href, activeTake(client)?.summary() ?? { running: false }),
   );
 
   server.registerResource(
@@ -180,11 +196,14 @@ function forwardEvents(server: McpServer, client: OBSWebSocketClient): void {
     ]),
   ];
   for (const [event, listener] of listeners) client.on(event, listener);
+  const onTakeUpdate = () => notify(TAKE_URI);
+  takeUpdates.on("update", onTakeUpdate);
 
   // serveStdio builds a server per session; drop this session's listeners with it.
   const previousOnClose = lowLevel.onclose;
   lowLevel.onclose = () => {
     for (const [event, listener] of listeners) client.off(event, listener);
+    takeUpdates.off("update", onTakeUpdate);
     previousOnClose?.();
   };
 }

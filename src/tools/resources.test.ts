@@ -5,6 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
+import { TakeMonitor, takeUpdates } from "./take-monitor.js";
 
 const JPEG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACv/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AN//Z";
 
@@ -47,6 +48,7 @@ describe("resources", () => {
     expect(resources.map(({ uri }) => uri)).toEqual(expect.arrayContaining([
       "obs://status",
       "obs://scenes",
+      "obs://take/current",
       "obs://scene/Demo/items",
       "obs://scene/Be%20Right%20Back/items",
     ]));
@@ -97,6 +99,28 @@ describe("resources", () => {
     expect(updated).toHaveLength(2);
   });
 
+  it("serves the running take and notifies subscribers when it changes", async () => {
+    const updated: string[] = [];
+    harness.mcpClient.setNotificationHandler("notifications/resources/updated", async (notification) => {
+      updated.push(notification.params.uri);
+    });
+    const read = async () => JSON.parse(String(
+      ((await harness.mcpClient.readResource({ uri: "obs://take/current" })).contents[0] as { text: string }).text,
+    )) as Record<string, unknown>;
+    expect(await read()).toEqual({ running: false });
+
+    await harness.obsClient.connect();
+    const take = new TakeMonitor(harness.obsClient, { sampleIntervalMs: 60_000, statsIntervalMs: 60_000 });
+    await take.start();
+    await harness.mcpClient.subscribeResource({ uri: "obs://take/current" });
+    take.mark("Intro");
+
+    await vi.waitFor(() => expect(updated).toContain("obs://take/current"));
+    expect(await read()).toMatchObject({ running: true, chapters: [{ name: "Intro" }] });
+    await take.stop();
+    expect(await read()).toEqual({ running: false });
+  });
+
   it("removes its OBS event listeners when the session closes", async () => {
     expect(harness.obsClient.listenerCount("RecordStateChanged")).toBeGreaterThan(0);
     const { obsClient } = harness;
@@ -105,6 +129,7 @@ describe("resources", () => {
     closed = true;
 
     expect(obsClient.listenerCount("RecordStateChanged")).toBe(0);
+    expect(takeUpdates.listenerCount("update")).toBe(0);
   });
 });
 

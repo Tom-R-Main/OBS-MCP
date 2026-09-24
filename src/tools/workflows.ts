@@ -11,6 +11,7 @@ import { RequestBatchExecutionType, type OBSWebSocketClient } from "../client.js
 import { appendInputScreenshot, inputStateResult, readInputState } from "./after-change.js";
 import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
 import { runPreflight } from "./preflight.js";
+import { describeTake, TakeMonitor, writeTakeLog, type TakeSummary } from "./take-monitor.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -33,6 +34,9 @@ function errorMessage(error: unknown): string {
 function errorResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
+
+/** JSON has no -Infinity; silence reports as null. */
+const finite = (value: number): number | null => (Number.isFinite(value) ? value : null);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -95,12 +99,16 @@ async function recordClip(
   if (started.isError) return started;
 
   const startedAt = Date.now();
+  const monitor = new TakeMonitor(client, { expectSilent: args.expectSilent });
   const chapterNotes: string[] = [];
   let outputPath: string | undefined;
+  let take: TakeSummary;
   try {
+    await monitor.start();
     const chapters = [...args.chapters].sort((a, b) => a.atSeconds - b.atSeconds);
     for (const chapter of chapters) {
       await sleep(Math.max(0, startedAt + chapter.atSeconds * 1000 - Date.now()));
+      monitor.mark(chapter.name);
       try {
         await client.sendRequest("CreateRecordChapter", { chapterName: chapter.name });
       } catch (error) {
@@ -110,8 +118,10 @@ async function recordClip(
     }
     await sleep(Math.max(0, startedAt + args.durationSeconds * 1000 - Date.now()));
   } finally {
+    monitor.expectStop();
     const stopped: unknown = await client.sendRequest("StopRecord").catch(() => undefined);
     if (isObject(stopped) && typeof stopped.outputPath === "string") outputPath = stopped.outputPath;
+    take = await monitor.stop();
   }
 
   if (!outputPath) {
@@ -123,7 +133,11 @@ async function recordClip(
     ? await inspectRecording(outputPath, args.expectSilent)
     : { skipped: "OBS is remote, so the file was not inspected" };
 
+  const takeLog = local ? await writeTakeLog(outputPath, take) : null;
   const problems: string[] = [];
+  for (const warning of take.warnings.filter(({ kind }) => kind === "blank" || kind === "output" || (kind === "audio" && args.expectSilent))) {
+    problems.push(`At ${warning.atSeconds}s: ${warning.message}`);
+  }
   if (inspection.durationSeconds !== undefined && inspection.durationSeconds < args.durationSeconds - 2) {
     problems.push(`The file is ${inspection.durationSeconds.toFixed(1)}s, shorter than the requested ${args.durationSeconds}s`);
   }
@@ -137,6 +151,8 @@ async function recordClip(
       ? `Not verified: ${inspection.skipped}`
       : `Verified: ${inspection.durationSeconds?.toFixed(1)}s, ${inspection.audioStreams} audio stream(s)`
         + (inspection.maxVolumeDb !== undefined ? `, peak ${inspection.maxVolumeDb} dB` : ""),
+    ...describeTake(take).filter((line) => !line.startsWith("Warning")),
+    ...(takeLog ? [`Take log: ${takeLog}`] : []),
     ...chapterNotes,
     ...problems.map((problem) => `Problem: ${problem}`),
   ];
@@ -148,6 +164,8 @@ async function recordClip(
       ...(inspection.maxVolumeDb === -Infinity ? { maxVolumeDb: null } : {}),
       chapterNotes,
       problems,
+      takeLog,
+      take: { ...take, audio: take.audio.map((level) => ({ ...level, peakDb: finite(level.peakDb), inputPeakDb: finite(level.inputPeakDb) })) },
     },
     ...(problems.length > 0 ? { isError: true } : {}),
   };

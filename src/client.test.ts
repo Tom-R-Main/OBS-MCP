@@ -305,6 +305,48 @@ describe("OBSWebSocketClient request batches", () => {
   });
 });
 
+describe("OBSWebSocketClient high-volume events", () => {
+  it("adds a subscription while anyone holds it and restores it after a reconnect", async () => {
+    const server = await createServer();
+    const client = createClient(server);
+    await client.connect();
+    expect(server.eventSubscriptions()).toBe(EventSubscription.All);
+
+    const first = client.subscribeHighVolume(EventSubscription.InputVolumeMeters);
+    const second = client.subscribeHighVolume(EventSubscription.InputVolumeMeters);
+    const withMeters = EventSubscription.All | EventSubscription.InputVolumeMeters;
+    await vi.waitFor(() => expect(server.eventSubscriptions()).toBe(withMeters));
+    const reidentifies = () => server.history().filter(({ frame }) => frame.op === OBS_OP.Reidentify).length;
+    expect(reidentifies()).toBe(1);
+
+    first();
+    first();
+    expect(reidentifies()).toBe(1);
+
+    server.disconnect();
+    await vi.waitFor(() => expect(client.isConnected()).toBe(false));
+    await client.connect();
+    expect(server.eventSubscriptions(2)).toBe(withMeters);
+
+    second();
+    await vi.waitFor(() => expect(server.eventSubscriptions(2)).toBe(EventSubscription.All));
+  });
+
+  it("keeps unapplied output settings flagged when OBS acknowledges a Reidentify", async () => {
+    const server = await createServer();
+    const client = createClient(server);
+    await client.connect();
+    client.markOutputSettingsPending();
+
+    const release = client.subscribeHighVolume(EventSubscription.InputVolumeMeters);
+    await server.waitForFrame(({ frame }) => frame.op === OBS_OP.Reidentify);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(client.hasPendingOutputSettings()).toBe(true);
+    release();
+  });
+});
+
 describe("OBSWebSocketClient events and socket ownership", () => {
   it("emits both generic and event-specific OBS events", async () => {
     const server = await createServer();
