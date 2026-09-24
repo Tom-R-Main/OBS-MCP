@@ -23,10 +23,11 @@ export function initialize(server: McpServer): void {
       argsSchema: z.object({
         window: z.string().describe("Part of the window title or app name to capture, e.g. \"ChatGPT\""),
         scene: z.string().default("Demo").describe("Scene to record from"),
-        seconds: z.string().default("30").describe("Length of the take in seconds (up to 50 in one call)"),
+        seconds: z.string().default("30").describe("Length of a hands-off take in seconds; ignored when steps are given"),
+        steps: z.string().optional().describe("Steps to perform on screen, one per line; each becomes a chapter"),
       }),
     },
-    ({ window, scene, seconds }) => userMessage([
+    ({ window, scene, seconds, steps }) => userMessage([
       `Record a silent demo of the "${window}" window in the OBS scene "${scene}".`,
       "",
       `1. If the scene "${scene}" does not exist, create it with obs-create-scene and switch to it.`,
@@ -34,7 +35,14 @@ export function initialize(server: McpServer): void {
         + "silent true, fit true, includeScreenshot true. If it lists several matches, ask me which one.",
       "3. Look at the screenshot and the reported size. If the capture renders at 0×0 or shows the wrong window, stop and tell me.",
       "4. Call obs-preflight with expectSilent true. Fix every failure, or explain it to me if you cannot.",
-      `5. Call obs-record-clip with durationSeconds ${seconds} and expectSilent true, then report the file path and the verification result.`,
+      ...(steps
+        ? [
+          "5. Call obs-take-start with expectSilent true. For each step below, call obs-take-mark with the step's name, "
+            + "then perform it. If obs-take-status or a tool result reports a warning, tell me. Call obs-take-stop "
+            + "after the last step, then report the file path, the chapters, and the verification result.",
+          ...steps.split("\n").map((step) => step.trim()).filter(Boolean).map((step) => `   - ${step}`),
+        ]
+        : [`5. Call obs-record-clip with durationSeconds ${seconds} and expectSilent true, then report the file path and the verification result.`]),
       "Do not change output settings with obs-set-profile-parameter without asking: OBS needs a restart to apply them.",
     ].join("\n")),
   );

@@ -3,19 +3,13 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
 import { appendInputScreenshot, inputStateResult, readInputState } from "./after-change.js";
-import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
-import { runPreflight } from "./preflight.js";
-import { describeTake, TakeMonitor, writeTakeLog, type TakeSummary } from "./take-monitor.js";
+import { markTake, startTake, stopTake } from "./takes.js";
 
 type JsonObject = Record<string, unknown>;
-
-const execFileAsync = promisify(execFile);
 
 /** Many MCP clients time a tool call out at 60 seconds. */
 export const MAX_CLIP_SECONDS = 50;
@@ -35,140 +29,30 @@ function errorResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
 
-/** JSON has no -Infinity; silence reports as null. */
-const finite = (value: number): number | null => (Number.isFinite(value) ? value : null);
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export type ClipCheck = {
-  durationSeconds?: number;
-  audioStreams?: number;
-  maxVolumeDb?: number;
-  skipped?: string;
-};
-
-/**
- * Inspects a finished recording with ffprobe (and ffmpeg for loudness) when
- * they are on PATH and OBS writes to this machine. Never throws.
- */
-export async function inspectRecording(outputPath: string, measureLoudness: boolean): Promise<ClipCheck> {
-  let probe: JsonObject;
-  try {
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v", "error", "-print_format", "json", "-show_format", "-show_streams", outputPath,
-    ], { timeout: 15_000 });
-    probe = JSON.parse(stdout) as JsonObject;
-  } catch (error) {
-    const code = isObject(error) ? error.code : undefined;
-    return { skipped: code === "ENOENT" ? "ffprobe is not installed" : `ffprobe failed: ${errorMessage(error)}` };
-  }
-
-  const streams = Array.isArray(probe.streams) ? probe.streams.filter(isObject) : [];
-  const format = isObject(probe.format) ? probe.format : {};
-  const check: ClipCheck = {
-    durationSeconds: Number(format.duration),
-    audioStreams: streams.filter((stream) => stream.codec_type === "audio").length,
-  };
-  if (!measureLoudness || check.audioStreams === 0) return check;
-
-  try {
-    const { stderr } = await execFileAsync("ffmpeg", [
-      "-hide_banner", "-nostats", "-i", outputPath, "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-",
-    ], { timeout: 60_000 });
-    const match = /max_volume:\s*(-?[\d.]+|-inf) dB/.exec(stderr);
-    if (match?.[1]) check.maxVolumeDb = match[1] === "-inf" ? -Infinity : Number(match[1]);
-  } catch (error) {
-    check.skipped = `ffmpeg loudness check failed: ${errorMessage(error)}`;
-  }
-  return check;
-}
 
 async function recordClip(
   client: OBSWebSocketClient,
   args: { durationSeconds: number; chapters: { atSeconds: number; name: string }[]; expectSilent: boolean },
 ): Promise<CallToolResult> {
-  const preflight = await runPreflight(client, { minFreeDiskMb: 1024, expectSilent: args.expectSilent });
-  if (!preflight.ready) {
-    const failures = preflight.checks.filter(({ status }) => status === "fail");
-    return errorResult(
-      `Not recording; preflight failed:\n${failures.map(({ id, message }) => `- ${id}: ${message}`).join("\n")}`,
-    );
-  }
-
-  const started = await startOutputAndConfirm(client, RECORD_OUTPUT);
-  if (started.isError) return started;
+  const started = await startTake(client, { expectSilent: args.expectSilent, minFreeDiskMb: 1024, lock: true });
+  if (!started.ok) return started.result;
+  const { take } = started;
 
   const startedAt = Date.now();
-  const monitor = new TakeMonitor(client, { expectSilent: args.expectSilent });
-  const chapterNotes: string[] = [];
-  let outputPath: string | undefined;
-  let take: TakeSummary;
+  let result: CallToolResult | undefined;
   try {
-    await monitor.start();
     const chapters = [...args.chapters].sort((a, b) => a.atSeconds - b.atSeconds);
     for (const chapter of chapters) {
       await sleep(Math.max(0, startedAt + chapter.atSeconds * 1000 - Date.now()));
-      monitor.mark(chapter.name);
-      try {
-        await client.sendRequest("CreateRecordChapter", { chapterName: chapter.name });
-      } catch (error) {
-        // Chapters need Hybrid MP4/MOV; a missing chapter must not abort the take.
-        chapterNotes.push(`Chapter "${chapter.name}" not added: ${errorMessage(error)}`);
-      }
+      await markTake(client, take, chapter.name);
     }
     await sleep(Math.max(0, startedAt + args.durationSeconds * 1000 - Date.now()));
   } finally {
-    monitor.expectStop();
-    const stopped: unknown = await client.sendRequest("StopRecord").catch(() => undefined);
-    if (isObject(stopped) && typeof stopped.outputPath === "string") outputPath = stopped.outputPath;
-    take = await monitor.stop();
+    // stopTake never throws, so the recording always stops.
+    result = await stopTake(client, take, { requestedSeconds: args.durationSeconds });
   }
-
-  if (!outputPath) {
-    return errorResult("Recording started, but OBS did not confirm the stop or report the file. Check obs-get-record-status");
-  }
-
-  const local = preflight.checks.some(({ id, status }) => id === "record-directory" && status === "pass");
-  const inspection = local
-    ? await inspectRecording(outputPath, args.expectSilent)
-    : { skipped: "OBS is remote, so the file was not inspected" };
-
-  const takeLog = local ? await writeTakeLog(outputPath, take) : null;
-  const problems: string[] = [];
-  for (const warning of take.warnings.filter(({ kind }) => kind === "blank" || kind === "output" || (kind === "audio" && args.expectSilent))) {
-    problems.push(`At ${warning.atSeconds}s: ${warning.message}`);
-  }
-  if (inspection.durationSeconds !== undefined && inspection.durationSeconds < args.durationSeconds - 2) {
-    problems.push(`The file is ${inspection.durationSeconds.toFixed(1)}s, shorter than the requested ${args.durationSeconds}s`);
-  }
-  if (args.expectSilent && inspection.maxVolumeDb !== undefined && inspection.maxVolumeDb > -60) {
-    problems.push(`Expected silence, but the audio peaks at ${inspection.maxVolumeDb} dB`);
-  }
-
-  const lines = [
-    `Recorded ${args.durationSeconds}s to ${outputPath}`,
-    inspection.skipped
-      ? `Not verified: ${inspection.skipped}`
-      : `Verified: ${inspection.durationSeconds?.toFixed(1)}s, ${inspection.audioStreams} audio stream(s)`
-        + (inspection.maxVolumeDb !== undefined ? `, peak ${inspection.maxVolumeDb} dB` : ""),
-    ...describeTake(take).filter((line) => !line.startsWith("Warning")),
-    ...(takeLog ? [`Take log: ${takeLog}`] : []),
-    ...chapterNotes,
-    ...problems.map((problem) => `Problem: ${problem}`),
-  ];
-  return {
-    content: [{ type: "text", text: lines.join("\n") }],
-    structuredContent: {
-      outputPath,
-      ...inspection,
-      ...(inspection.maxVolumeDb === -Infinity ? { maxVolumeDb: null } : {}),
-      chapterNotes,
-      problems,
-      takeLog,
-      take: { ...take, audio: take.audio.map((level) => ({ ...level, peakDb: finite(level.peakDb), inputPeakDb: finite(level.inputPeakDb) })) },
-    },
-    ...(problems.length > 0 ? { isError: true } : {}),
-  };
+  return result;
 }
 
 type ListItem = { itemName: string; itemValue: unknown; itemEnabled?: boolean };

@@ -24,6 +24,7 @@ import * as protocolExtensions from "./protocol-extensions.js";
 import * as protocol from "./protocol.js";
 import * as preflight from "./preflight.js";
 import * as workflows from "./workflows.js";
+import * as takes from "./takes.js";
 import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import { withStructuredToolResults } from "./results.js";
@@ -48,6 +49,7 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["protocol", protocol],
   ["record", preflight],
   ["record", workflows],
+  ["record", takes],
 ];
 
 /**
@@ -67,9 +69,11 @@ export function initialize(
   client: OBSWebSocketClient,
   { filter = ALL_TOOLS, confirmLive = liveConfirmationEnabled(), resourcesAndPrompts = true }: InitializeOptions = {},
 ): RegisteredTool[] {
-  // Registration passes through: group filter -> live confirmation -> structured results -> server.
+  // Registration passes through: group filter -> live confirmation -> take lock -> structured results -> server.
+  // At call time the take lock runs first, so a locked call never asks the user.
   const structuredServer = withStructuredToolResults(server);
-  const confirmingServer = confirmLive ? withLiveConfirmation(structuredServer) : structuredServer;
+  const lockingServer = takes.withTakeLock(structuredServer, client);
+  const confirmingServer = confirmLive ? withLiveConfirmation(lockingServer) : lockingServer;
   const registry: RegisteredTool[] = [];
   for (const [group, module] of MODULES) {
     module.initialize(scopedServer(confirmingServer, group, filter, registry), client);
@@ -99,5 +103,6 @@ export {
   protocolExtensions,
   protocol,
   preflight,
-  workflows
+  workflows,
+  takes
 };

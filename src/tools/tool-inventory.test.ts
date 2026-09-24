@@ -13,7 +13,7 @@ import { initialize } from "./index.js";
 // docs/protocol.json) cannot silently rename tools or change their arguments.
 // Tools that end a broadcast, finalize a recording, or cut off consumers of an
 // output must be marked destructive so clients can ask before calling them.
-const DESTRUCTIVE_NAME = /^obs-(remove-.+|stop-(stream|record|output|virtual-cam|replay-buffer)|toggle-(stream|record|output|virtual-cam|replay-buffer))$/;
+const DESTRUCTIVE_NAME = /^obs-(remove-.+|take-stop|stop-(stream|record|output|virtual-cam|replay-buffer)|toggle-(stream|record|output|virtual-cam|replay-buffer))$/;
 
 describe("tool contract snapshot", () => {
   it("keeps tool names, input and output schemas, and annotations stable", async () => {
@@ -33,7 +33,7 @@ describe("tool contract snapshot", () => {
         .map(({ name }) => name);
       expect(unsafe).toEqual([]);
       const readOnlyMutators = contract
-        .filter(({ name, annotations }) => annotations?.readOnlyHint && !/^obs-(get|list|test|describe)-|^obs-(sleep|preflight)$/.test(name))
+        .filter(({ name, annotations }) => annotations?.readOnlyHint && !/^obs-(get|list|test|describe)-|^obs-(sleep|preflight|take-status)$/.test(name))
         .map(({ name }) => name);
       expect(readOnlyMutators).toEqual([]);
       await expect(`${JSON.stringify(contract, null, 2)}\n`)

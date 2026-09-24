@@ -122,6 +122,7 @@ export class TakeMonitor {
   private framesSampled = 0;
   private pictureChecks: "on" | "off" = "off";
   private programScene: string | null = null;
+  private recordingPath: string | null = null;
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly busy = new Set<string>();
   private releaseMeters: (() => void) | null = null;
@@ -159,6 +160,7 @@ export class TakeMonitor {
       this.closeStill(this.now());
     });
     this.listen("RecordStateChanged", (data) => {
+      if (typeof data.outputPath === "string" && data.outputPath) this.recordingPath = data.outputPath;
       if (data.outputActive === false && !this.stopExpected && data.outputState === "OBS_WEBSOCKET_OUTPUT_STOPPED") {
         this.warn("output", "The recording stopped before it was asked to");
       }
@@ -184,6 +186,11 @@ export class TakeMonitor {
   mark(name: string): void {
     this.chapters.push({ atSeconds: this.now(), name });
     this.changed();
+  }
+
+  /** The file OBS last reported for this take, from RecordStateChanged. */
+  outputPath(): string | null {
+    return this.recordingPath;
   }
 
   /** Call before stopping the recording, so the stop is not reported as a problem. */
