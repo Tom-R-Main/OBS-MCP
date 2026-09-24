@@ -14,7 +14,7 @@ function registry(filter?: ToolFilter) {
   return initialize(
     new McpServer({ name: "obs-mcp-test", version: "0.0.0" }),
     new OBSWebSocketClient("ws://127.0.0.1:1"),
-    filter,
+    { filter, resourcesAndPrompts: false },
   );
 }
 

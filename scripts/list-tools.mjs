@@ -22,7 +22,7 @@ export async function listTools(root) {
   const client = new Client({ name: "obs-mcp-tool-inspector", version });
 
   const { initialize } = await import(pathToFileURL(resolve(root, "build/tools/index.js")).href);
-  await initialize(server, mockClient);
+  await initialize(server, mockClient, { resourcesAndPrompts: false });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
