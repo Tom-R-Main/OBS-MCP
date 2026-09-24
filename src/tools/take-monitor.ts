@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { writeFile } from "node:fs/promises";
 import { EventSubscription, type OBSWebSocketClient } from "../client.js";
 import { logger } from "../logger.js";
-import { decodePpm, isBlank, isSameFrame, type FrameSample } from "./frame-sample.js";
+import { decodePpm, isBlank, StillTracker } from "./frame-sample.js";
 import { recordedTracks } from "./preflight.js";
 
 type JsonObject = Record<string, unknown>;
@@ -54,7 +54,8 @@ export type TakeMonitorOptions = {
   stillAfterSeconds?: number;
 };
 
-const SAMPLE_WIDTH = 32;
+/** Wide enough to see streaming text in a 1080p screen capture; about 15 KB per sample. */
+const SAMPLE_WIDTH = 96;
 const MAX_EVENTS = 500;
 const MAX_WARNINGS_PER_KIND = 20;
 /** Two black samples in a row, so a fade or cut through black is not flagged. */
@@ -93,7 +94,7 @@ export function activeTake(client: OBSWebSocketClient): TakeMonitor | undefined 
 
 /**
  * Watches OBS while a take records: audio levels on recorded tracks from
- * InputVolumeMeters, skipped frames from GetStats, and a 32px sample of the
+ * InputVolumeMeters, skipped frames from GetStats, and a 96px sample of the
  * program output for black or unchanging picture. Start it once the
  * recording is confirmed, so its clock matches the file's.
  */
@@ -115,10 +116,9 @@ export class TakeMonitor {
   private lastFrameWarningMs = new Map<string, number>();
   private readonly stills: TakeSpan[] = [];
   private readonly blanks: TakeSpan[] = [];
-  private stillSince: number | null = null;
+  private stillTracker: StillTracker;
   private blankSince: number | null = null;
   private blankRun = 0;
-  private previousSample: FrameSample | null = null;
   private framesSampled = 0;
   private pictureChecks: "on" | "off" = "off";
   private programScene: string | null = null;
@@ -137,6 +137,7 @@ export class TakeMonitor {
       statsIntervalMs: options.statsIntervalMs ?? 2_000,
       stillAfterSeconds: options.stillAfterSeconds ?? 3,
     };
+    this.stillTracker = this.newStillTracker();
   }
 
   /** Seconds since the monitor started. */
@@ -156,7 +157,6 @@ export class TakeMonitor {
     });
     this.listen("CurrentProgramSceneChanged", (data) => {
       if (typeof data.sceneName === "string") this.programScene = data.sceneName;
-      this.previousSample = null;
       this.closeStill(this.now());
     });
     this.listen("RecordStateChanged", (data) => {
@@ -230,7 +230,11 @@ export class TakeMonitor {
       chapters: [...this.chapters],
       audio: [...this.levels.values()].sort((a, b) => b.peakDb - a.peakDb),
       frames: { ...this.frames },
-      stills: [...this.stills, ...this.openSpan(this.stillSince)],
+      stills: [
+        ...this.stills,
+        ...this.stillTracker.spans.map(({ start, end }) => ({ startSeconds: round(start), endSeconds: round(end) })),
+        ...this.openSpan(this.stillTracker.stillSince()),
+      ],
       blanks: [...this.blanks, ...this.openSpan(this.blankSince)],
       framesSampled: this.framesSampled,
       pictureChecks: this.pictureChecks,
@@ -391,19 +395,18 @@ export class TakeMonitor {
       this.closeBlank(at);
     }
 
-    if (this.previousSample && isSameFrame(this.previousSample, sample)) {
-      this.stillSince ??= round(at - this.options.sampleIntervalMs / 1000);
-    } else {
-      this.closeStill(at);
-    }
-    this.previousSample = sample;
+    this.stillTracker.push(at, sample.luma);
   }
 
+  /** The same rule as obs-trim-take, so a spinner or shimmer still counts as still. */
+  private newStillTracker(): StillTracker {
+    return new StillTracker(this.options.stillAfterSeconds);
+  }
+
+  /** Ends the current still stretch, e.g. on a scene switch, and starts tracking afresh. */
   private closeStill(at: number): void {
-    if (this.stillSince !== null && at - this.stillSince >= this.options.stillAfterSeconds) {
-      this.stills.push({ startSeconds: this.stillSince, endSeconds: at });
-    }
-    this.stillSince = null;
+    for (const { start, end } of this.stillTracker.finish(at)) this.stills.push({ startSeconds: round(start), endSeconds: round(end) });
+    this.stillTracker = this.newStillTracker();
   }
 
   private closeBlank(at: number): void {
