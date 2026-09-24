@@ -6,7 +6,7 @@
 import { accessSync, constants, statSync } from "node:fs";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { RequestBatchExecutionType, type OBSWebSocketClient } from "../client.js";
+import type { OBSWebSocketClient } from "../client.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
 
 export type PreflightStatus = "pass" | "warn" | "fail" | "unknown";
@@ -175,13 +175,10 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Pr
     .filter((name): name is string => typeof name === "string");
   // One round trip for every input's mute state and tracks. Video-only inputs
   // fail both requests, which the batch reports without failing the rest.
-  const results = await client.sendBatch(
-    names.flatMap((inputName) => [
-      { requestType: "GetInputMute", requestData: { inputName } },
-      { requestType: "GetInputAudioTracks", requestData: { inputName } },
-    ]),
-    { executionType: RequestBatchExecutionType.Parallel },
-  );
+  const results = await client.sendBatch(names.flatMap((inputName) => [
+    { requestType: "GetInputMute", requestData: { inputName } },
+    { requestType: "GetInputAudioTracks", requestData: { inputName } },
+  ]));
   const audible: string[] = [];
 
   names.forEach((inputName, index) => {
@@ -221,7 +218,6 @@ async function checkSceneItems(client: OBSWebSocketClient): Promise<PreflightChe
   const missing = visible.filter((item) => !isObject(item.sceneItemTransform) && typeof item.sceneItemId === "number");
   const looked = await client.sendBatch(
     missing.map(({ sceneItemId }) => ({ requestType: "GetSceneItemTransform", requestData: { sceneName, sceneItemId } })),
-    { executionType: RequestBatchExecutionType.Parallel },
   );
   const transforms = new Map(missing.map((item, index) => {
     const result = looked[index];

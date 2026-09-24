@@ -142,15 +142,16 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     const batch = async (args: JsonObject) => await client!.callTool({ name: "obs-batch", arguments: args }) as CallToolResult;
 
     // A missing input fails on its own without failing the rest.
-    const parallel = await batch({
-      executionType: "parallel",
+    const realtime = await batch({
       requests: [
         { requestType: "GetVersion" },
         { requestType: "GetStats" },
         { requestType: "GetInputMute", requestData: { inputName: "obs-mcp-no-such-input" } },
       ],
     });
-    expect(parallel.structuredContent).toMatchObject({ succeeded: 2, failed: 1, skipped: 0 });
+    expect(realtime.structuredContent).toMatchObject({ succeeded: 2, failed: 1, skipped: 0 });
+    const results = (realtime.structuredContent as { results: { requestType: string; ok: boolean }[] }).results;
+    expect(results.map(({ requestType, ok }) => `${requestType}:${ok}`)).toEqual(["GetVersion:true", "GetStats:true", "GetInputMute:false"]);
 
     const started = Date.now();
     const framed = await batch({

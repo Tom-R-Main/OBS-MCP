@@ -74,15 +74,16 @@ describe("obs-batch", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(110);
   });
 
-  it("refuses unknown requests and Sleep in parallel batches without contacting OBS", async () => {
+  it("refuses unknown requests and the parallel mode without contacting OBS", async () => {
     const unknown = await harness.call("obs-batch", { requests: [{ requestType: "LaunchRocket" }] });
-    const parallelSleep = await harness.call("obs-batch", {
+    // obs-websocket 5.7 deadlocks on concurrent parallel batches, so the mode is not offered.
+    const parallel = await harness.call("obs-batch", {
       executionType: "parallel",
-      requests: [{ requestType: "Sleep", requestData: { sleepMillis: 10 } }],
+      requests: [{ requestType: "GetCurrentProgramScene" }],
     });
 
     expect(resultText(unknown)).toContain("Unknown OBS WebSocket request: LaunchRocket");
-    expect(resultText(parallelSleep)).toContain("Sleep only works in serial");
+    expect(parallel.isError).toBe(true);
     expect(batchFrames()).toHaveLength(0);
   });
 });
