@@ -167,6 +167,14 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(60);
   });
 
+  it("snapshots the program scene and finds nothing to restore", async () => {
+    const snapshot = await call("obs-snapshot", { label: "live test" });
+    const restore = await call("obs-restore", { snapshotId: snapshot.snapshotId, dryRun: true });
+
+    expect(restore).toMatchObject({ changes: [], applied: false });
+    expect(Array.isArray(snapshot.inputs) && snapshot.inputs.length).toBeGreaterThan(0);
+  });
+
   it("reads status, scene, and scene item resources from real OBS", async () => {
     if (!client) throw new Error("Live MCP client is not connected");
     const read = async (uri: string) => {

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 165 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 167 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -106,7 +106,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 165 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 167 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -118,6 +118,7 @@ The 165 tools are organized around the OBS protocol rather than a smaller opinio
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
 - `obs-take-start`, `obs-take-mark`, `obs-take-status`, and `obs-take-stop` for a watched recording of any length, with a chapter per step (see [Watching a take](#watching-a-take))
 - `obs-trim-take`, which cuts dead time out of a recording, and `obs-contact-sheet`, which tiles frames from it into one image (see [Trimming a take](#trimming-a-take))
+- `obs-snapshot` and `obs-restore`, which save the state of inputs and scene items and later undo changes to them (see [Undoing changes](#undoing-changes))
 - `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
 - protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message, in order or one per rendered frame (so a change to two sources lands on the same frame), with `Sleep` between them. OBS's parallel mode is not offered: in obs-websocket 5.7, concurrent parallel batches deadlock its WebSocket server until OBS restarts
@@ -134,7 +135,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 |---|---|
 | `general` | status, version, statistics, hotkeys, vendor requests, custom events, sleep |
 | `scenes` | scenes, canvases, program and preview scene |
-| `scene-items` | scene items, groups, transforms, ordering, locking, blend modes |
+| `scene-items` | scene items, groups, transforms, ordering, locking, blend modes, `obs-snapshot`, and `obs-restore` |
 | `sources` | source screenshots and active state |
 | `inputs` | inputs, input settings and properties, audio, deinterlacing, and `obs-capture-window` |
 | `media` | media input playback |
@@ -147,7 +148,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `ui` | studio mode, dialogs, projectors |
 | `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
-`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (87 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 40-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (89 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 41-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
 ### Resources and prompts
 
@@ -218,6 +219,12 @@ Without `apply: true` it returns only the plan: the cuts, the new length, and th
 
 `obs-contact-sheet` tiles frames from a recording into one JPEG: one second after each chapter start by default, or at the times you give. Both tools work only on files inside OBS's recording directory, and need `ffmpeg` and `ffprobe` on `PATH`.
 
+### Undoing changes
+
+`obs-snapshot` saves the settings, mute, volume, and audio tracks of inputs, and the transform, visibility, lock, and order of scene items: by default the program scene and the inputs in it. `obs-restore` compares OBS with a snapshot and sends only what differs, in one request batch; `dryRun: true` lists the changes first. It cannot recreate a removed input or item, and leaves items added since in place; it reports both. `obs-capture-window` takes a snapshot automatically before it changes an existing capture.
+
+Snapshots are kept in the server's memory, the last 10, and are lost when it restarts. OBS's own scene collection file is not a substitute: OBS rewrites it while running.
+
 ## Troubleshooting
 
 **Tools appear, but OBS calls fail:** make sure OBS is open and its WebSocket server is enabled. The MCP process stays available while it retries the connection.
@@ -247,7 +254,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 165 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 167 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

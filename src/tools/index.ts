@@ -26,6 +26,7 @@ import * as preflight from "./preflight.js";
 import * as workflows from "./workflows.js";
 import * as takes from "./takes.js";
 import * as trim from "./trim.js";
+import * as snapshots from "./snapshots.js";
 import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import { withStructuredToolResults } from "./results.js";
@@ -52,6 +53,7 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["record", workflows],
   ["record", takes],
   ["record", trim],
+  ["scene-items", snapshots],
 ];
 
 /**
@@ -107,5 +109,6 @@ export {
   preflight,
   workflows,
   takes,
-  trim
+  trim,
+  snapshots
 };

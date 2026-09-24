@@ -4833,6 +4833,31 @@
     }
   },
   {
+    "name": "obs-restore",
+    "title": "Restore Scene State",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "snapshotId": {
+          "description": "Snapshot to restore; defaults to the most recent",
+          "type": "string"
+        },
+        "dryRun": {
+          "default": false,
+          "description": "Only list the changes",
+          "type": "boolean"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-resume-record",
     "title": "Resume Recording",
     "inputSchema": {
@@ -6730,6 +6755,45 @@
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-snapshot",
+    "title": "Snapshot Scene State",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "scenes": {
+          "description": "Scenes whose items to save",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputs": {
+          "description": "Inputs to save; defaults to the inputs in the saved scenes",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "label": {
+          "description": "A name to recognize the snapshot by",
+          "type": "string"
+        },
+        "list": {
+          "default": false,
+          "description": "List saved snapshots instead of taking one",
+          "type": "boolean"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": false
     }
   },
