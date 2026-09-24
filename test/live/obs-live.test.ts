@@ -99,6 +99,23 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     expect(record.outputActive).toEqual(expect.any(Boolean));
   });
 
+  it("runs a read-only recording preflight against real OBS", async () => {
+    const preflight = await call("obs-preflight");
+    const checks = Array.isArray(preflight.checks) ? preflight.checks : [];
+
+    expect(preflight.ready).toEqual(expect.any(Boolean));
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "connection", status: "pass" }),
+      expect.objectContaining({ id: "record-directory" }),
+      expect.objectContaining({ id: "encoder" }),
+    ]));
+    for (const check of checks) {
+      expect(check, JSON.stringify(check)).toMatchObject({
+        status: expect.stringMatching(/^(pass|warn|fail|unknown)$/),
+      });
+    }
+  });
+
   it.skipIf(!mutationsEnabled)("creates and removes one scene in the approved collection", async () => {
     const expectedCollection = process.env.OBS_MCP_LIVE_SCENE_COLLECTION;
     if (!expectedCollection) {
@@ -144,6 +161,8 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     expect(collection.currentSceneCollectionName).toBe(process.env.OBS_MCP_LIVE_SCENE_COLLECTION);
     const record = await call("obs-get-record-status");
     expect(record.outputActive, "Recording must be inactive for the live recording test").toBe(false);
+    const preflight = await call("obs-preflight");
+    expect(preflight.ready, JSON.stringify(preflight.checks)).toBe(true);
 
     const started = await call("obs-start-record");
     try {

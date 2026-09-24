@@ -22,6 +22,7 @@ import * as record from "./record.js";
 import * as ui from "./ui.js";
 import * as protocolExtensions from "./protocol-extensions.js";
 import * as protocol from "./protocol.js";
+import * as preflight from "./preflight.js";
 import { withStructuredToolResults } from "./results.js";
 
 // Export the initialization function for all tools
@@ -42,6 +43,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   ui.initialize(structuredServer, client);
   protocolExtensions.initialize(structuredServer, client);
   protocol.initialize(structuredServer, client);
+  preflight.initialize(structuredServer, client);
 }
 
 // Export tool modules
@@ -60,5 +62,6 @@ export {
   record,
   ui,
   protocolExtensions,
-  protocol
+  protocol,
+  preflight
 };

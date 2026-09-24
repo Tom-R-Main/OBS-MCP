@@ -14,6 +14,7 @@ import {
 } from "@modelcontextprotocol/client/stdio";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
+import { TOOL_COUNT } from "../support/tool-count.js";
 
 type JsonObject = Record<string, unknown>;
 type JsonRpcMessage = JsonObject & { id?: string | number };
@@ -274,8 +275,8 @@ describe("compiled stdio MCP boundary", () => {
     expect(client.getProtocolEra()).toBe("modern");
     expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
     const tools = await client.listTools();
-    expect(tools.tools).toHaveLength(155);
-    expect(new Set(tools.tools.map(({ name }) => name)).size).toBe(155);
+    expect(tools.tools).toHaveLength(TOOL_COUNT);
+    expect(new Set(tools.tools.map(({ name }) => name)).size).toBe(TOOL_COUNT);
     await waitForObsConnected(client);
 
     const versionCursor = fake.cursor();
@@ -373,7 +374,7 @@ describe("compiled stdio MCP boundary", () => {
     await client.connect(transport);
     mcpClients.push(client);
 
-    expect((await client.listTools()).tools).toHaveLength(155);
+    expect((await client.listTools()).tools).toHaveLength(TOOL_COUNT);
     const unavailable = await client.callTool({ name: "obs-get-scene-list", arguments: {} });
     expect(unavailable.isError).toBe(true);
     expect(textContent(unavailable)).toContain("Unable to connect to OBS WebSocket server");
@@ -408,7 +409,7 @@ describe("compiled stdio MCP boundary", () => {
 
     expect(client.getProtocolEra()).toBe("legacy");
     expect(client.getNegotiatedProtocolVersion()).toBe("2025-11-25");
-    expect((await client.listTools()).tools).toHaveLength(155);
+    expect((await client.listTools()).tools).toHaveLength(TOOL_COUNT);
     await waitForObsConnected(client);
     const result = await client.callTool({ name: "obs-get-version", arguments: {} });
     expect(result.isError).not.toBe(true);
@@ -439,7 +440,7 @@ describe("compiled stdio MCP boundary", () => {
     const tools = await child.response("tools");
     expect(tools).toHaveProperty("result.tools");
     const result = tools.result;
-    expect(isObject(result) && Array.isArray(result.tools) ? result.tools : []).toHaveLength(155);
+    expect(isObject(result) && Array.isArray(result.tools) ? result.tools : []).toHaveLength(TOOL_COUNT);
     expect(child.invalidStdout).toEqual([]);
     expect(child.stderr.join("")).not.toContain("Unhandled");
   });

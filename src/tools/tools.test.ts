@@ -8,6 +8,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { describe, expect, it } from "vitest";
 import { OBSWebSocketClient } from "../client.js";
 import { initialize } from "./index.js";
+import { TOOL_COUNT } from "../../test/support/tool-count.js";
 
 describe("MCP tool inventory", () => {
   it("publishes deterministic, fully annotated tools through MCP", async () => {
@@ -27,7 +28,7 @@ describe("MCP tool inventory", () => {
       const second = await client.listTools();
       const names = first.tools.map(({ name }) => name);
 
-      expect(first.tools).toHaveLength(155);
+      expect(first.tools).toHaveLength(TOOL_COUNT);
       expect(new Set(names).size).toBe(names.length);
       expect(second.tools.map(({ name }) => name)).toEqual(names);
 
@@ -80,7 +81,7 @@ describe("MCP tool inventory", () => {
 
       expect(client.getProtocolEra()).toBe("modern");
       expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28");
-      expect((await client.listTools()).tools).toHaveLength(155);
+      expect((await client.listTools()).tools).toHaveLength(TOOL_COUNT);
     } finally {
       await client.close();
       await handler.close();

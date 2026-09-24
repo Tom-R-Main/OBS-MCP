@@ -1958,6 +1958,34 @@
     }
   },
   {
+    "name": "obs-preflight",
+    "title": "Recording Preflight",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "minFreeDiskMb": {
+          "default": 1024,
+          "description": "Minimum free disk space in MB (default 1024)",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expectSilent": {
+          "default": false,
+          "description": "Treat any audible input as a failure instead of a warning",
+          "type": "boolean"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-press-input-property-button",
     "title": "Press Input Property Button",
     "inputSchema": {

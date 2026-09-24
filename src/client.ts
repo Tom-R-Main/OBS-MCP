@@ -159,6 +159,10 @@ export class OBSWebSocketClient extends EventEmitter {
   private readonly password: string | null;
   private connected = false;
   private identified = false;
+  // OBS reads output settings only when it rebuilds its outputs (restart,
+  // Settings dialog, or profile switch). A new connection usually means OBS
+  // restarted, so the flag resets on identify.
+  private outputSettingsPending = false;
   private connectionPromise: Promise<void> | null = null;
   private availableRequests: Set<string> | null = null;
   private versionInfo: VersionResponse | null = null;
@@ -200,6 +204,14 @@ export class OBSWebSocketClient extends EventEmitter {
       availableRequestCount: this.availableRequests?.size ?? null,
       versionInfo: this.versionInfo,
     };
+  }
+
+  public markOutputSettingsPending(): void {
+    this.outputSettingsPending = true;
+  }
+
+  public hasPendingOutputSettings(): boolean {
+    return this.outputSettingsPending;
   }
 
   public supportsRequest(requestType: string): boolean | null {
@@ -413,6 +425,7 @@ export class OBSWebSocketClient extends EventEmitter {
           return;
         }
         this.identified = true;
+        this.outputSettingsPending = false;
         this.emit("identified", socket);
         break;
       case OpCode.RequestResponse: {
