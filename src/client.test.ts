@@ -333,6 +333,19 @@ describe("OBSWebSocketClient high-volume events", () => {
     await vi.waitFor(() => expect(server.eventSubscriptions(2)).toBe(EventSubscription.All));
   });
 
+  it("sends a subscription added while identifying once OBS has answered", async () => {
+    const server = await createServer();
+    const client = createClient(server);
+
+    const connecting = client.connect();
+    await server.waitForFrame(({ frame }) => frame.op === OBS_OP.Identify);
+    const release = client.subscribeHighVolume(EventSubscription.InputVolumeMeters);
+    await connecting;
+
+    await vi.waitFor(() => expect(server.eventSubscriptions()).toBe(EventSubscription.All | EventSubscription.InputVolumeMeters));
+    release();
+  });
+
   it("keeps unapplied output settings flagged when OBS acknowledges a Reidentify", async () => {
     const server = await createServer();
     const client = createClient(server);

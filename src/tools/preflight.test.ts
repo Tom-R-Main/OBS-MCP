@@ -132,6 +132,26 @@ describe("obs-preflight", () => {
     expect(byId("audio")?.message).not.toContain("Camera");
   });
 
+  it("follows the tracks Simple mode records, not just track 1", async () => {
+    state.profile["SimpleOutput/RecTracks"] = "3";
+    state.inputs[0] = { inputName: "Chrome", inputKind: "screen_capture", muted: false, tracks: { 1: false, 2: true } };
+
+    const { byId } = await preflight({ expectSilent: true });
+
+    expect(byId("audio")).toMatchObject({ status: "fail", message: expect.stringContaining("Chrome (track 2)") });
+  });
+
+  it("records only track 1 in Simple mode at stream quality", async () => {
+    state.profile["SimpleOutput/RecQuality"] = "Stream";
+    state.profile["SimpleOutput/StreamEncoder"] = "apple_h264";
+    state.profile["SimpleOutput/RecTracks"] = "3";
+    state.inputs[0] = { inputName: "Chrome", inputKind: "screen_capture", muted: false, tracks: { 1: false, 2: true } };
+
+    const { byId } = await preflight({ expectSilent: true });
+
+    expect(byId("audio")?.status).toBe("pass");
+  });
+
   it("ignores unmuted inputs whose recorded tracks are disabled", async () => {
     state.profile["Output/Mode"] = "Advanced";
     state.profile["AdvOut/RecEncoder"] = "com.apple.videotoolbox.videoencoder.ave.avc";

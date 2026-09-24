@@ -11,7 +11,7 @@ import { Client, StreamableHTTPClientTransport, type CallToolResult } from "@mod
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OBSWebSocketClient } from "../client.js";
 import { FakeOBSServer } from "../../test/support/fake-obs-server.js";
-import { healthyObsState, servePreflightState } from "../../test/support/fake-obs-state.js";
+import { healthyObsState, servePreflightState, serveRecordOutput } from "../../test/support/fake-obs-state.js";
 import { initialize } from "./index.js";
 import { activeLease, claim } from "./lease.js";
 
@@ -21,12 +21,24 @@ let handler: McpHttpHandler;
 let directory: string;
 const clients: Client[] = [];
 
-/** One MCP client, named as an agent would name itself, sharing the server with the others. */
-async function agent(name: string): Promise<(tool: string, args?: Record<string, unknown>) => Promise<CallToolResult>> {
-  const client = new Client({ name, version: "1.0.0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+/**
+ * One MCP client, named as an agent would name itself, sharing the server with
+ * the others. A 2025-era client sends each request to a fresh server with no
+ * name; `declared` is the name its URL gives (?client=), which serveHttp
+ * passes to the handler as authInfo.
+ */
+async function agent(
+  name: string,
+  { era = "modern", declared }: { era?: "modern" | "legacy"; declared?: string } = {},
+): Promise<(tool: string, args?: Record<string, unknown>) => Promise<CallToolResult>> {
+  const client = new Client(
+    { name, version: "1.0.0" },
+    { versionNegotiation: { mode: era === "modern" ? { pin: "2026-07-28" } : "legacy" } },
+  );
+  const authInfo = declared ? { authInfo: { token: "", clientId: declared, scopes: [] } } : undefined;
   await client.connect(new StreamableHTTPClientTransport(
     new URL("http://obs-mcp.test/mcp"),
-    { fetch: (input, init) => handler.fetch(new Request(input, init)) },
+    { fetch: (input, init) => handler.fetch(new Request(input, init), authInfo) },
   ));
   clients.push(client);
   return async (tool, args = {}) => await client.callTool({ name: tool, arguments: args }) as CallToolResult;
@@ -43,17 +55,13 @@ beforeEach(async () => {
   servePreflightState(fakeObs, () => healthyObsState(directory));
   fakeObs.respondWith("SetCurrentProgramScene", () => ({}));
   fakeObs.respondWith("CreateRecordChapter", () => ({}));
-  fakeObs.respondWith("StartRecord", () => {
-    setTimeout(() => fakeObs.sendEvent("RecordStateChanged", { outputActive: true, outputState: "OBS_WEBSOCKET_OUTPUT_STARTED", outputPath: join(directory, "take.mp4") }), 5);
-    return {};
-  });
-  fakeObs.respondWith("StopRecord", () => ({ outputPath: join(directory, "take.mp4") }));
+  serveRecordOutput(fakeObs, () => join(directory, "take.mp4"));
   obsClient = new OBSWebSocketClient(fakeObs.url);
   handler = createMcpHandler(() => {
     const server = new McpServer({ name: "obs-mcp-test", version: "0.0.0" });
     initialize(server, obsClient, { sessionNotifications: false });
     return server;
-  }, { legacy: "reject" });
+  });
 });
 
 afterEach(async () => {
@@ -95,6 +103,34 @@ describe("control lease", () => {
     await codex("obs-claim-control");
 
     expect((await claude("obs-stop-record")).isError).toBeFalsy();
+  });
+
+  it("does not let unnamed 2025-era HTTP clients hold control or pass as the holder", async () => {
+    const a = await agent("agent-a", { era: "legacy" });
+    const b = await agent("agent-b", { era: "legacy" });
+    const named = await agent("codex", { era: "legacy", declared: "codex" });
+
+    expect(text(await a("obs-claim-control"))).toContain("did not identify itself");
+    expect(text(await named("obs-claim-control"))).toMatch(/^codex has control/);
+    expect(text(await b("obs-set-current-scene", { sceneName: "X" }))).toContain("Not changed: codex has control");
+    expect(text(await b("obs-release-control"))).toContain("Not released");
+  });
+
+  it("lets the holder see and release its control, whichever way it identifies itself", async () => {
+    const named = await agent("codex", { era: "legacy", declared: "codex" });
+    await named("obs-claim-control");
+
+    expect(text(await named("obs-control-status"))).toContain("(this client)");
+    expect(text(await named("obs-release-control"))).toBe("Released control of OBS");
+  });
+
+  it("says a take could not claim control for an unnamed client", async () => {
+    const unnamed = await agent("agent-a", { era: "legacy" });
+
+    const started = await unnamed("obs-take-start");
+
+    expect(text(started)).toContain("did not identify itself");
+    await unnamed("obs-take-stop");
   });
 
   it("expires", () => {

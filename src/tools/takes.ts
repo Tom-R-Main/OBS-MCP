@@ -59,18 +59,25 @@ export async function inspectRecording(outputPath: string, measureLoudness: bool
 
   const streams = Array.isArray(probe.streams) ? probe.streams.filter(isObject) : [];
   const format = isObject(probe.format) ? probe.format : {};
+  const duration = Number(format.duration);
+  if (!Number.isFinite(duration)) return { skipped: "ffprobe could not read the file's length; it may be incomplete" };
   const check: ClipCheck = {
-    durationSeconds: Number(format.duration),
+    durationSeconds: duration,
     audioStreams: streams.filter((stream) => stream.codec_type === "audio").length,
   };
   if (!measureLoudness || check.audioStreams === 0) return check;
 
+  // Every audio track, since a recording can write several: the loudest one counts.
   try {
-    const { stderr } = await execFileAsync("ffmpeg", [
-      "-hide_banner", "-nostats", "-i", outputPath, "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-",
-    ], { timeout: 60_000 });
-    const match = /max_volume:\s*(-?[\d.]+|-inf) dB/.exec(stderr);
-    if (match?.[1]) check.maxVolumeDb = match[1] === "-inf" ? -Infinity : Number(match[1]);
+    for (let track = 0; track < (check.audioStreams ?? 0); track += 1) {
+      const { stderr } = await execFileAsync("ffmpeg", [
+        "-hide_banner", "-nostats", "-i", outputPath, "-map", `0:a:${track}`, "-af", "volumedetect", "-f", "null", "-",
+      ], { timeout: 60_000 });
+      const match = /max_volume:\s*(-?[\d.]+|-inf) dB/.exec(stderr);
+      if (!match?.[1]) continue;
+      const level = match[1] === "-inf" ? -Infinity : Number(match[1]);
+      check.maxVolumeDb = Math.max(check.maxVolumeDb ?? -Infinity, level);
+    }
   } catch (error) {
     check.skipped = `ffmpeg loudness check failed: ${errorMessage(error)}`;
   }
@@ -92,6 +99,8 @@ export type Take = {
 };
 
 const takes = new WeakMap<OBSWebSocketClient, Take>();
+/** Clients with a take being started: preflight and the start take time, and a second start must not slip in. */
+const starting = new WeakSet<OBSWebSocketClient>();
 
 export function currentTake(client: OBSWebSocketClient): Take | undefined {
   return takes.get(client);
@@ -112,6 +121,20 @@ export async function startTake(
   const refuse = (result: CallToolResult) => ({ ok: false as const, result });
   const running = currentTake(client);
   if (running) return refuse(errorResult(`Take ${running.id} is already recording; stop it with obs-take-stop first`));
+  if (starting.has(client)) return refuse(errorResult("Another take is being started; wait for it, then stop it with obs-take-stop"));
+  starting.add(client);
+  try {
+    return await startTakeReserved(client, options);
+  } finally {
+    starting.delete(client);
+  }
+}
+
+async function startTakeReserved(
+  client: OBSWebSocketClient,
+  options: StartTakeOptions,
+): Promise<{ ok: true; take: Take } | { ok: false; result: CallToolResult }> {
+  const refuse = (result: CallToolResult) => ({ ok: false as const, result });
 
   const preflight = await runPreflight(client, { minFreeDiskMb: options.minFreeDiskMb, expectSilent: options.expectSilent });
   if (!preflight.ready) {
@@ -153,6 +176,26 @@ export async function markTake(client: OBSWebSocketClient, take: Take, name: str
   }
 }
 
+const STOP_TIMEOUT_MS = 10_000;
+
+/** Resolves with OBS's RecordStateChanged STOPPED event, or null after the timeout or cancel. */
+function recordStopped(client: OBSWebSocketClient, timeoutMs: number): { done: Promise<{ outputPath?: string } | null>; cancel(): void } {
+  let finish: (value: { outputPath?: string } | null) => void = () => undefined;
+  const done = new Promise<{ outputPath?: string } | null>((resolve) => { finish = resolve; });
+  const listener = (data: unknown) => {
+    if (!isObject(data) || data.outputState !== "OBS_WEBSOCKET_OUTPUT_STOPPED") return;
+    end(typeof data.outputPath === "string" ? { outputPath: data.outputPath } : {});
+  };
+  const timer = setTimeout(() => end(null), timeoutMs);
+  const end = (value: { outputPath?: string } | null) => {
+    clearTimeout(timer);
+    client.off("RecordStateChanged", listener);
+    finish(value);
+  };
+  client.on("RecordStateChanged", listener);
+  return { done, cancel: () => end(null) };
+}
+
 /**
  * Stops the recording, stops the monitor, checks the file, and writes the
  * take log. Never throws, so callers can stop from a finally block.
@@ -165,13 +208,19 @@ export async function stopTake(
   take.monitor.expectStop();
   let outputPath: string | undefined;
   let stopError: string | undefined;
+  // StopRecord answers before OBS has finished writing the file; wait for the
+  // STOPPED state before inspecting it.
+  const finished = recordStopped(client, STOP_TIMEOUT_MS);
   try {
     const stopped: unknown = await client.sendRequest("StopRecord");
     if (isObject(stopped) && typeof stopped.outputPath === "string") outputPath = stopped.outputPath;
   } catch (error) {
     // The recording may have stopped already; OBS reported the file when it did.
     stopError = errorMessage(error);
+    finished.cancel();
   }
+  const stoppedState = await finished.done;
+  outputPath ??= stoppedState?.outputPath;
   const summary = await take.monitor.stop();
   if (takes.get(client) === take) takes.delete(client);
   outputPath ??= take.monitor.outputPath() ?? undefined;
@@ -256,6 +305,7 @@ export const LOCKED_TOOLS: Readonly<Record<string, string>> = {
   "obs-set-record-directory": "change the recording directory",
   "obs-set-video-settings": "change the canvas and frame rate",
   "obs-set-stream-service-settings": "change the stream service",
+  "obs-set-output-settings": "change an output's settings",
 };
 
 const LOCKED_REQUESTS = new Set([
@@ -268,6 +318,7 @@ const LOCKED_REQUESTS = new Set([
   "SetRecordDirectory",
   "SetVideoSettings",
   "SetStreamServiceSettings",
+  "SetOutputSettings",
 ]);
 
 function lockedAction(name: string, args: unknown): string | undefined {
@@ -344,14 +395,19 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         const { take } = started;
         // Other clients sharing this server cannot change OBS until the take stops.
         const holder = callerName(server, ctx);
-        if (claim(client, holder, 240, `recording take ${take.id}`).ok) take.leaseHolder = holder;
+        const claimed = claim(client, holder, 240, `recording take ${take.id}`);
+        if (claimed.ok) take.leaseHolder = holder;
         const status = take.monitor.summary();
         return {
           content: [{
             type: "text",
             text: `Take ${take.id} is recording${take.locked ? " (profile and output changes locked)" : ""}. `
               + `Watching audio${status.pictureChecks === "on" ? ", frames, and picture" : " and frames"}; `
-              + "stop it with obs-take-stop",
+              + "stop it with obs-take-stop"
+              + (claimed.ok ? "" : claimed.lease
+                ? `. ${claimed.lease.holder} already has control of OBS`
+                : ". Other clients sharing this server can still change OBS: this client did not identify itself "
+                  + "(over HTTP, add ?client=<name> to the URL)"),
           }],
           structuredContent: { takeId: take.id, locked: take.locked, pictureChecks: status.pictureChecks, chapterNotes: take.chapterNotes },
         };

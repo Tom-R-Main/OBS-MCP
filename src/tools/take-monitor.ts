@@ -123,6 +123,8 @@ export class TakeMonitor {
   private pictureChecks: "on" | "off" = "off";
   private programScene: string | null = null;
   private recordingPath: string | null = null;
+  private pausedMs = 0;
+  private pausedSince: number | null = null;
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly busy = new Set<string>();
   private releaseMeters: (() => void) | null = null;
@@ -141,8 +143,15 @@ export class TakeMonitor {
   }
 
   /** Seconds since the monitor started. */
+  /** Seconds of recorded time since the take started: paused time is left out, as it is from the file. */
   now(): number {
-    return round(((this.stoppedAtMs ?? Date.now()) - this.startedAtMs) / 1000);
+    const end = this.stoppedAtMs ?? Date.now();
+    const paused = this.pausedMs + (this.pausedSince === null ? 0 : end - this.pausedSince);
+    return round((end - this.startedAtMs - paused) / 1000);
+  }
+
+  isPaused(): boolean {
+    return this.pausedSince !== null;
   }
 
   async start(): Promise<void> {
@@ -161,6 +170,12 @@ export class TakeMonitor {
     });
     this.listen("RecordStateChanged", (data) => {
       if (typeof data.outputPath === "string" && data.outputPath) this.recordingPath = data.outputPath;
+      if (data.outputState === "OBS_WEBSOCKET_OUTPUT_PAUSED" && this.pausedSince === null) {
+        this.pausedSince = Date.now();
+      } else if (data.outputState === "OBS_WEBSOCKET_OUTPUT_RESUMED" && this.pausedSince !== null) {
+        this.pausedMs += Date.now() - this.pausedSince;
+        this.pausedSince = null;
+      }
       if (data.outputActive === false && !this.stopExpected && data.outputState === "OBS_WEBSOCKET_OUTPUT_STOPPED") {
         this.warn("output", "The recording stopped before it was asked to");
       }
@@ -310,7 +325,8 @@ export class TakeMonitor {
   }
 
   private onMeters(data: JsonObject): void {
-    if (this.stoppedAtMs !== null || !Array.isArray(data.inputs)) return;
+    // While paused nothing is written to the file, so nothing heard then is in the recording.
+    if (this.stoppedAtMs !== null || this.isPaused() || !Array.isArray(data.inputs)) return;
     for (const input of data.inputs) {
       if (!isObject(input) || typeof input.inputName !== "string" || !Array.isArray(input.inputLevelsMul)) continue;
       // Each channel is [magnitude, peak, input peak]; peak is after volume and mute.
@@ -372,7 +388,7 @@ export class TakeMonitor {
   }
 
   private async samplePicture(): Promise<void> {
-    if (!this.programScene) return;
+    if (!this.programScene || this.isPaused()) return;
     const response = await this.client.sendRequest("GetSourceScreenshot", {
       sourceName: this.programScene,
       imageFormat: "ppm",

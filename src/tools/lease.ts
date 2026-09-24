@@ -27,17 +27,25 @@ const ALWAYS_ALLOWED = new Set([
 
 const UNIDENTIFIED = "an unidentified client";
 
-type RequestContext = { mcpReq?: { envelope?: Record<string, unknown> } };
+type RequestContext = {
+  mcpReq?: { envelope?: Record<string, unknown> };
+  http?: { authInfo?: { clientId?: unknown } };
+};
 
 function errorResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
 
 /**
- * The calling client's name: from the request envelope on 2026-07-28, or
- * from initialize on 2025-era sessions. Clients with the same name share a lease.
+ * The calling client's name, from the first of: the `client` parameter of
+ * the HTTP URL it connects with, the 2026-07-28 request envelope, or
+ * initialize on a 2025-era stdio session. A 2025-era client over HTTP sends
+ * each request to a fresh server without a name, so it is unidentified
+ * unless its URL names it. Clients with the same name share a lease.
  */
 export function callerName(server: McpServer, ctx: unknown): string {
+  const declared = (ctx as RequestContext | undefined)?.http?.authInfo?.clientId;
+  if (typeof declared === "string" && declared) return declared;
   const envelope = (ctx as RequestContext | undefined)?.mcpReq?.envelope;
   const info = envelope?.[CLIENT_INFO_META_KEY] as { name?: unknown } | undefined;
   if (typeof info?.name === "string" && info.name) return info.name;
@@ -55,7 +63,13 @@ export function activeLease(client: OBSWebSocketClient, now = Date.now()): Lease
 }
 
 /** Takes control for `holder`, or returns the lease that stands in the way. */
-export function claim(client: OBSWebSocketClient, holder: string, minutes: number, reason: string): { ok: true; lease: Lease } | { ok: false; lease: Lease } {
+export function isIdentified(holder: string): boolean {
+  return holder !== UNIDENTIFIED;
+}
+
+/** Takes control for `holder`, or returns the lease that stands in the way. An unidentified client cannot hold control. */
+export function claim(client: OBSWebSocketClient, holder: string, minutes: number, reason: string): { ok: true; lease: Lease } | { ok: false; lease?: Lease } {
+  if (!isIdentified(holder)) return { ok: false };
   const current = activeLease(client);
   if (current && current.holder !== holder) return { ok: false, lease: current };
   const now = Date.now();
@@ -97,8 +111,9 @@ export function withControlLease(server: McpServer, client: OBSWebSocketClient):
           const guarded = async (...callbackArgs: unknown[]) => {
             const lease = activeLease(client);
             if (lease) {
+              // An unidentified caller can never be the holder, so it is always refused.
               const caller = callerName(target, callbackArgs.at(-1));
-              if (caller !== lease.holder) {
+              if (!isIdentified(caller) || caller !== lease.holder) {
                 return errorResult(`Not changed: ${describe(lease)}. Ask them to call obs-release-control, `
                   + "or wait. Reading OBS and stopping outputs still work");
               }
@@ -131,7 +146,12 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     async ({ minutes, reason }, ctx): Promise<CallToolResult> => {
       const holder = callerName(server, ctx);
       const result = claim(client, holder, minutes, reason ?? "");
-      if (!result.ok) return errorResult(`Not claimed: ${describe(result.lease)}`);
+      if (!result.ok) {
+        return errorResult(result.lease
+          ? `Not claimed: ${describe(result.lease)}`
+          : "Not claimed: this client did not identify itself. Over HTTP, connect with a name in the URL, "
+            + "e.g. http://127.0.0.1:<port>/mcp?client=codex");
+      }
       return {
         content: [{ type: "text", text: `${describe(result.lease)}. Release it with obs-release-control` }],
         structuredContent: { ...result.lease },
@@ -147,7 +167,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       inputSchema: z.object({}),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async (ctx): Promise<CallToolResult> => {
+    async (_args, ctx): Promise<CallToolResult> => {
       const holder = callerName(server, ctx);
       const current = activeLease(client);
       if (release(client, holder)) return { content: [{ type: "text", text: "Released control of OBS" }] };
@@ -163,7 +183,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       inputSchema: z.object({}),
       annotations: READ_ONLY_TOOL,
     },
-    async (ctx): Promise<CallToolResult> => {
+    async (_args, ctx): Promise<CallToolResult> => {
       const lease = activeLease(client);
       const caller = callerName(server, ctx);
       return {

@@ -251,6 +251,8 @@ export class OBSWebSocketClient extends EventEmitter {
   private readonly pendingRequests = new Map<string, PendingRequest>();
   // How many callers want each high-volume subscription bit.
   private readonly highVolumeCounts = new Map<number, number>();
+  // The subscriptions OBS was last told about.
+  private sentSubscriptions: number = EventSubscription.All;
 
   constructor(url = "ws://localhost:4455", password: string | null = null) {
     super();
@@ -323,6 +325,7 @@ export class OBSWebSocketClient extends EventEmitter {
     const socket = this.ws;
     if (eventSubscriptions === before || !this.isConnected() || !socket || socket.readyState !== WebSocket.OPEN) return;
     try {
+      this.sentSubscriptions = eventSubscriptions;
       socket.send(JSON.stringify({ op: OpCode.Reidentify, d: { eventSubscriptions } }));
     } catch (error) {
       logger.error(`Unable to change OBS event subscriptions: ${asError(error).message}`);
@@ -595,8 +598,12 @@ export class OBSWebSocketClient extends EventEmitter {
         }
         // OBS answers Reidentify with Identified too; only a new session means
         // OBS may have restarted and rebuilt its outputs.
-        if (!this.identified) this.outputSettingsPending = false;
-        this.identified = true;
+        if (!this.identified) {
+          this.outputSettingsPending = false;
+          this.identified = true;
+          // A subscription added while Identify was in flight is not in what OBS was sent.
+          this.reidentifyIfChanged(this.sentSubscriptions);
+        }
         this.emit("identified", socket);
         break;
       case OpCode.RequestResponse: {
@@ -679,7 +686,7 @@ export class OBSWebSocketClient extends EventEmitter {
       op: OpCode.Identify,
       d: {
         rpcVersion: hello.rpcVersion,
-        eventSubscriptions: this.eventSubscriptions(),
+        eventSubscriptions: this.sentSubscriptions = this.eventSubscriptions(),
         ...(authentication ? { authentication } : {}),
       },
     };

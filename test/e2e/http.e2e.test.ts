@@ -80,6 +80,14 @@ describe("compiled HTTP server", () => {
 
     const codex = await agent(url, "codex-mcp-client");
     const claude = await agent(url, "claude-code");
+    // A 2025-era client over HTTP is named by its URL.
+    const legacy = new Client({ name: "legacy", version: "1.0.0" }, { versionNegotiation: { mode: "legacy" } });
+    await legacy.connect(new StreamableHTTPClientTransport(new URL(`${url}?client=codex-legacy`)));
+    clients.push(legacy);
+    expect(text(await legacy.callTool({ name: "obs-control-status", arguments: {} }) as CallToolResult))
+      .toContain("any client may change OBS");
+    expect(text(await legacy.callTool({ name: "obs-claim-control", arguments: {} }) as CallToolResult)).toMatch(/^codex-legacy has control/);
+    await legacy.callTool({ name: "obs-release-control", arguments: {} });
     await vi.waitFor(async () => expect(text(await claude("obs-get-status"))).toContain('"connected": true'), { timeout: 3_000 });
 
     await codex("obs-claim-control", { reason: "recording" });
@@ -98,6 +106,7 @@ describe("compiled HTTP server", () => {
     const port = new URL(url).port;
 
     expect(await rawPost(url, { host: "evil.example", authorization: "Bearer local-secret" })).toBe(403);
+    expect(await rawPost(url, { host: `127.0.0.1:${port}`, origin: "https://evil.example", authorization: "Bearer local-secret" })).toBe(403);
     expect(await rawPost(url, { host: `127.0.0.1:${port}` })).toBe(401);
     expect(await rawPost(url, { host: `127.0.0.1:${port}`, authorization: "Bearer wrong-secret!" })).toBe(401);
     expect(await rawPost(url.replace("/mcp", "/other"), { host: `127.0.0.1:${port}` })).toBe(404);

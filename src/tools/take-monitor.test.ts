@@ -194,6 +194,21 @@ describe("TakeMonitor", () => {
     expect(second.summary().warnings).toEqual([]);
   });
 
+  it("leaves paused time out of take times, and ignores audio while paused", async () => {
+    const take = await startMonitor();
+    fakeObs.sendEvent("RecordStateChanged", { outputActive: true, outputState: "OBS_WEBSOCKET_OUTPUT_PAUSED" });
+    await vi.waitFor(() => expect(take.isPaused()).toBe(true));
+    meters([{ inputName: "Chrome", peak: 0.5 }]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    fakeObs.sendEvent("RecordStateChanged", { outputActive: true, outputState: "OBS_WEBSOCKET_OUTPUT_RESUMED" });
+    await vi.waitFor(() => expect(take.isPaused()).toBe(false));
+
+    const summary = await take.stop();
+
+    expect(summary.durationSeconds).toBeLessThan(0.25);
+    expect(summary.warnings.filter(({ kind }) => kind === "audio")).toEqual([]);
+  });
+
   it("writes a take log next to the recording with chapters and without -Infinity", async () => {
     const take = await startMonitor();
     take.mark("Intro");

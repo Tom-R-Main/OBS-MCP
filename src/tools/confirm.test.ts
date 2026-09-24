@@ -120,6 +120,37 @@ describe("live action confirmation", () => {
     expect(sent("StopStream")).toBe(false);
   });
 
+  it("asks before stopping or toggling any output, which can be the stream or the recording", async () => {
+    const questions: string[] = [];
+    const { call } = await start({ confirmLive: true, onElicit: (message) => {
+      questions.push(message);
+      return { action: "decline" };
+    } });
+
+    await call("obs-stop-output", { outputName: "simple_stream" });
+    await call("obs-call-request", { requestType: "ToggleOutput", requestData: { outputName: "adv_file_output" } });
+
+    expect(questions).toEqual([
+      "Stop the output simple_stream? If it is the stream or the recording, this ends it.",
+      "Toggle the output adv_file_output? If it is the stream or the recording, this can end it.",
+    ]);
+    expect(sent("StopOutput")).toBe(false);
+  });
+
+  it("asks the user even when the model passes confirm: true, if the client can ask", async () => {
+    const questions: string[] = [];
+    const { call } = await start({ confirmLive: true, onElicit: (message) => {
+      questions.push(message);
+      return { action: "decline" };
+    } });
+
+    const result = await call("obs-stop-stream", { confirm: true });
+
+    expect(questions).toEqual(["Stop the live stream?"]);
+    expect(resultText(result)).toContain("Cancelled");
+    expect(sent("StopStream")).toBe(false);
+  });
+
   it("confirms through the 2026-07-28 input_required round trip", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fakeObs = await FakeOBSServer.start();

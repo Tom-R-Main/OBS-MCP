@@ -84,3 +84,25 @@ export function servePreflightState(fakeObs: FakeOBSServer, getState: () => Fake
     })),
   }));
 }
+
+/**
+ * Answers StartRecord and StopRecord the way OBS does: each returns at once,
+ * and the RecordStateChanged event that confirms it follows shortly after.
+ */
+export function serveRecordOutput(fakeObs: FakeOBSServer, outputPath: () => string): void {
+  const later = (outputState: string, outputActive: boolean) => setTimeout(() => {
+    try {
+      fakeObs.sendEvent("RecordStateChanged", { outputActive, outputState, outputPath: outputPath() });
+    } catch {
+      // The connection closed first.
+    }
+  }, 5);
+  fakeObs.respondWith("StartRecord", () => {
+    later("OBS_WEBSOCKET_OUTPUT_STARTED", true);
+    return {};
+  });
+  fakeObs.respondWith("StopRecord", () => {
+    later("OBS_WEBSOCKET_OUTPUT_STOPPED", false);
+    return { outputPath: outputPath() };
+  });
+}

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSRequestError, OBS_OP } from "../../test/support/fake-obs-server.js";
-import { healthyObsState, servePreflightState, type FakeObsState } from "../../test/support/fake-obs-state.js";
+import { healthyObsState, servePreflightState, serveRecordOutput, type FakeObsState } from "../../test/support/fake-obs-state.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
 
 function hasFfmpeg(): boolean {
@@ -50,15 +50,7 @@ async function startHarness(platform = "macos"): Promise<void> {
   harness = await startMcpHarness({ platform });
   servePreflightState(harness.fakeObs, () => state);
   const { fakeObs } = harness;
-  fakeObs.respondWith("StartRecord", () => {
-    setTimeout(() => fakeObs.sendEvent("RecordStateChanged", {
-      outputActive: true,
-      outputState: "OBS_WEBSOCKET_OUTPUT_STARTED",
-      outputPath: clipPath,
-    }), 5);
-    return {};
-  });
-  fakeObs.respondWith("StopRecord", () => ({ outputPath: clipPath }));
+  serveRecordOutput(fakeObs, () => clipPath);
   fakeObs.respondWith("CreateRecordChapter", () => ({}));
 }
 
@@ -189,6 +181,16 @@ describe("obs-record-clip", () => {
       chapters: [{ name: "Start" }],
       warnings: [{ kind: "audio" }],
     });
+  });
+
+  it("refuses a chapter at or after the end, which would keep it recording", async () => {
+    await startHarness();
+
+    const result = await harness.call("obs-record-clip", { durationSeconds: 5, chapters: [{ atSeconds: 3600, name: "Late" }] });
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain('"Late" start at or after the 5s clip ends');
+    expect(requestTypes()).not.toContain("StartRecord");
   });
 
   it("rejects clips longer than a client timeout allows", async () => {

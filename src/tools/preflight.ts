@@ -158,9 +158,26 @@ async function checkEncoder(client: OBSWebSocketClient): Promise<PreflightCheck[
   return checks;
 }
 
+/**
+ * The audio tracks the recording writes, as OBS's frontend chooses them:
+ * Simple mode writes SimpleOutput/RecTracks unless it records at stream
+ * quality or to FLV (track 1 only); Advanced mode writes AdvOut/RecTracks,
+ * or AdvOut/FFAudioMixes when it records through FFmpeg.
+ */
 export async function recordedTracks(client: OBSWebSocketClient): Promise<number[]> {
-  if (await profileParameter(client, "Output", "Mode") !== "Advanced") return [1];
-  const mask = Number(await profileParameter(client, "AdvOut", "RecTracks") ?? "1");
+  const mode = await profileParameter(client, "Output", "Mode") ?? "Simple";
+  let mask: number;
+  if (mode === "Advanced") {
+    const ffmpeg = await profileParameter(client, "AdvOut", "RecType") === "FFmpeg";
+    mask = Number(await profileParameter(client, "AdvOut", ffmpeg ? "FFAudioMixes" : "RecTracks") ?? "1");
+  } else {
+    const [quality, format] = await Promise.all([
+      profileParameter(client, "SimpleOutput", "RecQuality"),
+      profileParameter(client, "SimpleOutput", "RecFormat2"),
+    ]);
+    if (quality === "Stream" || format === "flv") return [1];
+    mask = Number(await profileParameter(client, "SimpleOutput", "RecTracks") ?? "1");
+  }
   const tracks = [1, 2, 3, 4, 5, 6].filter((track) => (mask & (1 << (track - 1))) !== 0);
   return tracks.length > 0 ? tracks : [1];
 }

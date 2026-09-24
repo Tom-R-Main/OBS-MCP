@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import crypto from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
@@ -39,6 +39,8 @@ export type Snapshot = {
   id: string;
   /** The OBS WebSocket URL the snapshot was taken from. */
   obsUrl?: string;
+  /** Taken automatically before a change, not by a user. */
+  auto?: boolean;
   label?: string;
   takenAt: string;
   inputs: InputState[];
@@ -48,8 +50,11 @@ export type Snapshot = {
 /** A change obs-restore would make, and the request that makes it. */
 export type RestoreChange = { target: string; field: string; request: BatchRequest };
 
-/** Kept on disk across every OBS instance, newest last. */
+/** Kept on disk across every OBS instance, newest last: snapshots users take, and automatic ones. */
 const MAX_SNAPSHOTS = 20;
+const MAX_AUTO_SNAPSHOTS = 10;
+const LOCK_WAIT_MS = 2_000;
+const LOCK_STALE_MS = 10_000;
 const SNAPSHOT_FILE = "snapshots.json";
 
 /** The transform fields SetSceneItemTransform accepts; the rest are computed by OBS. */
@@ -72,6 +77,34 @@ function errorResult(text: string): CallToolResult {
 }
 
 /** Deep equality for JSON values, with a tolerance for floating-point numbers. */
+/**
+ * OBS keeps transforms as 32-bit floats, so 100.1 reads back as 100.09999847.
+ * Two values match when they are the same 32-bit float.
+ */
+export function sameFloat32(a: unknown, b: unknown): boolean {
+  if (typeof a === "number" && typeof b === "number") return Math.fround(a) === Math.fround(b) || Math.abs(a - b) < 1e-6;
+  return same(a, b);
+}
+
+/** OBS rounds scene item positions to half a pixel (204.37 reads back as 204.5, observed on OBS 32.2.2). */
+const POSITION_FIELDS = new Set(["positionX", "positionY"]);
+const toHalfPixel = (value: number) => Math.round(value * 2) / 2;
+
+/**
+ * Whether two transform values are the same once OBS stores them: positions
+ * on the same half pixel, other numbers as the same 32-bit float. A real
+ * half-pixel move (204 to 204.5) still counts as a difference.
+ */
+export function sameTransformValue(key: string, a: unknown, b: unknown): boolean {
+  if (POSITION_FIELDS.has(key) && typeof a === "number" && typeof b === "number") return toHalfPixel(a) === toHalfPixel(b);
+  return sameFloat32(a, b);
+}
+
+export function sameTransform(a: JsonObject, b: JsonObject): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every((key) => sameTransformValue(key, a[key], b[key]));
+}
+
 export function same(a: unknown, b: unknown): boolean {
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 1e-6;
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((value, index) => same(value, b[index]));
@@ -96,21 +129,81 @@ function snapshotFile(): string {
 }
 
 function loadAll(): Snapshot[] {
+  const path = snapshotFile();
+  let text: string;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(snapshotFile(), "utf8"));
-    return Array.isArray(parsed) ? parsed.filter((entry): entry is Snapshot => isObject(entry) && typeof entry.id === "string") : [];
+    text = readFileSync(path, "utf8");
   } catch {
+    return [];
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new Error("not a list");
+    return parsed.filter((entry): entry is Snapshot => isObject(entry) && typeof entry.id === "string");
+  } catch (error) {
+    // Keep the unreadable file instead of letting the next save replace the whole history.
+    const backup = `${path}.unreadable-${Date.now()}`;
+    try {
+      renameSync(path, backup);
+      logger.error(`${path} could not be read (${error instanceof Error ? error.message : String(error)}); moved it to ${backup}`);
+    } catch {
+      // Another server moved it first.
+    }
     return [];
   }
 }
 
-function saveAll(list: Snapshot[]): void {
+/** Automatic snapshots (taken before a change) are capped separately, so they never push out ones a user took. */
+function prune(list: Snapshot[]): Snapshot[] {
+  const autoKept = new Set(list.filter(({ auto }) => auto).slice(-MAX_AUTO_SNAPSHOTS));
+  const userKept = new Set(list.filter(({ auto }) => !auto).slice(-MAX_SNAPSHOTS));
+  return list.filter((snapshot) => autoKept.has(snapshot) || userKept.has(snapshot));
+}
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Runs `change` with the snapshot file locked, so two server processes saving
+ * at once cannot lose each other's snapshot. A lock left by a crashed process
+ * is broken after LOCK_STALE_MS.
+ */
+function withFileLock(change: () => void): void {
+  const lock = `${snapshotFile()}.lock`;
+  mkdirSync(stateDirectory(), { recursive: true, mode: 0o700 });
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      closeSync(openSync(lock, "wx", 0o600));
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { force: true });
+      } catch {
+        // Released meanwhile.
+      }
+      if (Date.now() > deadline) throw new Error(`the snapshot file is locked by another process (${lock})`);
+      sleepSync(25);
+    }
+  }
+  try {
+    change();
+  } finally {
+    rmSync(lock, { force: true });
+  }
+}
+
+function saveSnapshot(snapshot: Snapshot): void {
   const path = snapshotFile();
   try {
-    mkdirSync(stateDirectory(), { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(list.slice(-MAX_SNAPSHOTS), null, 2)}\n`, { mode: 0o600 });
-    renameSync(temporary, path);
+    withFileLock(() => {
+      const list = prune([...loadAll(), snapshot]);
+      const temporary = `${path}.${process.pid}.tmp`;
+      writeFileSync(temporary, `${JSON.stringify(list, null, 2)}\n`, { mode: 0o600 });
+      renameSync(temporary, path);
+    });
   } catch (error) {
     logger.error(`Could not save snapshots to ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -183,7 +276,7 @@ export async function readInputs(client: OBSWebSocketClient, inputNames: string[
  */
 export async function takeSnapshot(
   client: OBSWebSocketClient,
-  options: { scenes?: string[]; inputs?: string[]; label?: string },
+  options: { scenes?: string[]; inputs?: string[]; label?: string; auto?: boolean },
 ): Promise<Snapshot> {
   let scenes = options.scenes;
   if (!scenes && !options.inputs) {
@@ -203,12 +296,13 @@ export async function takeSnapshot(
   const snapshot: Snapshot = {
     id: crypto.randomUUID().slice(0, 8),
     obsUrl: client.getConnectionStatus().url,
+    ...(options.auto ? { auto: true } : {}),
     ...(options.label ? { label: options.label } : {}),
     takenAt: new Date().toISOString(),
     inputs: await readInputs(client, inputNames),
     items,
   };
-  saveAll([...loadAll(), snapshot]);
+  saveSnapshot(snapshot);
   return snapshot;
 }
 
@@ -218,12 +312,17 @@ export async function planRestore(
   snapshot: Snapshot,
 ): Promise<{ changes: RestoreChange[]; missing: string[] }> {
   const sceneNames = [...new Set(snapshot.items.map(({ sceneName }) => sceneName))];
-  const [currentItems, currentInputs] = await Promise.all([
-    readItems(client, sceneNames).catch(() => [] as ItemState[]),
+  // Read each scene on its own, so one deleted scene does not hide the others.
+  const [perScene, currentInputs] = await Promise.all([
+    Promise.all(sceneNames.map((sceneName) => readItems(client, [sceneName]).then((items) => ({ sceneName, items }), () => ({ sceneName, items: null })))),
     readInputs(client, snapshot.inputs.map(({ inputName }) => inputName)),
   ]);
+  const readableScenes = perScene.filter(({ items }) => items !== null).map(({ sceneName }) => sceneName);
+  const currentItems = perScene.flatMap(({ items }) => items ?? []);
   const changes: RestoreChange[] = [];
-  const missing: string[] = [];
+  const missing: string[] = perScene
+    .filter(({ items }) => items === null)
+    .map(({ sceneName }) => `scene ${sceneName} no longer exists; its items were not restored`);
 
   for (const saved of snapshot.inputs) {
     const current = currentInputs.find(({ inputName }) => inputName === saved.inputName);
@@ -248,7 +347,7 @@ export async function planRestore(
     }
   }
 
-  for (const saved of snapshot.items) {
+  for (const saved of snapshot.items.filter(({ sceneName }) => readableScenes.includes(sceneName))) {
     const current = currentItems.find(({ sceneName, sceneItemId }) => sceneName === saved.sceneName && sceneItemId === saved.sceneItemId);
     const target = `${saved.sceneName} › ${saved.sourceName} (#${saved.sceneItemId})`;
     if (!current) {
@@ -256,7 +355,7 @@ export async function planRestore(
       continue;
     }
     const selector = { sceneName: saved.sceneName, sceneItemId: saved.sceneItemId };
-    if (!same(saved.transform, current.transform)) {
+    if (!sameTransform(saved.transform, current.transform)) {
       changes.push({ target, field: "transform", request: { requestType: "SetSceneItemTransform", requestData: { ...selector, sceneItemTransform: saved.transform } } });
     }
     if (saved.enabled !== current.enabled) {
@@ -267,22 +366,33 @@ export async function planRestore(
     }
   }
 
-  // Reorder last, bottom to top, so earlier moves do not shift later ones.
-  const moved = snapshot.items
-    .filter((saved) => {
-      const current = currentItems.find(({ sceneName, sceneItemId }) => sceneName === saved.sceneName && sceneItemId === saved.sceneItemId);
-      return current && current.index !== saved.index;
-    })
-    .sort((a, b) => a.index - b.index);
-  for (const saved of moved) {
-    changes.push({
-      target: `${saved.sceneName} › ${saved.sourceName} (#${saved.sceneItemId})`,
-      field: `order (to ${saved.index})`,
-      request: { requestType: "SetSceneItemIndex", requestData: { sceneName: saved.sceneName, sceneItemId: saved.sceneItemId, sceneItemIndex: saved.index } },
+  // Order last. The saved items that survive go back into the positions they
+  // occupy now, in their saved order, so items added since keep their place.
+  // Moving every item of the scene to its final index, bottom to top, gives
+  // that order whatever moves OBS makes along the way.
+  for (const sceneName of readableScenes) {
+    const now = currentItems.filter((item) => item.sceneName === sceneName).sort((a, b) => a.index - b.index);
+    const survivors = snapshot.items
+      .filter((saved) => saved.sceneName === sceneName && now.some(({ sceneItemId }) => sceneItemId === saved.sceneItemId))
+      .sort((a, b) => a.index - b.index);
+    const survivorIds = new Set(survivors.map(({ sceneItemId }) => sceneItemId));
+    let next = 0;
+    const target = now.map((item) => {
+      if (!survivorIds.has(item.sceneItemId)) return item;
+      const wanted = survivors[next++]!;
+      return now.find(({ sceneItemId }) => sceneItemId === wanted.sceneItemId)!;
+    });
+    if (target.every((item, index) => item.sceneItemId === now[index]!.sceneItemId)) continue;
+    target.forEach((item, index) => {
+      changes.push({
+        target: `${sceneName} › ${item.sourceName} (#${item.sceneItemId})`,
+        field: `order (to ${index})`,
+        request: { requestType: "SetSceneItemIndex", requestData: { sceneName, sceneItemId: item.sceneItemId, sceneItemIndex: index } },
+      });
     });
   }
 
-  for (const sceneName of sceneNames) {
+  for (const sceneName of readableScenes) {
     const savedIds = new Set(snapshot.items.filter((item) => item.sceneName === sceneName).map(({ sceneItemId }) => sceneItemId));
     for (const item of currentItems.filter((current) => current.sceneName === sceneName && !savedIds.has(current.sceneItemId))) {
       missing.push(`${sceneName} › ${item.sourceName} (#${item.sceneItemId}) was added since; it is left in place`);

@@ -7,7 +7,7 @@ import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { BatchRequest, BatchResult, OBSWebSocketClient } from "../client.js";
 import { withoutAudioOnly } from "./audio-only.js";
-import { readInputs, readItems, same, takeSnapshot, type InputState, type ItemState } from "./snapshots.js";
+import { readInputs, readItems, same, sameTransformValue, takeSnapshot, type InputState, type ItemState } from "./snapshots.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -74,6 +74,7 @@ function toDb(multiplier: number | undefined): number | undefined {
 
 type Current = {
   sceneExists: boolean;
+  sceneNames: Set<string>;
   inputKinds: Map<string, string>;
   items: ItemState[];
   inputs: InputState[];
@@ -85,8 +86,9 @@ async function readCurrent(client: OBSWebSocketClient, spec: SceneSpec): Promise
     client.sendRequest("GetSceneList") as Promise<JsonObject>,
     client.sendRequest("GetInputList") as Promise<JsonObject>,
   ]);
-  const sceneExists = (Array.isArray(sceneList.scenes) ? sceneList.scenes : [])
-    .some((scene) => isObject(scene) && scene.sceneName === spec.sceneName);
+  const sceneNames = new Set((Array.isArray(sceneList.scenes) ? sceneList.scenes : [])
+    .filter(isObject).map(({ sceneName }) => String(sceneName)));
+  const sceneExists = sceneNames.has(spec.sceneName);
   const inputKinds = new Map((Array.isArray(inputList.inputs) ? inputList.inputs : [])
     .filter(isObject)
     .map(({ inputName, inputKind }) => [String(inputName), String(inputKind)] as const));
@@ -97,7 +99,7 @@ async function readCurrent(client: OBSWebSocketClient, spec: SceneSpec): Promise
       ? client.sendRequest("GetVideoSettings") as Promise<{ baseWidth: number; baseHeight: number }>
       : Promise.resolve(null),
   ]);
-  return { sceneExists, inputKinds, items, inputs, video };
+  return { sceneExists, sceneNames, inputKinds, items, inputs, video };
 }
 
 /**
@@ -113,6 +115,12 @@ export function planScene(spec: SceneSpec, current: Current): { actions: SceneAc
 
   if (!current.sceneExists) {
     actions.push({ target: `scene ${sceneName}`, change: "create", phase: "create", request: { requestType: "CreateScene", requestData: scene } });
+  }
+  const seen = new Set<string>();
+  for (const { name } of spec.sources) {
+    if (seen.has(name)) errors.push(`${name} is listed more than once`);
+    seen.add(name);
+    if (current.sceneNames.has(name) || name === sceneName) errors.push(`${name} is a scene, not an input; nest scenes with obs-create-scene-item`);
   }
 
   for (const source of spec.sources) {
@@ -200,7 +208,7 @@ export function planScene(spec: SceneSpec, current: Current): { actions: SceneAc
         : {}),
       ...source.transform,
     };
-    const changedFields = Object.keys(transform).filter((key) => !item || !same(transform[key], item.transform[key]));
+    const changedFields = Object.keys(transform).filter((key) => !item || !sameTransformValue(key, transform[key], item.transform[key]));
     if (changedFields.length > 0) {
       itemAction(source.fit && changedFields.includes("boundsType") ? "fit to the canvas" : `transform (${changedFields.join(", ")})`, "SetSceneItemTransform", { sceneItemTransform: transform });
     }
@@ -215,16 +223,19 @@ export function planScene(spec: SceneSpec, current: Current): { actions: SceneAc
   }
 
   if (spec.order) {
-    // Sources are listed back to front; items not in the spec stay behind them.
-    const base = spec.removeOthers ? 0 : others.length;
+    // Sources are listed back to front and end up in front of any others:
+    // the top items, bottom to top, must be the listed ones in listed order.
     const allExist = spec.sources.every(({ name }) => current.items.some(({ sourceName }) => sourceName === name));
-    const outOfPlace = spec.sources.some(({ name }, index) => current.items.find(({ sourceName }) => sourceName === name)?.index !== base + index);
+    const stack = [...current.items].sort((a, b) => a.index - b.index).map(({ sourceName }) => sourceName);
+    const top = stack.slice(stack.length - spec.sources.length);
     if (!allExist) {
       actions.push({ target: `scene ${sceneName}`, change: "order the sources back to front as listed", phase: "change" });
-    } else if (outOfPlace) {
-      spec.sources.forEach(({ name }, index) => {
+    } else if (spec.sources.some(({ name }, index) => top[index] !== name)) {
+      // Moving each to the top in listed order stacks them correctly whatever OBS shifts on the way.
+      const topIndex = (spec.removeOthers ? spec.sources.length : current.items.length) - 1;
+      spec.sources.forEach(({ name }) => {
         const item = current.items.find(({ sourceName }) => sourceName === name)!;
-        actions.push({ target: name, change: `order (to ${base + index})`, phase: "change", request: { requestType: "SetSceneItemIndex", requestData: { ...scene, sceneItemId: item.sceneItemId, sceneItemIndex: base + index } } });
+        actions.push({ target: name, change: "order (to the front, as listed)", phase: "change", request: { requestType: "SetSceneItemIndex", requestData: { ...scene, sceneItemId: item.sceneItemId, sceneItemIndex: topIndex } } });
       });
     }
   }
@@ -267,8 +278,22 @@ export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, ap
     };
   }
 
-  const snapshot = before.sceneExists
-    ? await takeSnapshot(client, { scenes: [spec.sceneName], label: "before obs-apply-scene" }).catch(() => undefined)
+  // Save every existing input the spec touches, including ones shown only in
+  // other scenes, and this scene's items, so obs-restore can undo the change.
+  const touchedInputs = spec.sources.map(({ name }) => name).filter((name) => before.inputKinds.has(name));
+  const sceneInputs = before.items.map(({ sourceName }) => sourceName).filter((name) => before.inputKinds.has(name));
+  const snapshotInputs = [...new Set([...sceneInputs, ...touchedInputs])];
+  let snapshotNote: string | undefined;
+  const snapshot = before.sceneExists || snapshotInputs.length > 0
+    ? await takeSnapshot(client, {
+      scenes: before.sceneExists ? [spec.sceneName] : [],
+      inputs: snapshotInputs,
+      label: "before obs-apply-scene",
+      auto: true,
+    }).catch((error: unknown) => {
+      snapshotNote = `Could not save a snapshot first, so obs-restore cannot undo this: ${errorMessage(error)}`;
+      return undefined;
+    })
     : undefined;
 
   // Pass 1 creates the scene, inputs, and items; pass 2 plans again with their IDs and changes the rest.
@@ -277,7 +302,15 @@ export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, ap
   if (creations.length > 0) {
     const results = await client.sendBatch(creations.map(({ request }) => request!), { haltOnFailure: true });
     problems.push(...failures(creations, results));
-    if (problems.length > 0) return errorResult([`Stopped while creating:`, ...problems].join("\n"));
+    if (problems.length > 0) {
+      const created = creations.filter((_action, index) => results[index]?.ok);
+      return errorResult([
+        "Stopped while creating:",
+        ...problems,
+        ...(created.length > 0 ? ["Created before stopping:", ...describe(created)] : []),
+        ...(snapshot ? [`Snapshot ${snapshot.id} holds the previous state of existing sources`] : []),
+      ].join("\n"));
+    }
   }
   const second = planScene(spec, await readCurrent(client, spec));
   const changes = second.actions.filter((action) => action.request);
@@ -292,6 +325,7 @@ export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, ap
     ...(remaining.length > 0 ? ["Still different afterwards:", ...describe(remaining)] : ["OBS now matches the spec"]),
     ...blank.map((name) => `Warning: ${name} renders at 0×0; a capture may need a window, display, or permission`),
     ...(snapshot ? [`Saved the previous state as snapshot ${snapshot.id}; obs-restore undoes changes to existing sources`] : []),
+    ...(snapshotNote ? [snapshotNote] : []),
   ];
   return {
     content: [{ type: "text", text: lines.join("\n") }],

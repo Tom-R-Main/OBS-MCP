@@ -72,6 +72,8 @@ describe("dynamic tool groups", () => {
     const names = await toolNames();
     expect(names).toContain("obs-get-record-status");
     expect(names).not.toContain("obs-start-record");
+    const { tools } = await harness!.mcpClient.listTools();
+    expect(tools.filter(({ annotations }) => annotations?.readOnlyHint !== true).map(({ name }) => name)).toEqual([]);
   });
 
   it("adds no group tools without OBS_MCP_DYNAMIC_TOOLSETS", async () => {
