@@ -43,14 +43,18 @@ export enum EventSubscription {
   SceneItemTransformChanged = 1 << 19,
 }
 
-/** How OBS runs the requests in a batch (RequestBatchExecutionType). */
+/**
+ * How OBS runs the requests in a batch (RequestBatchExecutionType). Parallel
+ * (2) is left out on purpose: in obs-websocket 5.7 each parallel batch holds a
+ * thread-pool thread while waiting for its requests on the same pool, so a few
+ * at once deadlock the WebSocket server until OBS restarts, and its results
+ * come back in completion order with the wrong request labels.
+ */
 export enum RequestBatchExecutionType {
   /** One after another, as fast as possible. */
   SerialRealtime = 0,
   /** One per rendered video frame; Sleep counts frames. */
   SerialFrame = 1,
-  /** All at once; Sleep is not allowed. */
-  Parallel = 2,
 }
 
 export type BatchRequest = { requestType: string; requestData?: unknown };
@@ -173,9 +177,11 @@ function parseRequestResponse(data: JsonObject): RequestResponseData | null {
   };
 }
 
-function parseBatchResponse(data: JsonObject): { requestId: string; results: BatchResult[] } | null {
+type RawBatchResult = BatchResult & { requestId?: string };
+
+function parseBatchResponse(data: JsonObject): { requestId: string; results: RawBatchResult[] } | null {
   if (typeof data.requestId !== "string" || !Array.isArray(data.results)) return null;
-  const results: BatchResult[] = [];
+  const results: RawBatchResult[] = [];
   for (const result of data.results) {
     if (
       !isObject(result)
@@ -186,6 +192,7 @@ function parseBatchResponse(data: JsonObject): { requestId: string; results: Bat
     ) return null;
     const { comment } = result.requestStatus;
     results.push({
+      ...(typeof result.requestId === "string" ? { requestId: result.requestId } : {}),
       requestType: result.requestType,
       ok: result.requestStatus.result,
       code: result.requestStatus.code,
@@ -194,6 +201,14 @@ function parseBatchResponse(data: JsonObject): { requestId: string; results: Bat
     });
   }
   return { requestId: data.requestId, results };
+}
+
+/** Orders batch results by the index each request carried as its ID, dropping the IDs. */
+function inRequestOrder(results: RawBatchResult[]): BatchResult[] {
+  const indexed = results.map((result, position) => ({ result, index: result.requestId === undefined ? position : Number(result.requestId) }));
+  return indexed
+    .sort((a, b) => a.index - b.index)
+    .map(({ result: { requestId: _requestId, ...result } }) => result);
 }
 
 /** Wall-clock time a batch spends in Sleep requests, assuming 30 fps for frames. */
@@ -376,18 +391,21 @@ export class OBSWebSocketClient extends EventEmitter {
     const socket = await this.readySocket();
     for (const { requestType } of requests) this.assertAdvertised(requestType);
 
-    return this.sendTracked<BatchResult[]>(socket, "RequestBatch", timeout, (requestId) => ({
+    const results = await this.sendTracked<RawBatchResult[]>(socket, "RequestBatch", timeout, (requestId) => ({
       op: OpCode.RequestBatch,
       d: {
         requestId,
         haltOnFailure,
         executionType,
-        requests: requests.map(({ requestType, requestData }) => ({
+        // Each request carries its index as its ID, so results are matched by ID, not position.
+        requests: requests.map(({ requestType, requestData }, index) => ({
           requestType,
+          requestId: String(index),
           ...(requestData === undefined ? {} : { requestData }),
         })),
       },
     }));
+    return inRequestOrder(results);
   }
 
   private async readySocket(): Promise<WebSocket> {
@@ -621,7 +639,7 @@ export class OBSWebSocketClient extends EventEmitter {
     ));
   }
 
-  private handleBatchResponse(socket: WebSocket, batch: { requestId: string; results: BatchResult[] }): void {
+  private handleBatchResponse(socket: WebSocket, batch: { requestId: string; results: RawBatchResult[] }): void {
     const pending = this.pendingRequests.get(batch.requestId);
     if (!pending || pending.socket !== socket) return;
     this.pendingRequests.delete(batch.requestId);

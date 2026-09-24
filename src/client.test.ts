@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { once } from "node:events";
 import WebSocket from "ws";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EventSubscription, OBSWebSocketClient, RequestBatchExecutionType } from "./client.js";
+import { EventSubscription, OBSWebSocketClient } from "./client.js";
 import {
   FakeOBSRequestError,
   FakeOBSServer,
@@ -248,14 +248,15 @@ describe("OBSWebSocketClient request batches", () => {
     const results = await client.sendBatch([
       { requestType: "GetInputMute", requestData: { inputName: "Mic" } },
       { requestType: "GetInputMute", requestData: { inputName: "Camera" } },
-    ], { executionType: RequestBatchExecutionType.Parallel });
+    ]);
 
     expect(results).toEqual([
       { requestType: "GetInputMute", ok: true, code: 100, responseData: { inputMuted: true } },
       { requestType: "GetInputMute", ok: false, code: 604, comment: "Camera has no audio", responseData: {} },
     ]);
     const batch = server.history().find(({ frame }) => frame.op === OBS_OP.RequestBatch);
-    expect(batch?.frame.d).toMatchObject({ executionType: 2, haltOnFailure: false });
+    expect(batch?.frame.d).toMatchObject({ executionType: 0, haltOnFailure: false });
+    expect((batch?.frame.d.requests as { requestId: string }[]).map(({ requestId }) => requestId)).toEqual(["0", "1"]);
     expect(server.history().filter(({ frame }) => frame.op === OBS_OP.Request && frame.d.batchRequestId)).toHaveLength(2);
   });
 
