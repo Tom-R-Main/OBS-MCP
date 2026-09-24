@@ -28,6 +28,7 @@ import * as takes from "./takes.js";
 import * as trim from "./trim.js";
 import * as snapshots from "./snapshots.js";
 import * as applyScene from "./apply-scene.js";
+import * as toolsetTools from "./toolset-tools.js";
 import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import { withStructuredToolResults } from "./results.js";
@@ -84,6 +85,7 @@ export function initialize(
   for (const [group, module] of MODULES) {
     module.initialize(scopedServer(confirmingServer, group, filter, registry), client);
   }
+  if (filter.dynamic) toolsetTools.initialize(structuredServer, registry);
   if (resourcesAndPrompts) {
     resources.initialize(server, client);
     prompts.initialize(server);

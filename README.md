@@ -99,6 +99,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_TOOLSETS` | No | all tools | Comma-separated tool groups to register: `all`, `core`, or any group listed under [Choosing tools](#choosing-tools) |
 | `OBS_MCP_TOOLS` | No | none | Comma-separated tool names to register in addition to `OBS_MCP_TOOLSETS` |
 | `OBS_MCP_READ_ONLY` | No | `false` | Register only read-only tools; overrides both lists |
+| `OBS_MCP_DYNAMIC_TOOLSETS` | No | `false` | Start with only the `OBS_MCP_TOOLSETS` groups (default `general`) and let the model turn others on and off (see [Choosing tools](#choosing-tools)) |
 | `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before stopping or toggling a stream or recording (see [Confirming live actions](#confirming-live-actions)) |
 | `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
@@ -150,6 +151,8 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
 `core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (90 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 41-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+
+With `OBS_MCP_DYNAMIC_TOOLSETS=true`, every group is registered but only the groups in `OBS_MCP_TOOLSETS` (by default just `general`) and the tools in `OBS_MCP_TOOLS` start enabled. Three more tools manage the rest: `obs-list-toolsets` shows each group and how many of its tools are on, and `obs-enable-toolset` and `obs-disable-toolset` switch groups for the session. Each change sends `notifications/tools/list_changed`, so clients that support it (Claude Code, VS Code, Cursor) reload the list. Read-only mode still applies: enabling a group adds only its read-only tools.
 
 ### Resources and prompts
 

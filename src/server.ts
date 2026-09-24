@@ -116,7 +116,10 @@ function loadToolFilter(): ToolFilter {
   assertKnownTools(filter, registry);
   const count = registry.filter(({ registered }) => registered).length;
   if (count === 0) throw new Error("The tool filter excludes every tool");
-  if (filter.groups !== null || filter.readOnly) {
+  if (filter.dynamic) {
+    const enabled = registry.filter(({ handle }) => handle?.enabled).length;
+    logger.log(`Dynamic tool groups: ${enabled} of ${count} tools enabled at the start${filter.readOnly ? " (read-only)" : ""}`);
+  } else if (filter.groups !== null || filter.readOnly) {
     logger.log(`Registering ${count} of ${registry.length} tools${filter.readOnly ? " (read-only)" : ""}`);
   }
   return filter;

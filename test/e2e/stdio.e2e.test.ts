@@ -514,6 +514,22 @@ describe("compiled stdio MCP boundary", () => {
     }
   });
 
+  it("starts with a few tool groups and enables more on request", async () => {
+    const fake = await FakeOBSServer.start({ availableRequests: ["GetRecordStatus"] });
+    fakeServers.push(fake);
+    const { client, stderr } = await connectClient(fake, "modern", { OBS_MCP_DYNAMIC_TOOLSETS: "true" });
+
+    const before = (await client.listTools()).tools.map(({ name }) => name);
+    await client.callTool({ name: "obs-enable-toolset", arguments: { groups: ["record"] } });
+    const after = (await client.listTools()).tools.map(({ name }) => name);
+
+    expect(before).toContain("obs-enable-toolset");
+    expect(before).not.toContain("obs-start-record");
+    expect(after).toContain("obs-start-record");
+    expect(before.length).toBeLessThan(TOOL_COUNT / 4);
+    await vi.waitFor(() => expect(stderr.join("")).toMatch(/Dynamic tool groups: \d+ of \d+ tools enabled at the start/));
+  });
+
   it("refuses to start with an unknown tool group or tool name", async () => {
     const environments: Record<string, string>[] = [
       { OBS_MCP_TOOLSETS: "scenez" },
