@@ -9,6 +9,7 @@ import WebSocket from "ws";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventSubscription, OBSWebSocketClient } from "./client.js";
 import {
+  FakeOBSRequestError,
   FakeOBSServer,
   OBS_OP,
   type OBSFrame,
@@ -232,6 +233,76 @@ describe("OBSWebSocketClient requests", () => {
     await expect(client.sendRequest("GetStats")).rejects.toThrow("send callback failure");
     expect(internals(client).pendingRequests.size).toBe(0);
     Object.defineProperty(socket, "send", { configurable: true, value: originalSend });
+  });
+});
+
+describe("OBSWebSocketClient request batches", () => {
+  it("sends one batch message and returns a result per request, including failures", async () => {
+    const server = await createServer();
+    server.respondWith("GetInputMute", ({ inputName }) => {
+      if (inputName === "Camera") throw new FakeOBSRequestError(604, "Camera has no audio");
+      return { inputMuted: true };
+    });
+    const client = createClient(server);
+
+    const results = await client.sendBatch([
+      { requestType: "GetInputMute", requestData: { inputName: "Mic" } },
+      { requestType: "GetInputMute", requestData: { inputName: "Camera" } },
+    ]);
+
+    expect(results).toEqual([
+      { requestType: "GetInputMute", ok: true, code: 100, responseData: { inputMuted: true } },
+      { requestType: "GetInputMute", ok: false, code: 604, comment: "Camera has no audio", responseData: {} },
+    ]);
+    const batch = server.history().find(({ frame }) => frame.op === OBS_OP.RequestBatch);
+    expect(batch?.frame.d).toMatchObject({ executionType: 0, haltOnFailure: false });
+    expect((batch?.frame.d.requests as { requestId: string }[]).map(({ requestId }) => requestId)).toEqual(["0", "1"]);
+    expect(server.history().filter(({ frame }) => frame.op === OBS_OP.Request && frame.d.batchRequestId)).toHaveLength(2);
+  });
+
+  it("stops at the first failure when asked to", async () => {
+    const server = await createServer();
+    server.respondWith("SetInputMute", () => {
+      throw new FakeOBSRequestError(600, "No such input");
+    });
+    server.respondWith("SetInputAudioTracks", () => ({}));
+    const client = createClient(server);
+
+    const results = await client.sendBatch([
+      { requestType: "SetInputMute", requestData: { inputName: "x", inputMuted: true } },
+      { requestType: "SetInputAudioTracks", requestData: { inputName: "x", inputAudioTracks: {} } },
+    ], { haltOnFailure: true });
+
+    expect(results.map(({ ok }) => ok)).toEqual([false]);
+  });
+
+  it("refuses request types OBS does not advertise before sending anything", async () => {
+    const server = await createServer();
+    const client = createClient(server);
+    await client.connect();
+    const cursor = server.cursor();
+
+    await expect(client.sendBatch([{ requestType: "MadeUpRequest" }])).rejects.toThrow("MadeUpRequest");
+    expect(server.cursor()).toBe(cursor);
+  });
+
+  it("extends the timeout by the time the batch sleeps", async () => {
+    const server = await createServer();
+    const client = createClient(server);
+
+    const results = await client.sendBatch([
+      { requestType: "Sleep", requestData: { sleepMillis: 150 } },
+    ], { timeout: undefined });
+
+    expect(results).toEqual([{ requestType: "Sleep", ok: true, code: 100, responseData: {} }]);
+  });
+
+  it("returns no results without contacting OBS for an empty batch", async () => {
+    const server = await createServer();
+    const client = createClient(server);
+
+    expect(await client.sendBatch([])).toEqual([]);
+    expect(server.connectionCount).toBe(0);
   });
 });
 

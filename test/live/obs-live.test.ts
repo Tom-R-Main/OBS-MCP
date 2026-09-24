@@ -66,6 +66,9 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
         ...(process.env.OBS_WEBSOCKET_PASSWORD
           ? { OBS_WEBSOCKET_PASSWORD: process.env.OBS_WEBSOCKET_PASSWORD }
           : {}),
+        ...(process.env.OBS_MCP_READ_OBS_CONFIG
+          ? { OBS_MCP_READ_OBS_CONFIG: process.env.OBS_MCP_READ_OBS_CONFIG }
+          : {}),
       },
       stderr: "pipe",
     });
@@ -134,6 +137,35 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     }
     expect(mismatches).toEqual([]);
   }, 60_000);
+
+  it("runs read-only request batches, including Sleep, against real OBS", async () => {
+    const batch = async (args: JsonObject) => await client!.callTool({ name: "obs-batch", arguments: args }) as CallToolResult;
+
+    // A missing input fails on its own without failing the rest.
+    const realtime = await batch({
+      requests: [
+        { requestType: "GetVersion" },
+        { requestType: "GetStats" },
+        { requestType: "GetInputMute", requestData: { inputName: "obs-mcp-no-such-input" } },
+      ],
+    });
+    expect(realtime.structuredContent).toMatchObject({ succeeded: 2, failed: 1, skipped: 0 });
+    const results = (realtime.structuredContent as { results: { requestType: string; ok: boolean }[] }).results;
+    expect(results.map(({ requestType, ok }) => `${requestType}:${ok}`)).toEqual(["GetVersion:true", "GetStats:true", "GetInputMute:false"]);
+
+    const started = Date.now();
+    const framed = await batch({
+      executionType: "serial-frame",
+      requests: [
+        { requestType: "GetCurrentProgramScene" },
+        { requestType: "Sleep", requestData: { sleepFrames: 6 } },
+        { requestType: "GetRecordStatus" },
+      ],
+    });
+    expect(framed.isError).toBeFalsy();
+    expect(framed.structuredContent).toMatchObject({ succeeded: 3, failed: 0 });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(60);
+  });
 
   it("reads status, scene, and scene item resources from real OBS", async () => {
     if (!client) throw new Error("Live MCP client is not connected");

@@ -169,24 +169,30 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Pr
     request(client, "GetInputList"),
     recordedTracks(client),
   ]);
+  const names = (Array.isArray(inputs) ? inputs : [])
+    .filter(isObject)
+    .map(({ inputName }) => inputName)
+    .filter((name): name is string => typeof name === "string");
+  // One round trip for every input's mute state and tracks. Video-only inputs
+  // fail both requests, which the batch reports without failing the rest.
+  const results = await client.sendBatch(names.flatMap((inputName) => [
+    { requestType: "GetInputMute", requestData: { inputName } },
+    { requestType: "GetInputAudioTracks", requestData: { inputName } },
+  ]));
   const audible: string[] = [];
 
-  for (const input of Array.isArray(inputs) ? inputs : []) {
-    if (!isObject(input) || typeof input.inputName !== "string") continue;
-    const selector = { inputName: input.inputName };
-    let muted: unknown;
-    try {
-      ({ inputMuted: muted } = await request(client, "GetInputMute", selector));
-    } catch {
-      continue; // Video-only inputs reject audio requests.
-    }
-    if (muted === true) continue;
-    const { inputAudioTracks } = await request(client, "GetInputAudioTracks", selector);
+  names.forEach((inputName, index) => {
+    const mute = results[index * 2];
+    const trackResult = results[index * 2 + 1];
+    if (!mute?.ok || !isObject(mute.responseData) || mute.responseData.inputMuted === true) return;
+    const inputAudioTracks = trackResult?.ok && isObject(trackResult.responseData)
+      ? trackResult.responseData.inputAudioTracks
+      : undefined;
     const enabled = isObject(inputAudioTracks)
       ? tracks.filter((track) => inputAudioTracks[String(track)] === true)
       : tracks;
-    if (enabled.length > 0) audible.push(`${input.inputName} (track ${enabled.join(", ")})`);
-  }
+    if (enabled.length > 0) audible.push(`${inputName} (track ${enabled.join(", ")})`);
+  });
 
   if (audible.length === 0) {
     return { id: "audio", status: "pass", message: "No unmuted input feeds a recorded audio track" };
@@ -207,21 +213,22 @@ async function checkSceneItems(client: OBSWebSocketClient): Promise<PreflightChe
   }
   const { sceneItems } = await request(client, "GetSceneItemList", { sceneName });
   const items = (Array.isArray(sceneItems) ? sceneItems : []).filter(isObject);
-  const blank: string[] = [];
-
-  for (const item of items) {
-    if (item.sceneItemEnabled === false) continue;
-    let transform = item.sceneItemTransform;
-    if (!isObject(transform) && typeof item.sceneItemId === "number") {
-      ({ sceneItemTransform: transform } = await request(client, "GetSceneItemTransform", {
-        sceneName,
-        sceneItemId: item.sceneItemId,
-      }));
-    }
-    if (isObject(transform) && (transform.sourceWidth === 0 || transform.sourceHeight === 0)) {
-      blank.push(String(item.sourceName ?? item.sceneItemId));
-    }
-  }
+  const visible = items.filter((item) => item.sceneItemEnabled !== false);
+  // GetSceneItemList includes transforms; look up any it left out in one batch.
+  const missing = visible.filter((item) => !isObject(item.sceneItemTransform) && typeof item.sceneItemId === "number");
+  const looked = await client.sendBatch(
+    missing.map(({ sceneItemId }) => ({ requestType: "GetSceneItemTransform", requestData: { sceneName, sceneItemId } })),
+  );
+  const transforms = new Map(missing.map((item, index) => {
+    const result = looked[index];
+    return [item, result?.ok && isObject(result.responseData) ? result.responseData.sceneItemTransform : undefined];
+  }));
+  const blank = visible
+    .filter((item) => {
+      const transform = isObject(item.sceneItemTransform) ? item.sceneItemTransform : transforms.get(item);
+      return isObject(transform) && (transform.sourceWidth === 0 || transform.sourceHeight === 0);
+    })
+    .map((item) => String(item.sourceName ?? item.sceneItemId));
 
   if (items.length === 0) {
     return { id: "scene-items", status: "warn", message: `Program scene ${sceneName} is empty` };

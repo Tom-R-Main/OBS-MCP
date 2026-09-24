@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeOBSRequestError } from "../../test/support/fake-obs-server.js";
+import { FakeOBSRequestError, OBS_OP } from "../../test/support/fake-obs-server.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
 import type { PreflightCheck } from "./preflight.js";
 import { healthyObsState, servePreflightState, type FakeObsState } from "../../test/support/fake-obs-state.js";
@@ -115,6 +115,21 @@ describe("obs-preflight", () => {
     expect(warned.byId("audio")).toMatchObject({ status: "warn", message: expect.stringContaining("Chrome (track 1)") });
     expect(failed.ready).toBe(false);
     expect(failed.byId("audio")?.status).toBe("fail");
+  });
+
+  it("reads every input's audio state in one batch", async () => {
+    state.inputs.push(
+      { inputName: "Mic", inputKind: "coreaudio_input_capture", muted: false, tracks: { 1: true } },
+      { inputName: "Camera", inputKind: "av_capture_input" },
+    );
+
+    const { byId } = await preflight();
+
+    const batches = harness.fakeObs.history().filter(({ frame }) => frame.op === OBS_OP.RequestBatch);
+    expect(batches).toHaveLength(1);
+    expect(batches[0]?.frame.d.requests).toHaveLength(state.inputs.length * 2);
+    expect(byId("audio")?.message).toContain("Mic (track 1)");
+    expect(byId("audio")?.message).not.toContain("Camera");
   });
 
   it("ignores unmuted inputs whose recorded tracks are disabled", async () => {
