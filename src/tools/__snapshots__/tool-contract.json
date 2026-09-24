@@ -1,5 +1,174 @@
 [
   {
+    "name": "obs-apply-scene",
+    "title": "Apply Scene",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Input name; an existing input is reused, including one shown in another scene"
+              },
+              "kind": {
+                "description": "Input kind, e.g. screen_capture or color_source_v3; needed only to create the input",
+                "type": "string"
+              },
+              "settings": {
+                "description": "Input settings to set; others are left as they are",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "visible": {
+                "type": "boolean"
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "muted": {
+                "type": "boolean"
+              },
+              "volumeDb": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 26
+              },
+              "audioTracks": {
+                "description": "The tracks it feeds, e.g. [1]; [] removes it from every track",
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 6
+                }
+              },
+              "fit": {
+                "description": "Scale it to fit the canvas, centered, keeping its aspect ratio",
+                "type": "string",
+                "enum": [
+                  "canvas"
+                ]
+              },
+              "transform": {
+                "description": "Transform fields to set; applied after fit",
+                "type": "object",
+                "properties": {
+                  "positionX": {
+                    "type": "number"
+                  },
+                  "positionY": {
+                    "type": "number"
+                  },
+                  "scaleX": {
+                    "type": "number"
+                  },
+                  "scaleY": {
+                    "type": "number"
+                  },
+                  "rotation": {
+                    "type": "number"
+                  },
+                  "alignment": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "boundsType": {
+                    "type": "string",
+                    "enum": [
+                      "OBS_BOUNDS_NONE",
+                      "OBS_BOUNDS_STRETCH",
+                      "OBS_BOUNDS_SCALE_INNER",
+                      "OBS_BOUNDS_SCALE_OUTER",
+                      "OBS_BOUNDS_SCALE_TO_WIDTH",
+                      "OBS_BOUNDS_SCALE_TO_HEIGHT",
+                      "OBS_BOUNDS_MAX_ONLY"
+                    ]
+                  },
+                  "boundsWidth": {
+                    "type": "number"
+                  },
+                  "boundsHeight": {
+                    "type": "number"
+                  },
+                  "boundsAlignment": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cropLeft": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cropRight": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cropTop": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "cropBottom": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "description": "Sources in the scene, listed back to front"
+        },
+        "order": {
+          "default": false,
+          "description": "Stack the sources in the listed order, in front of any others",
+          "type": "boolean"
+        },
+        "removeOthers": {
+          "default": false,
+          "description": "Remove items not listed from this scene (their inputs remain)",
+          "type": "boolean"
+        },
+        "apply": {
+          "default": false,
+          "description": "Make the changes; otherwise only plan",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sceneName",
+        "sources"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-batch",
     "title": "Run OBS Requests in a Batch",
     "inputSchema": {
