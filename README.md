@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 168 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 171 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -101,13 +101,15 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_READ_ONLY` | No | `false` | Register only read-only tools; overrides both lists |
 | `OBS_MCP_DYNAMIC_TOOLSETS` | No | `false` | Start with only the `OBS_MCP_TOOLSETS` groups (default `general`) and let the model turn others on and off (see [Choosing tools](#choosing-tools)) |
 | `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before stopping or toggling a stream or recording (see [Confirming live actions](#confirming-live-actions)) |
+| `OBS_MCP_HTTP_PORT` | No | none (stdio) | Serve MCP over Streamable HTTP at `http://127.0.0.1:<port>/mcp` instead of stdio, so several agents share one server (see [Sharing one server](#sharing-one-server)); `0` picks a free port |
+| `OBS_MCP_HTTP_TOKEN` | No | none | With `OBS_MCP_HTTP_PORT`, require `Authorization: Bearer <token>` on every request |
 | `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
 
 ## Tool surface
 
-The 168 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 171 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -135,7 +137,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 
 | Group | Covers |
 |---|---|
-| `general` | status, version, statistics, hotkeys, vendor requests, custom events, sleep |
+| `general` | status, version, statistics, hotkeys, vendor requests, custom events, sleep, control of a shared server |
 | `scenes` | scenes, canvases, program and preview scene, `obs-apply-scene` |
 | `scene-items` | scene items, groups, transforms, ordering, locking, blend modes, `obs-snapshot`, and `obs-restore` |
 | `sources` | source screenshots and active state |
@@ -150,7 +152,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `ui` | studio mode, dialogs, projectors |
 | `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
-`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (90 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 41-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (93 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 42-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
 
 With `OBS_MCP_DYNAMIC_TOOLSETS=true`, every group is registered but only the groups in `OBS_MCP_TOOLSETS` (by default just `general`) and the tools in `OBS_MCP_TOOLS` start enabled. Three more tools manage the rest: `obs-list-toolsets` shows each group and how many of its tools are on, and `obs-enable-toolset` and `obs-disable-toolset` switch groups for the session. Each change sends `notifications/tools/list_changed`, so clients that support it (Claude Code, VS Code, Cursor) reload the list. Read-only mode still applies: enabling a group adds only its read-only tools.
 
@@ -249,6 +251,19 @@ Without `apply: true` it returns the plan. When applying, it creates what is mis
 
 Snapshots are kept in the server's memory, the last 10, and are lost when it restarts. OBS's own scene collection file is not a substitute: OBS rewrites it while running.
 
+### Sharing one server
+
+By default each agent starts its own server over stdio, with its own OBS connection, and nothing stops two agents from changing OBS at once. With `OBS_MCP_HTTP_PORT`, one server listens on `http://127.0.0.1:<port>/mcp` and every agent connects to it:
+
+```bash
+OBS_MCP_HTTP_PORT=8765 OBS_MCP_READ_OBS_CONFIG=true node /path/to/OBS-MCP/build/index.js
+claude mcp add --transport http obs http://127.0.0.1:8765/mcp
+```
+
+The server listens only on 127.0.0.1 and rejects requests whose Host or Origin header is not localhost, which blocks DNS rebinding from web pages. Set `OBS_MCP_HTTP_TOKEN` to also require a bearer token. Each HTTP request is served statelessly, so `OBS_MCP_DYNAMIC_TOOLSETS` is ignored over HTTP.
+
+While agents share a server, `obs-claim-control` gives one of them control of OBS for a set time (30 minutes by default). Until it calls `obs-release-control` or the time runs out, tools that change OBS refuse calls from other clients; reading OBS and stopping outputs always work. `obs-control-status` shows who holds control. `obs-take-start` claims control for the length of the take. Clients are told apart by the name they report (Claude Code and Codex report different names), so two sessions of the same client share control.
+
 ## Troubleshooting
 
 **Tools appear, but OBS calls fail:** make sure OBS is open and its WebSocket server is enabled. The MCP process stays available while it retries the connection.
@@ -278,7 +293,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 168 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 171 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

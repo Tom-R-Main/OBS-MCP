@@ -391,6 +391,34 @@
     }
   },
   {
+    "name": "obs-claim-control",
+    "title": "Claim Control of OBS",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "minutes": {
+          "default": 30,
+          "description": "How long to hold control",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 240
+        },
+        "reason": {
+          "description": "Shown to other clients, e.g. \"recording the demo\"",
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-contact-sheet",
     "title": "Contact Sheet",
     "inputSchema": {
@@ -426,6 +454,21 @@
       "required": [
         "path"
       ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-control-status",
+    "title": "Control Status",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
       "$schema": "https://json-schema.org/draft/2020-12/schema"
     },
     "annotations": {
@@ -4786,6 +4829,21 @@
       "readOnlyHint": false,
       "destructiveHint": false,
       "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-release-control",
+    "title": "Release Control of OBS",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
       "openWorldHint": false
     }
   },

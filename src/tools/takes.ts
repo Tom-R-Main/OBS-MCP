@@ -12,6 +12,7 @@ import type { OBSWebSocketClient } from "../client.js";
 import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
 import { runPreflight } from "./preflight.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
+import { callerName, claim, release } from "./lease.js";
 import { describeTake, TakeMonitor, writeTakeLog, type TakeSummary } from "./take-monitor.js";
 
 type JsonObject = Record<string, unknown>;
@@ -86,6 +87,8 @@ export type Take = {
   /** Refuse changes that break a running recording. */
   locked: boolean;
   chapterNotes: string[];
+  /** The client that holds control of OBS because it started this take. */
+  leaseHolder?: string;
 };
 
 const takes = new WeakMap<OBSWebSocketClient, Take>();
@@ -334,11 +337,14 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async (args) => {
+    async (args, ctx) => {
       try {
         const started = await startTake(client, args);
         if (!started.ok) return started.result;
         const { take } = started;
+        // Other clients sharing this server cannot change OBS until the take stops.
+        const holder = callerName(server, ctx);
+        if (claim(client, holder, 240, `recording take ${take.id}`).ok) take.leaseHolder = holder;
         const status = take.monitor.summary();
         return {
           content: [{
@@ -421,7 +427,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     async () => {
       const take = currentTake(client);
       if (!take) return noTake();
-      return stopTake(client, take);
+      const result = await stopTake(client, take);
+      if (take.leaseHolder) release(client, take.leaseHolder);
+      return result;
     },
   );
 }

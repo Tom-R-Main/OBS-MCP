@@ -29,6 +29,7 @@ import * as trim from "./trim.js";
 import * as snapshots from "./snapshots.js";
 import * as applyScene from "./apply-scene.js";
 import * as toolsetTools from "./toolset-tools.js";
+import * as lease from "./lease.js";
 import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import { withStructuredToolResults } from "./results.js";
@@ -37,6 +38,7 @@ import { ALL_TOOLS, scopedServer, type RegisteredTool, type ToolFilter, type Too
 
 const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client: OBSWebSocketClient): void }]> = [
   ["general", general],
+  ["general", lease],
   ["scenes", scenes],
   ["sources", sources],
   ["scene-items", sceneItems],
@@ -69,17 +71,20 @@ export type InitializeOptions = {
   confirmLive?: boolean;
   /** Resources and prompts; off for servers built only to inspect the tool list. */
   resourcesAndPrompts?: boolean;
+  /** Forward OBS events to this session; off for the per-request servers behind HTTP. */
+  sessionNotifications?: boolean;
 };
 
 export function initialize(
   server: McpServer,
   client: OBSWebSocketClient,
-  { filter = ALL_TOOLS, confirmLive = liveConfirmationEnabled(), resourcesAndPrompts = true }: InitializeOptions = {},
+  { filter = ALL_TOOLS, confirmLive = liveConfirmationEnabled(), resourcesAndPrompts = true, sessionNotifications = true }: InitializeOptions = {},
 ): RegisteredTool[] {
-  // Registration passes through: group filter -> live confirmation -> take lock -> structured results -> server.
-  // At call time the take lock runs first, so a locked call never asks the user.
+  // Registration passes through: group filter -> live confirmation -> take lock -> control lease -> structured results -> server.
+  // At call time the lease and the take lock run before confirmation, so a refused call never asks the user.
   const structuredServer = withStructuredToolResults(server);
-  const lockingServer = takes.withTakeLock(structuredServer, client);
+  const leasingServer = lease.withControlLease(structuredServer, client);
+  const lockingServer = takes.withTakeLock(leasingServer, client);
   const confirmingServer = confirmLive ? withLiveConfirmation(lockingServer) : lockingServer;
   const registry: RegisteredTool[] = [];
   for (const [group, module] of MODULES) {
@@ -87,7 +92,7 @@ export function initialize(
   }
   if (filter.dynamic) toolsetTools.initialize(structuredServer, registry);
   if (resourcesAndPrompts) {
-    resources.initialize(server, client);
+    resources.initialize(server, client, { sessionNotifications });
     prompts.initialize(server);
   }
   return registry;

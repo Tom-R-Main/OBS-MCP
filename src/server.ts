@@ -11,6 +11,8 @@ import { PACKAGE_VERSION } from "./version.js";
 import { ALL_TOOLS, assertKnownTools, parseToolFilter, type ToolFilter } from "./tools/toolsets.js";
 import { logger } from "./logger.js";
 import { resolveObsPassword } from "./obs-config.js";
+import { serveHttp, type HttpServerHandle } from "./http.js";
+import { forwardResourceEvents } from "./tools/resources.js";
 
 // Create the OBS WebSocket client
 const obsClient = new OBSWebSocketClient(
@@ -21,6 +23,8 @@ const obsClient = new OBSWebSocketClient(
 export let serverConnected = false;
 export let obsConnected = false;
 let stdioServer: StdioServerHandle | null = null;
+let httpServer: HttpServerHandle | null = null;
+let stopResourceEvents: (() => void) | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let connectionAttempt: Promise<void> | null = null;
 let reconnectAttempts = 0;
@@ -102,8 +106,21 @@ export function createServer(): McpServer {
     version: PACKAGE_VERSION,
   });
 
-  tools.initialize(server, obsClient, { filter: toolFilter ?? ALL_TOOLS });
+  tools.initialize(server, obsClient, { filter: toolFilter ?? ALL_TOOLS, sessionNotifications: !httpMode() });
   return server;
+}
+
+/** OBS_MCP_HTTP_PORT selects Streamable HTTP on 127.0.0.1 instead of stdio. */
+function httpPort(): number | null {
+  const value = process.env.OBS_MCP_HTTP_PORT?.trim();
+  if (!value) return null;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`OBS_MCP_HTTP_PORT must be a port number, not "${value}"`);
+  return port;
+}
+
+function httpMode(): boolean {
+  return Boolean(process.env.OBS_MCP_HTTP_PORT?.trim());
 }
 
 function loadToolFilter(): ToolFilter {
@@ -129,10 +146,23 @@ function loadToolFilter(): ToolFilter {
 export async function startServer(): Promise<void> {
   try {
     toolFilter = loadToolFilter();
-    stdioServer = serveStdio(createServer, {
-      onerror: (error) => logger.error(`MCP stdio error: ${error.message}`),
-    });
-    logger.log("Initialized MCP tools and started dual-era stdio server");
+    const port = httpPort();
+    if (port !== null) {
+      if (toolFilter.dynamic) {
+        // Each HTTP request gets a fresh server, so a session cannot keep groups it turned on.
+        logger.error("OBS_MCP_DYNAMIC_TOOLSETS is ignored over HTTP; registering the OBS_MCP_TOOLSETS groups instead");
+        toolFilter = { ...toolFilter, dynamic: false };
+      }
+      httpServer = await serveHttp(createServer, { port, ...(process.env.OBS_MCP_HTTP_TOKEN ? { token: process.env.OBS_MCP_HTTP_TOKEN } : {}) });
+      const notify = httpServer.notify;
+      stopResourceEvents = forwardResourceEvents(obsClient, (uri) => notify.resourceUpdated(uri), () => notify.resourcesChanged());
+      logger.log(`Serving MCP over HTTP at ${httpServer.url}${process.env.OBS_MCP_HTTP_TOKEN ? " (bearer token required)" : ""}`);
+    } else {
+      stdioServer = serveStdio(createServer, {
+        onerror: (error) => logger.error(`MCP stdio error: ${error.message}`),
+      });
+      logger.log("Initialized MCP tools and started dual-era stdio server");
+    }
 
     serverConnected = true;
 
@@ -141,8 +171,10 @@ export async function startServer(): Promise<void> {
 
     // stdin EOF is the only portable graceful-shutdown signal for stdio MCP
     // servers. Signals remain useful for terminals and process supervisors.
-    process.stdin.once("end", () => void handleShutdown("stdin end"));
-    process.stdin.once("close", () => void handleShutdown("stdin close"));
+    if (stdioServer) {
+      process.stdin.once("end", () => void handleShutdown("stdin end"));
+      process.stdin.once("close", () => void handleShutdown("stdin close"));
+    }
     process.once("SIGINT", () => void handleShutdown("SIGINT"));
     process.once("SIGTERM", () => void handleShutdown("SIGTERM"));
     
@@ -180,11 +212,14 @@ function handleShutdown(reason: string): Promise<void> {
       Promise.allSettled([
         obsClient.disconnect(),
         stdioServer?.close() ?? Promise.resolve(),
+        httpServer?.close() ?? Promise.resolve(),
       ]).then(() => undefined),
       deadline,
     ]);
 
+    stopResourceEvents?.();
     stdioServer = null;
+    httpServer = null;
     process.exit(0);
   })();
 
