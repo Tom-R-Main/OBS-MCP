@@ -24,7 +24,7 @@ function registeredNames(filter: ToolFilter): string[] {
 
 describe("parseToolFilter", () => {
   it("registers every tool when nothing is configured", () => {
-    expect(parseToolFilter({})).toEqual({ groups: null, tools: new Set(), readOnly: false });
+    expect(parseToolFilter({})).toEqual({ groups: null, tools: new Set(), readOnly: false, dynamic: false });
     expect(parseToolFilter({ OBS_MCP_TOOLSETS: "all,scenes" }).groups).toBeNull();
   });
 

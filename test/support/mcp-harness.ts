@@ -7,6 +7,7 @@ import { InMemoryTransport, McpServer } from "@modelcontextprotocol/server";
 import { Client, type CallToolResult } from "@modelcontextprotocol/client";
 import { OBSWebSocketClient } from "../../src/client.js";
 import { initialize } from "../../src/tools/index.js";
+import type { ToolFilter } from "../../src/tools/toolsets.js";
 import { FakeOBSServer, type FakeOBSOptions } from "./fake-obs-server.js";
 
 /** An MCP client wired in memory to the real tool set and a fake OBS. */
@@ -27,6 +28,8 @@ export function resultText(result: CallToolResult): string {
 export type HarnessOptions = FakeOBSOptions & {
   /** Register tools with OBS_MCP_CONFIRM_LIVE behavior. */
   confirmLive?: boolean;
+  /** Tool groups to register, as parsed from the OBS_MCP_* variables; defaults to every tool. */
+  filter?: ToolFilter;
   /** Declare form elicitation and answer every elicitation with this. */
   onElicit?: (message: string) => {
     action: "accept" | "decline" | "cancel";
@@ -35,7 +38,7 @@ export type HarnessOptions = FakeOBSOptions & {
 };
 
 export async function startMcpHarness(options: HarnessOptions = {}): Promise<McpHarness> {
-  const { confirmLive = false, onElicit, ...fakeOptions } = options;
+  const { confirmLive = false, onElicit, filter, ...fakeOptions } = options;
   const fakeObs = await FakeOBSServer.start(fakeOptions);
   const obsClient = new OBSWebSocketClient(fakeObs.url);
   const mcpServer = new McpServer({ name: "obs-mcp-test", version: "0.0.0" });
@@ -46,7 +49,7 @@ export async function startMcpHarness(options: HarnessOptions = {}): Promise<Mcp
   if (onElicit) {
     mcpClient.setRequestHandler("elicitation/create", async (request) => onElicit(request.params.message));
   }
-  initialize(mcpServer, obsClient, { confirmLive });
+  initialize(mcpServer, obsClient, { confirmLive, ...(filter ? { filter } : {}) });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([mcpServer.connect(serverTransport), mcpClient.connect(clientTransport)]);
 

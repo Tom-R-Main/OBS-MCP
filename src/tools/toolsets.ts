@@ -34,20 +34,30 @@ export const CORE_GROUPS: readonly ToolGroup[] = [
   "record",
 ];
 
+/** Groups enabled at the start with OBS_MCP_DYNAMIC_TOOLSETS and no OBS_MCP_TOOLSETS. */
+export const DYNAMIC_START_GROUPS: readonly ToolGroup[] = ["general"];
+
 export type ToolFilter = {
-  /** null registers every group. */
+  /** null registers every group. With dynamic, the groups enabled at the start. */
   groups: ReadonlySet<ToolGroup> | null;
   tools: ReadonlySet<string>;
   readOnly: boolean;
+  /** Register every group but enable only `groups` and `tools`; the model enables more at runtime. */
+  dynamic?: boolean;
 };
 
 export const ALL_TOOLS: ToolFilter = { groups: null, tools: new Set(), readOnly: false };
+
+/** Enables or disables a registered tool; the SDK tells connected clients the list changed. */
+export type ToolHandle = { enabled: boolean; enable(): void; disable(): void };
 
 export type RegisteredTool = {
   name: string;
   group: ToolGroup;
   annotations: ToolAnnotations | undefined;
   registered: boolean;
+  /** Present for registered tools; with dynamic toolsets, disabled ones can be enabled later. */
+  handle?: ToolHandle;
 };
 
 function splitList(value: string | undefined): string[] {
@@ -67,9 +77,13 @@ export function parseToolFilter(env: NodeJS.ProcessEnv = process.env): ToolFilte
   const groupNames = splitList(env.OBS_MCP_TOOLSETS);
   const tools = new Set(splitList(env.OBS_MCP_TOOLS));
   const readOnly = ["1", "true", "yes"].includes((env.OBS_MCP_READ_ONLY ?? "").trim().toLowerCase());
+  const dynamic = ["1", "true", "yes"].includes((env.OBS_MCP_DYNAMIC_TOOLSETS ?? "").trim().toLowerCase());
 
-  if (groupNames.length === 0 && tools.size === 0) return { groups: null, tools, readOnly };
-  if (groupNames.includes("all")) return { groups: null, tools, readOnly };
+  if (dynamic && groupNames.length === 0) {
+    return { groups: new Set(DYNAMIC_START_GROUPS), tools, readOnly, dynamic };
+  }
+  if (groupNames.length === 0 && tools.size === 0) return { groups: null, tools, readOnly, dynamic };
+  if (groupNames.includes("all")) return { groups: null, tools, readOnly, dynamic };
 
   const groups = new Set<ToolGroup>();
   for (const name of groupNames) {
@@ -83,10 +97,17 @@ export function parseToolFilter(env: NodeJS.ProcessEnv = process.env): ToolFilte
       );
     }
   }
-  return { groups, tools, readOnly };
+  return { groups, tools, readOnly, dynamic };
 }
 
-export function includesTool(filter: ToolFilter, tool: Omit<RegisteredTool, "registered">): boolean {
+/** Whether a tool is registered: with dynamic toolsets, every tool read-only mode allows. */
+export function registersTool(filter: ToolFilter, tool: Pick<RegisteredTool, "name" | "group" | "annotations">): boolean {
+  if (filter.readOnly && tool.annotations?.readOnlyHint !== true) return false;
+  return filter.dynamic ? true : includesTool(filter, tool);
+}
+
+/** Whether a tool is registered, or with dynamic toolsets, enabled at the start. */
+export function includesTool(filter: ToolFilter, tool: Pick<RegisteredTool, "name" | "group" | "annotations">): boolean {
   // Read-only mode wins over explicit groups and tool names.
   if (filter.readOnly && tool.annotations?.readOnlyHint !== true) return false;
   if (filter.groups === null) return true;
@@ -155,10 +176,16 @@ export function scopedServer(
           if (typeof name !== "string") throw new TypeError("MCP tool registration requires a name");
           const annotations = (config as { annotations?: ToolAnnotations } | undefined)?.annotations;
           const tool = { name, group: GROUP_OVERRIDES[name] ?? group, annotations };
-          const registered = includesTool(filter, tool);
-          registry.push({ ...tool, registered });
-          if (!registered) return undefined;
-          return Reflect.apply(Reflect.get(target, property, target) as Function, target, registrationArgs);
+          const registered = registersTool(filter, tool);
+          if (!registered) {
+            registry.push({ ...tool, registered });
+            return undefined;
+          }
+          const handle = Reflect.apply(Reflect.get(target, property, target) as Function, target, registrationArgs) as ToolHandle;
+          // Disabled before the session connects, so no list-changed notification is sent.
+          if (filter.dynamic && !includesTool(filter, tool)) handle.disable();
+          registry.push({ ...tool, registered, handle });
+          return handle;
         };
       }
       const value: unknown = Reflect.get(target, property, target);
