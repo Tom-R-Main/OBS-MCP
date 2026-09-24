@@ -4,44 +4,13 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FakeOBSRequestError, OBS_OP } from "../../test/support/fake-obs-server.js";
+import { OBS_OP } from "../../test/support/fake-obs-server.js";
+import { demoSceneState, serveSceneState, type FakeSceneInput, type FakeSceneItem } from "../../test/support/fake-obs-scene.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
 
-type Input = { kind: string; settings: Record<string, unknown>; muted?: boolean; volume?: number; tracks?: Record<string, boolean> };
-type Item = { sceneItemId: number; sourceName: string; enabled: boolean; locked: boolean; transform: Record<string, unknown> };
-
 let harness: McpHarness;
-let inputs: Record<string, Input>;
-let items: Item[];
-
-function initialState(): void {
-  inputs = {
-    Chrome: { kind: "screen_capture", settings: { type: 1, window: 31875 }, muted: true, volume: 1, tracks: { 1: false, 2: false } },
-    Background: { kind: "color_source_v3", settings: { color: 4278190080 } },
-  };
-  items = [
-    { sceneItemId: 1, sourceName: "Background", enabled: true, locked: true, transform: { positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, sourceWidth: 1920 } },
-    { sceneItemId: 2, sourceName: "Chrome", enabled: true, locked: false, transform: { positionX: 204, positionY: 65, scaleX: 1, scaleY: 1, cropTop: 40, sourceWidth: 1512 } },
-  ];
-}
-
-function input(data: Record<string, unknown>): Input {
-  const found = inputs[String(data.inputName)];
-  if (!found) throw new FakeOBSRequestError(600, "No source was found");
-  return found;
-}
-
-function item(data: Record<string, unknown>): Item {
-  const found = items.find(({ sceneItemId }) => sceneItemId === data.sceneItemId);
-  if (!found || data.sceneName !== "Demo") throw new FakeOBSRequestError(600, "No scene item was found");
-  return found;
-}
-
-function audio(data: Record<string, unknown>): Input {
-  const found = input(data);
-  if (found.muted === undefined) throw new FakeOBSRequestError(604, "The specified input does not support audio");
-  return found;
-}
+let inputs: Record<string, FakeSceneInput>;
+let items: FakeSceneItem[];
 
 function sent(requestType: string): Record<string, unknown>[] {
   return harness.fakeObs.history()
@@ -51,64 +20,11 @@ function sent(requestType: string): Record<string, unknown>[] {
 
 beforeEach(async () => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
-  initialState();
+  const state = demoSceneState();
+  inputs = state.inputs;
+  items = state.scenes.Demo!;
   harness = await startMcpHarness();
-  const { fakeObs } = harness;
-  fakeObs.respondWith("GetCurrentProgramScene", () => ({ currentProgramSceneName: "Demo" }));
-  fakeObs.respondWith("GetInputList", () => ({ inputs: Object.entries(inputs).map(([inputName, { kind }]) => ({ inputName, inputKind: kind })) }));
-  fakeObs.respondWith("GetSceneItemList", ({ sceneName }) => {
-    if (sceneName !== "Demo") throw new FakeOBSRequestError(600, "No source was found");
-    return {
-      sceneItems: items.map((entry, index) => ({
-        sceneItemId: entry.sceneItemId,
-        sourceName: entry.sourceName,
-        sceneItemIndex: index,
-        sceneItemEnabled: entry.enabled,
-        sceneItemLocked: entry.locked,
-        sceneItemTransform: { ...entry.transform },
-      })),
-    };
-  });
-  fakeObs.respondWith("GetInputSettings", (data) => ({ inputKind: input(data).kind, inputSettings: { ...input(data).settings } }));
-  fakeObs.respondWith("GetInputMute", (data) => ({ inputMuted: audio(data).muted }));
-  fakeObs.respondWith("GetInputVolume", (data) => ({ inputVolumeMul: audio(data).volume, inputVolumeDb: 0 }));
-  fakeObs.respondWith("GetInputAudioTracks", (data) => ({ inputAudioTracks: { ...audio(data).tracks } }));
-  fakeObs.respondWith("SetInputSettings", (data) => {
-    const target = input(data);
-    target.settings = data.overlay === false ? { ...(data.inputSettings as object) } : { ...target.settings, ...(data.inputSettings as object) };
-    return {};
-  });
-  fakeObs.respondWith("SetInputMute", (data) => {
-    audio(data).muted = data.inputMuted as boolean;
-    return {};
-  });
-  fakeObs.respondWith("SetInputVolume", (data) => {
-    audio(data).volume = data.inputVolumeMul as number;
-    return {};
-  });
-  fakeObs.respondWith("SetInputAudioTracks", (data) => {
-    audio(data).tracks = data.inputAudioTracks as Record<string, boolean>;
-    return {};
-  });
-  fakeObs.respondWith("SetSceneItemTransform", (data) => {
-    const target = item(data);
-    target.transform = { ...target.transform, ...(data.sceneItemTransform as object) };
-    return {};
-  });
-  fakeObs.respondWith("SetSceneItemEnabled", (data) => {
-    item(data).enabled = data.sceneItemEnabled as boolean;
-    return {};
-  });
-  fakeObs.respondWith("SetSceneItemLocked", (data) => {
-    item(data).locked = data.sceneItemLocked as boolean;
-    return {};
-  });
-  fakeObs.respondWith("SetSceneItemIndex", (data) => {
-    const target = item(data);
-    items.splice(items.indexOf(target), 1);
-    items.splice(Number(data.sceneItemIndex), 0, target);
-    return {};
-  });
+  serveSceneState(harness.fakeObs, state);
 });
 
 afterEach(async () => {
@@ -119,7 +35,7 @@ afterEach(async () => {
 function breakEverything(): void {
   inputs.Chrome!.settings = { type: 2, application: "com.google.Chrome" };
   inputs.Chrome!.muted = false;
-  inputs.Chrome!.volume = 0.5;
+  inputs.Chrome!.volumeMul = 0.5;
   inputs.Chrome!.tracks = { 1: true, 2: false };
   items[1]!.transform = { ...items[1]!.transform, positionX: 0, cropTop: 0 };
   items[0]!.enabled = false;

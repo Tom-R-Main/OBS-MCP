@@ -64,7 +64,7 @@ function errorResult(text: string): CallToolResult {
 }
 
 /** Deep equality for JSON values, with a tolerance for floating-point numbers. */
-function same(a: unknown, b: unknown): boolean {
+export function same(a: unknown, b: unknown): boolean {
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 1e-6;
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((value, index) => same(value, b[index]));
   if (isObject(a) && isObject(b)) {
@@ -93,7 +93,7 @@ async function batch(client: OBSWebSocketClient, requests: BatchRequest[]) {
   return client.sendBatch(requests);
 }
 
-async function readItems(client: OBSWebSocketClient, sceneNames: string[]): Promise<ItemState[]> {
+export async function readItems(client: OBSWebSocketClient, sceneNames: string[]): Promise<ItemState[]> {
   const lists = await batch(client, sceneNames.map((sceneName) => ({ requestType: "GetSceneItemList", requestData: { sceneName } })));
   const items: ItemState[] = [];
   sceneNames.forEach((sceneName, sceneIndex) => {
@@ -118,7 +118,7 @@ async function readItems(client: OBSWebSocketClient, sceneNames: string[]): Prom
   return items;
 }
 
-async function readInputs(client: OBSWebSocketClient, inputNames: string[]): Promise<InputState[]> {
+export async function readInputs(client: OBSWebSocketClient, inputNames: string[]): Promise<InputState[]> {
   const per = 4;
   const results = await batch(client, inputNames.flatMap((inputName) => [
     { requestType: "GetInputSettings", requestData: { inputName } },
