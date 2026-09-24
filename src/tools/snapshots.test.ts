@@ -200,6 +200,16 @@ describe("obs-snapshot and obs-restore", () => {
     expect(list.split("\n").filter((line) => line.includes("before obs-apply-scene"))).toHaveLength(10);
   });
 
+  it("restores a half-pixel move, which OBS keeps", async () => {
+    await harness.call("obs-snapshot");
+    items[1]!.transform = { ...items[1]!.transform, positionX: 204.5 };
+
+    const result = await harness.call("obs-restore");
+
+    expect(resultText(result)).toContain("Chrome (#2): transform");
+    expect(items[1]!.transform.positionX).toBe(204);
+  });
+
   it("refuses to restore before any snapshot", async () => {
     const result = await harness.call("obs-restore");
 

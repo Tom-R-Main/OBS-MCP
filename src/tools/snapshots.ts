@@ -88,10 +88,15 @@ export function sameFloat32(a: unknown, b: unknown): boolean {
 
 /** OBS rounds scene item positions to half a pixel (204.37 reads back as 204.5, observed on OBS 32.2.2). */
 const POSITION_FIELDS = new Set(["positionX", "positionY"]);
+const toHalfPixel = (value: number) => Math.round(value * 2) / 2;
 
-/** Whether a transform field OBS read back matches the value asked for. */
+/**
+ * Whether two transform values are the same once OBS stores them: positions
+ * on the same half pixel, other numbers as the same 32-bit float. A real
+ * half-pixel move (204 to 204.5) still counts as a difference.
+ */
 export function sameTransformValue(key: string, a: unknown, b: unknown): boolean {
-  if (POSITION_FIELDS.has(key) && typeof a === "number" && typeof b === "number") return Math.abs(a - b) <= 0.5;
+  if (POSITION_FIELDS.has(key) && typeof a === "number" && typeof b === "number") return toHalfPixel(a) === toHalfPixel(b);
   return sameFloat32(a, b);
 }
 

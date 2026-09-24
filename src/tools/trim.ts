@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import { execFile, spawn } from "node:child_process";
+import crypto from "node:crypto";
 import { lstatSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
@@ -427,7 +428,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         // lstat also sees a dangling symlink, which ffmpeg would write through, possibly outside the directory.
         if (pathTaken(outputPath)) return errorResult(`${outputPath} already exists; choose another outputPath`);
         // Export under a temporary name so a failed or interrupted export leaves nothing that looks finished.
-        const partial = join(dirname(outputPath), `.${basename(outputPath)}.partial${extname(outputPath)}`);
+        // A unique name, so it can never be the recording being trimmed, which the finally block would delete.
+        const partial = join(dirname(outputPath), `.${basename(outputPath)}.${process.pid}-${crypto.randomUUID().slice(0, 8)}.partial${extname(outputPath)}`);
+        if (partial === path || pathTaken(partial)) return errorResult("Could not choose a temporary name for the export; try again");
         try {
           await exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds);
           if (pathTaken(outputPath)) return errorResult(`${outputPath} appeared while exporting; the export is discarded`);

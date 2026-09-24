@@ -173,6 +173,16 @@ describe.skipIf(!ffmpegAvailable)("obs-trim-take and obs-contact-sheet", () => {
     expect(resultText(result)).toContain("already exists");
   }, 30_000);
 
+  it("never deletes a recording whose name looks like a temporary export", async () => {
+    // Exported to fresh.mp4, the old temporary name was exactly this file.
+    const lookalike = join(directory, ".fresh.mp4.partial.mp4");
+    execFileSync("cp", [clip, lookalike]);
+
+    await harness.call("obs-trim-take", { path: ".fresh.mp4.partial.mp4", apply: true, outputPath: "fresh.mp4", contactSheet: false });
+
+    expect(existsSync(lookalike)).toBe(true);
+  }, 30_000);
+
   it("refuses files outside the OBS recording directory", async () => {
     const outside = mkdtempSync(join(tmpdir(), "obs-mcp-outside-"));
     try {
