@@ -295,6 +295,21 @@ describe("obs-capture-window", () => {
     expect(requestTypes()).not.toContain("SetSceneItemTransform");
   });
 
+  it("saves a snapshot before changing an existing capture", async () => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture" });
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [] }));
+    harness.fakeObs.respondWith("GetInputMute", () => ({ inputMuted: false }));
+    harness.fakeObs.respondWith("GetInputVolume", () => ({ inputVolumeMul: 1 }));
+    harness.fakeObs.respondWith("GetInputAudioTracks", () => ({ inputAudioTracks: { 1: true } }));
+
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "chatgpt" });
+
+    expect(resultText(result)).toMatch(/Saved the previous state as snapshot \w+; obs-restore undoes this change/);
+    const order = requestTypes();
+    expect(order.indexOf("GetInputSettings")).toBeLessThan(order.indexOf("SetInputSettings"));
+  });
+
   it("refuses an existing input of another kind", async () => {
     await startCaptureHarness();
     inputs.push({ inputName: "Chrome", inputKind: "browser_source" });

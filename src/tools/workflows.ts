@@ -7,6 +7,7 @@ import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
 import { appendInputScreenshot, inputStateResult, readInputState } from "./after-change.js";
+import { takeSnapshot } from "./snapshots.js";
 import { markTake, startTake, stopTake } from "./takes.js";
 
 type JsonObject = Record<string, unknown>;
@@ -89,6 +90,11 @@ async function captureWindow(
   if (existing && existing.inputKind !== "screen_capture") {
     return errorResult(`Input ${args.inputName} exists but is a ${String(existing.inputKind)}, not a screen_capture`);
   }
+  // Changing an existing capture can break a working setup; save it first so obs-restore can undo this.
+  const snapshot = existing
+    ? await takeSnapshot(client, { inputs: [args.inputName], scenes: [args.sceneName], label: "before obs-capture-window" })
+      .catch(() => undefined)
+    : undefined;
   const type = args.window ? SCK_WINDOW_CAPTURE : SCK_APPLICATION_CAPTURE;
   if (!existing) {
     await client.sendRequest("CreateInput", {
@@ -133,6 +139,7 @@ async function captureWindow(
   });
 
   const notes: string[] = [`Capturing ${property} ${match.itemName}`];
+  if (snapshot) notes.push(`Saved the previous state as snapshot ${snapshot.id}; obs-restore undoes this change`);
   if (args.silent) {
     // screen_capture carries the application's audio on macOS 13+.
     const silenced = await client.sendBatch([
