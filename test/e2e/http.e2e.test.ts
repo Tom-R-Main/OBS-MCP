@@ -60,6 +60,34 @@ function rawPost(url: string, headers: Record<string, string>): Promise<number> 
   });
 }
 
+async function postJson(url: string, body: unknown, headers: Record<string, string> = {}) {
+  const target = new URL(url);
+  return await new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const request = http.request({
+      host: target.hostname,
+      port: target.port,
+      path: target.pathname,
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+    }, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => { body += chunk; });
+      response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
+      response.on("error", reject);
+    });
+    request.on("error", reject);
+    request.setTimeout(5_000, () => request.destroy(new Error("HTTP test request timed out")));
+    request.end(JSON.stringify(body));
+  });
+}
+
+const modernMeta = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+  "io.modelcontextprotocol/clientInfo": { name: "http-regression-test", version: "1.0.0" },
+};
+
 function text(result: CallToolResult): string {
   return result.content.map((block) => (block.type === "text" ? block.text : "")).join("\n");
 }
@@ -71,6 +99,65 @@ afterEach(async () => {
 });
 
 describe("compiled HTTP server", () => {
+  it.each(["modern", "legacy"])("rejects oversized %s request bodies and remains available", async (era) => {
+    const fake = await FakeOBSServer.start();
+    fakes.push(fake);
+    const url = await startHttpServer(fake);
+    const body = {
+      jsonrpc: "2.0", id: 1, method: "tools/list",
+      params: { ...(era === "modern" ? { _meta: modernMeta } : {}), padding: "x".repeat(4 * 1024 * 1024) },
+    };
+    const headers: Record<string, string> = era === "modern"
+      ? { "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/list" }
+      : { "mcp-protocol-version": "2025-11-25" };
+
+    // A chunked upload exercises the bounded reader without a Content-Length shortcut.
+    const response = await postJson(url, body, { ...headers, "transfer-encoding": "chunked" });
+    expect(response.status).toBe(413);
+    expect(JSON.parse(response.body).error.message).toContain("Payload Too Large");
+
+    const call = await agent(url, `after-large-${era}`);
+    expect((await call("obs-control-status")).isError).toBeFalsy();
+    await vi.waitFor(async () => expect(text(await call("obs-get-status"))).toContain('"connected": true'), { timeout: 3_000 });
+  });
+
+  it("rejects legacy batches exceeding 100 messages and remains available", async () => {
+    const fake = await FakeOBSServer.start();
+    fakes.push(fake);
+    const url = await startHttpServer(fake);
+    const batch = Array.from({ length: 101 }, (_, id) => ({ jsonrpc: "2.0", id, method: "tools/list", params: {} }));
+    const response = await postJson(url, batch, { "mcp-protocol-version": "2025-11-25" });
+    expect(response.status).toBe(400);
+    expect(JSON.parse(response.body).error).toMatchObject({ code: -32600, message: expect.stringContaining("100 messages") });
+
+    const call = await agent(url, "after-large-batch");
+    expect((await call("obs-control-status")).isError).toBeFalsy();
+    await vi.waitFor(async () => expect(text(await call("obs-get-status"))).toContain('"connected": true'), { timeout: 3_000 });
+  });
+
+  it("serves concurrent discovery requests with independent server instances", async () => {
+    const fake = await FakeOBSServer.start();
+    fakes.push(fake);
+    const url = await startHttpServer(fake);
+    const responses = await Promise.all(Array.from({ length: 8 }, (_, id) => postJson(url, {
+      jsonrpc: "2.0", id, method: "server/discover", params: { _meta: modernMeta },
+    }, { "mcp-protocol-version": "2026-07-28", "mcp-method": "server/discover" })));
+
+    for (const [id, response] of responses.entries()) {
+      expect(response.status).toBe(200);
+      // Discovery is an ordinary response stream; consume its complete result before reconnecting.
+      const event = response.body.split("\n").find((line) => line.startsWith("data: "));
+      const result = JSON.parse(event ? event.slice(6) : response.body);
+      expect(result.id).toBe(id);
+      expect(result.error).toBeUndefined();
+      expect(result.result.supportedVersions).toContain("2026-07-28");
+    }
+
+    const call = await agent(url, "after-concurrent-discovery");
+    expect((await call("obs-control-status")).isError).toBeFalsy();
+    await vi.waitFor(async () => expect(text(await call("obs-get-status"))).toContain('"connected": true'), { timeout: 3_000 });
+  });
+
   it("lets two agents share one server and one OBS connection, with a control lease", async () => {
     const fake = await FakeOBSServer.start();
     fakes.push(fake);

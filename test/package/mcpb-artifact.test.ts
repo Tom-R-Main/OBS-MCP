@@ -91,6 +91,10 @@ describe("MCPB artifact", () => {
       await expect(access(path.join(extracted, relativePath), constants.R_OK)).resolves.toBeUndefined();
     }
     await expect(access(path.join(extracted, "server/index.js"), constants.X_OK)).resolves.toBeUndefined();
+    for (const developmentDependency of ["@anthropic-ai/mcpb", "node-forge"]) {
+      await expect(access(path.join(extracted, "node_modules", developmentDependency)))
+        .rejects.toMatchObject({ code: "ENOENT" });
+    }
 
     const fake = await FakeOBSServer.start();
     fakeServers.push(fake);

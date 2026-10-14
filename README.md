@@ -320,7 +320,21 @@ The suite refuses to mutate if the selected collection does not exactly match `O
 
 Add `OBS_MCP_LIVE_RECORD=1` to the mutation command to also record a one-second clip. It checks that `obs-start-record` reports success only after OBS confirms the output is active, then stops the recording in a `finally` block. The clip is saved to the profile's recording directory and captures whatever the selected collection shows, so select a collection whose sources are safe to record.
 
-Pull-request CI runs the hermetic gate on Node 20.19, 22, and 24, plus the packaged-artifact smoke test on Node 22. Dependency auditing runs in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
+Pull-request CI checks the dependency policy before installation, then runs the hermetic gate on Node 20.19, 22, and 24, plus the packaged-artifact smoke test on Node 22. Dependency auditing checks the lockfile in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
+
+### Dependency safety
+
+Direct dependencies use exact versions. `npm run check:dependencies` checks that the lockfile matches the manifest, uses npm registry HTTPS tarballs with SHA-512 integrity, and contains no production dependency install scripts. The check runs offline and requires no installed packages:
+
+```bash
+node scripts/check-dependencies.mjs
+```
+
+The project disables dependency lifecycle scripts through `.npmrc`; the MCPB staging install also passes `--ignore-scripts` explicitly. Explicit commands such as `npm run build` still run. Dependabot proposes weekly npm and GitHub Actions updates for review. CI actions are pinned to verified commit hashes. The residual development advisory and published SDK license findings are recorded in [`docs/dependency-security.md`](docs/dependency-security.md).
+
+For a dependency update, inspect its release notes and changes to the lockfile, retain exact direct versions, then run `npm run check` and `npm run test:package`. Check current advisories with `npm audit --package-lock-only --ignore-scripts --audit-level=low`. An audit reports known registry advisories; the offline policy check validates the dependency graph's packaging constraints.
+
+Vitest remains on 4.1.11 because Vitest 5 drops Node 20 support. Node type declarations stay on the supported Node 22 line.
 
 ### TypeScript policy
 
@@ -328,12 +342,14 @@ The application builds with TypeScript 7.0.2 and does not import the TypeScript 
 
 ## Protocol baselines
 
-This revision was checked against these exact sources:
+On October 14, 2026, this revision was compared with the `modelcontextprotocol`, `mcp-typescript-sdk`, and `obs-studio` checkouts under `/Volumes/External SSD/referencerepos`. Those checkouts were read without modification. The exact reference sources are:
 
-- MCP specification: [`cbd57657`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/cbd57657ec769b942263a5251afc05959fc4ce58)
-- MCP TypeScript server and client SDKs: `2.0.0`
-- OBS Studio: [`0043697f`](https://github.com/obsproject/obs-studio/commit/0043697fc59d791b95b3495dfa1fe180b395966f)
-- OBS WebSocket: [`1ef34bf4`](https://github.com/obsproject/obs-websocket/commit/1ef34bf48110c2a18184e50e41cd0b1a855e2147), the revision pinned by that OBS Studio checkout
+- MCP specification: [`5ea99602`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/5ea996028df322ce97d1c906731cf8c05a6e268e)
+- MCP TypeScript server and client SDKs: `2.3.1`; reference checkout [`9bc40e90`](https://github.com/modelcontextprotocol/typescript-sdk/commit/9bc40e903fde15534ec06ff4c1347d47000dbe16)
+- OBS Studio: [`f082210c`](https://github.com/obsproject/obs-studio/commit/f082210c177a03572cace88c168d0f32d8cde39e)
+- OBS WebSocket: [`e28f8497`](https://github.com/obsproject/obs-websocket/commit/e28f84975984340e84fc4879cfc05741cc0afde1), the revision pinned by that OBS Studio checkout
+
+The refreshed OBS WebSocket revision has the same 147 requests, 60 events, and 7 enums as the previous baseline; its protocol JSON is byte-for-byte identical. MCP 2026-07-28 remains the released protocol baseline.
 
 The generated protocol files live under [`docs/`](docs/). Tests compare every request used by the tool modules with the bundled protocol, so obsolete request names and missing wrappers fail locally.
 

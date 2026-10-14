@@ -50,7 +50,8 @@
     "test:package:run": "vitest run --config vitest.package.config.ts",
     "test:obs-live": "npm run build && vitest run --config vitest.live.config.ts",
     "validate:manifest": "mcpb validate manifest.json",
-    "check": "npm run build && npm run typecheck:test && npm run test:unit && npm run test:e2e:run && npm run validate:manifest"
+    "check:dependencies": "node scripts/check-dependencies.mjs",
+    "check": "npm run check:dependencies && npm run build && npm run typecheck:test && npm run test:unit && npm run test:e2e:run && npm run validate:manifest"
   },
   "files": [
     "build",
@@ -63,15 +64,15 @@
     "NOTICE.md"
   ],
   "dependencies": {
-    "ws": "8.21.3",
-    "zod": "4.4.3",
-    "@modelcontextprotocol/server": "2.0.0"
+    "@modelcontextprotocol/server": "2.3.1",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "2.1.2",
-    "@modelcontextprotocol/client": "2.0.0",
-    "@types/node": "22.20.1",
-    "@types/ws": "8.18.1",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/node": "22.20.5",
+    "@types/ws": "8.18.2",
     "typescript": "7.0.2",
     "vitest": "4.1.11"
   },

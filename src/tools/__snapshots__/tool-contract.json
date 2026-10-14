@@ -818,13 +818,9 @@
       "properties": {
         "sceneItemId": {
           "description": "Numeric ID of the duplicated scene item",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -889,46 +885,30 @@
       "properties": {
         "sceneName": {
           "description": "Current program scene name",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "sceneUuid": {
           "description": "Current program scene UUID",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentProgramSceneName": {
           "description": "Current program scene name (Deprecated)",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentProgramSceneUuid": {
           "description": "Current program scene UUID (Deprecated)",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -954,68 +934,44 @@
       "properties": {
         "transitionName": {
           "description": "Name of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionUuid": {
           "description": "UUID of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionKind": {
           "description": "Kind of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionFixed": {
           "description": "Whether the transition uses a fixed (unconfigurable) duration",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionDuration": {
           "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "transitionConfigurable": {
           "description": "Whether the transition supports being configured",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionSettings": {
@@ -1268,13 +1224,9 @@
       "properties": {
         "inputAudioBalance": {
           "description": "Audio balance value from 0.0-1.0",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -1309,13 +1261,9 @@
       "properties": {
         "monitorType": {
           "description": "Audio monitor type",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -1350,13 +1298,9 @@
       "properties": {
         "inputAudioSyncOffset": {
           "description": "Audio sync offset in milliseconds",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -1483,13 +1427,9 @@
       "properties": {
         "inputDeinterlaceFieldOrder": {
           "description": "Deinterlace field order of the input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -1525,13 +1465,9 @@
       "properties": {
         "inputDeinterlaceMode": {
           "description": "Deinterlace mode of the input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -1606,13 +1542,9 @@
       "properties": {
         "inputMuted": {
           "description": "Whether the input is muted",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -1718,13 +1650,9 @@
         },
         "inputKind": {
           "description": "The kind of the input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -1759,24 +1687,16 @@
       "properties": {
         "inputVolumeMul": {
           "description": "Volume setting in mul",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "inputVolumeDb": {
           "description": "Volume setting in dB",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -1802,13 +1722,9 @@
       "properties": {
         "savedReplayPath": {
           "description": "File path",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -1843,35 +1759,23 @@
       "properties": {
         "mediaState": {
           "description": "State of the media input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "mediaDuration": {
           "description": "Total duration of the playing media in milliseconds. `null` if not playing",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "mediaCursor": {
           "description": "Position of the cursor in milliseconds. `null` if not playing",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -2029,90 +1933,58 @@
       "properties": {
         "outputActive": {
           "description": "Whether the output is active",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "outputReconnecting": {
           "description": "Whether the output is reconnecting",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "outputTimecode": {
           "description": "Current formatted timecode string for the output",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "outputDuration": {
           "description": "Current duration in milliseconds for the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputCongestion": {
           "description": "Congestion of the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputBytes": {
           "description": "Number of bytes sent by the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputSkippedFrames": {
           "description": "Number of frames skipped by the output's process",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputTotalFrames": {
           "description": "Total number of frames delivered by the output's process",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -2176,46 +2048,30 @@
       "properties": {
         "sceneName": {
           "description": "Current preview scene name",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "sceneUuid": {
           "description": "Current preview scene UUID",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentPreviewSceneName": {
           "description": "Current preview scene name",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentPreviewSceneUuid": {
           "description": "Current preview scene UUID",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -2241,13 +2097,9 @@
       "properties": {
         "currentProfileName": {
           "description": "The name of the current profile",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "profiles": {
@@ -2301,24 +2153,16 @@
       "properties": {
         "parameterValue": {
           "description": "Value associated with the parameter. `null` if not set and no default",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "defaultParameterValue": {
           "description": "Default value associated with the parameter. `null` if no default",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -2344,13 +2188,9 @@
       "properties": {
         "recordDirectory": {
           "description": "Output directory",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -2376,57 +2216,37 @@
       "properties": {
         "outputActive": {
           "description": "Whether the output is active",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "outputPaused": {
           "description": "Whether the output is paused",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "outputTimecode": {
           "description": "Current formatted timecode string for the output",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "outputDuration": {
           "description": "Current duration in milliseconds for the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputBytes": {
           "description": "Number of bytes sent by the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -2452,13 +2272,9 @@
       "properties": {
         "outputActive": {
           "description": "Whether the output is active",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -2484,13 +2300,9 @@
       "properties": {
         "currentSceneCollectionName": {
           "description": "The name of the current scene collection",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "sceneCollections": {
@@ -2553,13 +2365,9 @@
       "properties": {
         "sceneItemBlendMode": {
           "description": "Current blend mode",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -2608,13 +2416,9 @@
       "properties": {
         "sceneItemEnabled": {
           "description": "Whether the scene item is enabled. `true` for enabled, `false` for disabled",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -2668,13 +2472,9 @@
       "properties": {
         "sceneItemId": {
           "description": "Numeric ID of the scene item",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -2723,13 +2523,9 @@
       "properties": {
         "sceneItemIndex": {
           "description": "Index position of the scene item",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -2778,13 +2574,9 @@
       "properties": {
         "sceneItemLocked": {
           "description": "Whether the scene item is locked. `true` for locked, `false` for unlocked",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -2833,24 +2625,16 @@
       "properties": {
         "sourceName": {
           "description": "Name of the source associated with the scene item",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "sourceUuid": {
           "description": "UUID of the source associated with the scene item",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -2994,46 +2778,30 @@
       "properties": {
         "currentProgramSceneName": {
           "description": "Current program scene name. Can be `null` if non-main canvas or internal state desync",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentProgramSceneUuid": {
           "description": "Current program scene UUID. Can be `null` if non-main canvas or internal state desync",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentPreviewSceneName": {
           "description": "Current preview scene name. `null` if not in studio mode or non-main canvas",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentPreviewSceneUuid": {
           "description": "Current preview scene UUID. `null` if not in studio mode or non-main canvas",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "scenes": {
@@ -3091,24 +2859,16 @@
       "properties": {
         "transitionName": {
           "description": "Name of the overridden scene transition, else `null`",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionDuration": {
           "description": "Duration of the overridden scene transition, else `null`",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -3148,24 +2908,16 @@
       "properties": {
         "videoActive": {
           "description": "Whether the source is showing in Program",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "videoShowing": {
           "description": "Whether the source is showing in the UI (Preview, Projector, Properties)",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -3209,35 +2961,23 @@
       "properties": {
         "filterEnabled": {
           "description": "Whether the filter is enabled",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "filterIndex": {
           "description": "Index of the filter in the list, beginning at 0",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "filterKind": {
           "description": "The kind of filter",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "filterSettings": {
@@ -3404,68 +3144,44 @@
       "properties": {
         "desktop1": {
           "description": "Name of the Desktop Audio input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "desktop2": {
           "description": "Name of the Desktop Audio 2 input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "mic1": {
           "description": "Name of the Mic/Auxiliary Audio input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "mic2": {
           "description": "Name of the Mic/Auxiliary Audio 2 input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "mic3": {
           "description": "Name of the Mic/Auxiliary Audio 3 input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "mic4": {
           "description": "Name of the Mic/Auxiliary Audio 4 input",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -3491,123 +3207,79 @@
       "properties": {
         "cpuUsage": {
           "description": "Current CPU usage in percent",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "memoryUsage": {
           "description": "Amount of memory in MB currently being used by OBS",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "availableDiskSpace": {
           "description": "Available disk space on the device being used for recording storage",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "activeFps": {
           "description": "Current FPS being rendered",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "averageFrameRenderTime": {
           "description": "Average time in milliseconds that OBS is taking to render a frame",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "renderSkippedFrames": {
           "description": "Number of frames skipped by OBS in the render thread",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "renderTotalFrames": {
           "description": "Total number of frames outputted by the render thread",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputSkippedFrames": {
           "description": "Number of frames skipped by OBS in the output thread",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputTotalFrames": {
           "description": "Total number of frames outputted by the output thread",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "webSocketSessionIncomingMessages": {
           "description": "Total number of messages received by obs-websocket from the client",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "webSocketSessionOutgoingMessages": {
           "description": "Total number of messages sent by obs-websocket to the client",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -3647,13 +3319,9 @@
       "properties": {
         "streamServiceType": {
           "description": "Stream service type, like `rtmp_custom` or `rtmp_common`",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "streamServiceSettings": {
@@ -3694,90 +3362,58 @@
       "properties": {
         "outputActive": {
           "description": "Whether the output is active",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "outputReconnecting": {
           "description": "Whether the output is currently reconnecting",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "outputTimecode": {
           "description": "Current formatted timecode string for the output",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "outputDuration": {
           "description": "Current duration in milliseconds for the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputCongestion": {
           "description": "Congestion of the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputBytes": {
           "description": "Number of bytes sent by the output",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputSkippedFrames": {
           "description": "Number of frames skipped by the output's process",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputTotalFrames": {
           "description": "Total number of frames delivered by the output's process",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -3803,13 +3439,9 @@
       "properties": {
         "studioModeEnabled": {
           "description": "Whether studio mode is enabled",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -3835,13 +3467,9 @@
       "properties": {
         "transitionCursor": {
           "description": "Cursor position, between 0.0 and 1.0",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -3867,68 +3495,44 @@
       "properties": {
         "transitionName": {
           "description": "Name of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionUuid": {
           "description": "UUID of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionKind": {
           "description": "Kind of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionFixed": {
           "description": "Whether the transition uses a fixed (unconfigurable) duration",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionDuration": {
           "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "transitionConfigurable": {
           "description": "Whether the transition supports being configured",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionSettings": {
@@ -3969,68 +3573,44 @@
       "properties": {
         "transitionName": {
           "description": "Name of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionUuid": {
           "description": "UUID of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionKind": {
           "description": "Kind of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionFixed": {
           "description": "Whether the transition uses a fixed (unconfigurable) duration",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionDuration": {
           "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "transitionConfigurable": {
           "description": "Whether the transition supports being configured",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionSettings": {
@@ -4106,35 +3686,23 @@
       "properties": {
         "currentSceneTransitionName": {
           "description": "Name of the current scene transition. Can be null",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentSceneTransitionUuid": {
           "description": "UUID of the current scene transition. Can be null",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "currentSceneTransitionKind": {
           "description": "Kind of the current scene transition. Can be null",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitions": {
@@ -4178,68 +3746,44 @@
       "properties": {
         "transitionName": {
           "description": "Name of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionUuid": {
           "description": "UUID of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionKind": {
           "description": "Kind of the transition",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionFixed": {
           "description": "Whether the transition uses a fixed (unconfigurable) duration",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionDuration": {
           "description": "Configured transition duration in milliseconds. `null` if transition is fixed",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "transitionConfigurable": {
           "description": "Whether the transition supports being configured",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         },
         "transitionSettings": {
@@ -4280,35 +3824,23 @@
       "properties": {
         "obsVersion": {
           "description": "Current OBS Studio version",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "obsWebSocketVersion": {
           "description": "Current obs-websocket version",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "rpcVersion": {
           "description": "Current latest obs-websocket RPC version",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "availableRequests": {
@@ -4341,24 +3873,16 @@
         },
         "platform": {
           "description": "Name of the platform. Usually `windows`, `macos`, or `ubuntu` (linux flavor). Not guaranteed to be any of those",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "platformDescription": {
           "description": "Description of the platform, like `Windows 10 (10.0)`",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         }
       },
@@ -4384,68 +3908,44 @@
       "properties": {
         "fpsNumerator": {
           "description": "Numerator of the fractional FPS value",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "fpsDenominator": {
           "description": "Denominator of the fractional FPS value",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "baseWidth": {
           "description": "Width of the base (canvas) resolution in pixels",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "baseHeight": {
           "description": "Height of the base (canvas) resolution in pixels",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputWidth": {
           "description": "Width of the output resolution in pixels",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         },
         "outputHeight": {
           "description": "Height of the output resolution in pixels",
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "number",
+            "null"
           ]
         }
       },
@@ -4471,13 +3971,9 @@
       "properties": {
         "outputActive": {
           "description": "Whether the output is active",
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "boolean",
+            "null"
           ]
         }
       },
@@ -6037,15 +5533,11 @@
           "description": "Name of the parameter to set"
         },
         "parameterValue": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Value of the parameter to set. Use null to delete"
+          "description": "Value of the parameter to set. Use null to delete",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -6470,13 +5962,9 @@
         },
         "transitionName": {
           "description": "Transition name, or null to clear it",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
+          "type": [
+            "string",
+            "null"
           ]
         },
         "transitionDuration": {

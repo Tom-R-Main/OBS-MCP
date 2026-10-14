@@ -16,6 +16,7 @@ import {
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listTools } from "./list-tools.mjs";
+import { checkDependencies } from "./check-dependencies.mjs";
 
 const require = createRequire(import.meta.url);
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,6 +34,7 @@ export async function pack({
   output = resolve(root, "dist/obs-studio.mcpb"),
   keepStaging = false,
 } = {}) {
+  checkDependencies({ root });
   const staging = resolve(root, ".pack-staging");
   console.log("Preparing staging directory...");
   rmSync(staging, { recursive: true, force: true });
@@ -90,7 +92,7 @@ export async function pack({
     });
 
     console.log("Installing production dependencies...");
-    execFileSync(npmCommand(), ["ci", "--omit=dev"], {
+    execFileSync(npmCommand(), ["ci", "--omit=dev", "--ignore-scripts", "--no-audit"], {
       cwd: staging,
       stdio: "inherit",
     });
