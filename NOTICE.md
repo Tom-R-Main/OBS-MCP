@@ -8,7 +8,7 @@ Thomas Main began the independent modernization in August 2026. Modified source 
 
 The complete project is distributed under GPL-2.0-only. See `LICENSE` for the license terms. Published packages include the corresponding TypeScript source and build scripts.
 
-The generated OBS protocol data is based on `obsproject/obs-websocket` commit `1ef34bf48110c2a18184e50e41cd0b1a855e2147`, the revision pinned by the OBS Studio baseline documented in the README.
+The generated OBS protocol data is based on `obsproject/obs-websocket` commit `e28f84975984340e84fc4879cfc05741cc0afde1`, the revision pinned by the OBS Studio baseline documented in the README.
 
 Upstream references:
 
