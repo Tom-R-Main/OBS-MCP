@@ -48,6 +48,5 @@ export function serveSceneAuditFixture(fake: FakeOBSServer) {
 /** Exact query allowlist: unexpected requests fail even if their names look read-only. */
 export const SCENE_AUDIT_READS = new Set([
   "GetVersion", "GetSceneCollectionList", "GetSceneList", "GetSceneItemList",
-  "GetGroupSceneItemList", "GetSceneItemTransform", "GetInputList", "GetInputKindList",
-  "GetInputSettings", "GetSourceActive", "GetVideoSettings", "GetSourceScreenshot",
+  "GetGroupSceneItemList", "GetSceneItemTransform", "GetInputList", "GetSourceScreenshot",
 ]);

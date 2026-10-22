@@ -99,7 +99,6 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
   };
   const containers: { uuid: string; group: boolean; before: string }[] = [];
   const transforms: { item: Item; before: string }[] = [];
-  const mediaSettings: { uuid: string; before: string }[] = [];
   try {
     const collection = await request("GetSceneCollectionList");
     if (collection.currentSceneCollectionName !== options.sceneCollection) throw new Error("The selected scene collection is not current or was not reported");
@@ -139,6 +138,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
           const valid = NUMERIC_FIELDS.every((key) => finite(transform[key]))
             && ["sourceWidth", "sourceHeight", "boundsWidth", "boundsHeight", "cropLeft", "cropRight", "cropTop", "cropBottom"].every((key) => Number(transform[key]) >= 0)
             && ["cropLeft", "cropRight", "cropTop", "cropBottom"].every((key) => Number.isInteger(transform[key]))
+            && ["sourceWidth", "sourceHeight"].every((key) => Number.isInteger(transform[key]) && Number(transform[key]) <= 0xffffffff)
             && [0, 1, 2, 4, 5, 6, 8, 9, 10].includes(Number(transform.alignment))
             && [0, 1, 2, 4, 5, 6, 8, 9, 10].includes(Number(transform.boundsAlignment))
             && text(transform.boundsType);
@@ -149,25 +149,17 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
             const nested = scenesByUuid.get(member.sourceUuid);
             if (!member.isGroup && !nested && source.length !== 1) add("source-identity", "unknown", "Item source could not be resolved uniquely in the input inventory", identity);
             else {
-              let audioOnly = source.length === 1 && rendersNoVideo(source[0]!.inputKind);
-              if (!audioOnly && source.length === 1 && ["ffmpeg_source", "vlc_source"].includes(String(source[0]!.inputKind))
-                && (transform.sourceWidth === 0 || transform.sourceHeight === 0)) {
-                const settings = await request("GetInputSettings", { inputUuid: member.sourceUuid });
-                if (!object(settings.inputSettings)) add("source-dimensions", "unknown", "Media source settings unavailable; audio-only status unknown", identity);
-                else {
-                  mediaSettings.push({ uuid: member.sourceUuid, before: signature(settings.inputSettings) });
-                  // A remembered local_file is not evidence while FFmpeg uses
-                  // a network URL or VLC uses a playlist instead.
-                  audioOnly = source[0]!.inputKind === "ffmpeg_source" && settings.inputSettings.is_local_file === true
-                    && rendersNoVideo(source[0]!.inputKind, settings.inputSettings);
-                }
-                if (!object(settings.inputSettings)) continue;
+              const audioOnly = source.length === 1 && rendersNoVideo(source[0]!.inputKind);
+              const unknownMedia = source.length === 1 && ["ffmpeg_source", "vlc_source"].includes(String(source[0]!.inputKind))
+                && (transform.sourceWidth === 0 || transform.sourceHeight === 0);
+              if (unknownMedia) add("source-dimensions", "unknown", "Zero-size media source may be audio-only or lack video; filename settings do not establish media contents", identity);
+              else {
+                const noPicture = Number(transform.sourceWidth) === 0 || Number(transform.sourceHeight) === 0
+                  || Number(transform.cropLeft) + Number(transform.cropRight) >= Number(transform.sourceWidth)
+                  || Number(transform.cropTop) + Number(transform.cropBottom) >= Number(transform.sourceHeight)
+                  || transform.scaleX === 0 || transform.scaleY === 0;
+                add("source-dimensions", audioOnly || !noPicture ? "pass" : "fail", audioOnly ? "Source kind establishes audio-only capture" : noPicture ? "Visual source has zero source size, zero scale, or is fully cropped" : "Visual source has nonzero dimensions after crop and scale", identity);
               }
-              const noPicture = Number(transform.sourceWidth) === 0 || Number(transform.sourceHeight) === 0
-                || Number(transform.cropLeft) + Number(transform.cropRight) >= Number(transform.sourceWidth)
-                || Number(transform.cropTop) + Number(transform.cropBottom) >= Number(transform.sourceHeight)
-                || transform.scaleX === 0 || transform.scaleY === 0;
-              add("source-dimensions", audioOnly || !noPicture ? "pass" : "fail", audioOnly ? "Source is audio-only by kind or media settings" : noPicture ? "Visual source has zero source size, zero scale, or is fully cropped" : "Visual source has nonzero dimensions after crop and scale", identity);
             }
             if (path.length > 0 || member.isGroup || nested || transform.rotation !== 0 || transform.boundsType !== "OBS_BOUNDS_NONE") {
               add("geometry", "unknown", "Nested, rotated, or bounded geometry is outside this structural audit", identity);
@@ -204,9 +196,6 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
     for (const { item, before } of transforms) {
       const now = await request("GetSceneItemTransform", { sceneUuid: item.containerUuid, sceneItemId: item.sceneItemId });
       if (signature(boundedTransform(now.sceneItemTransform)) !== before) invalidate();
-    }
-    for (const { uuid, before } of mediaSettings) {
-      if (signature((await request("GetInputSettings", { inputUuid: uuid })).inputSettings) !== before) invalidate();
     }
     if (signature(objects((await request("GetSceneList")).scenes)) !== signature(scenes)
       || signature(objects((await request("GetInputList")).inputs)) !== signature(inputs)

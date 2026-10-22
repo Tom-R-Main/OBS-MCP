@@ -89,26 +89,38 @@ describe("scene structural audit through MCP", () => {
     harness.fakeObs.respondWith("GetInputList", () => ({ inputs: [{ inputName: "Application", inputUuid: "application-source-uuid", inputKind: "coreaudio_input_capture" }] }));
     expect((await audit()).report.status).toBe("pass");
   });
-  it("uses media settings before exempting zero dimensions and leaves unavailable settings unknown", async () => {
+  it("does not promote a zero-size .ogg source to verified audio-only content", async () => {
     Object.assign(state.items[0]!.sceneItemTransform, { sourceWidth: 0, sourceHeight: 0 });
     harness.fakeObs.respondWith("GetInputList", () => ({ inputs: [{ inputName: "Application", inputUuid: "application-source-uuid", inputKind: "ffmpeg_source" }] }));
-    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputSettings: { local_file: "track.wav", is_local_file: true } }));
-    expect((await audit()).report.status).toBe("pass");
-    harness.fakeObs.respondWith("GetInputSettings", () => ({}));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputSettings: { is_local_file: true, local_file: "video.ogg" } }));
+    const { report } = await audit();
+    expect(report.status).toBe("unknown");
+    expect(report.checks).toContainEqual(expect.objectContaining({ id: "source-dimensions", status: "unknown" }));
+  });
+  it.each(["sourceWidth", "sourceHeight"].flatMap((field) => [0.5, Number.MAX_VALUE, 4294967296].map((dimension) => ({ field, dimension }))))("does not accept malformed source pixel dimensions $field=$dimension", async ({ field, dimension }) => {
+    Object.assign(state.items[0]!.sceneItemTransform, { [field]: dimension });
     expect((await audit()).report.status).toBe("unknown");
+  });
+  it.each(["ffmpeg_source", "vlc_source"])("leaves zero-size %s unknown despite apparent audio filenames", async (inputKind) => {
+    Object.assign(state.items[0]!.sceneItemTransform, { sourceWidth: 0, sourceHeight: 0 });
+    harness.fakeObs.respondWith("GetInputList", () => ({ inputs: [{ inputName: "Application", inputUuid: "application-source-uuid", inputKind }] }));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputSettings: { local_file: "track.wav", is_local_file: true } }));
+    expect((await audit()).report.status).toBe("unknown");
+    expect(harness.fakeObs.history().some(({ frame }) => frame.d.requestType === "GetInputSettings")).toBe(false);
   });
   it("does not exempt network media from remembered audio filenames", async () => {
     Object.assign(state.items[0]!.sceneItemTransform, { sourceWidth: 0, sourceHeight: 0 });
     harness.fakeObs.respondWith("GetInputList", () => ({ inputs: [{ inputName: "Application", inputUuid: "application-source-uuid", inputKind: "ffmpeg_source" }] }));
     harness.fakeObs.respondWith("GetInputSettings", () => ({ inputSettings: { local_file: "track.wav", is_local_file: false } }));
-    expect((await audit()).report.status).toBe("fail");
+    expect((await audit()).report.status).toBe("unknown");
   });
-  it("invalidates changed settings used to prove audio-only dimensions", async () => {
+  it("does not read media paths to infer audio-only dimensions", async () => {
     Object.assign(state.items[0]!.sceneItemTransform, { sourceWidth: 0, sourceHeight: 0 });
     harness.fakeObs.respondWith("GetInputList", () => ({ inputs: [{ inputName: "Application", inputUuid: "application-source-uuid", inputKind: "ffmpeg_source" }] }));
     let reads = 0;
     harness.fakeObs.respondWith("GetInputSettings", () => ({ inputSettings: { local_file: ++reads > 1 ? "video.mp4" : "track.wav", is_local_file: true } }));
     expect((await audit()).report.status).toBe("unknown");
+    expect(reads).toBe(0);
   });
   it("projects transforms onto bounded known fields", async () => {
     harness.fakeObs.respondWith("GetSceneItemTransform", () => ({ sceneItemTransform: { ...state.items[0]!.sceneItemTransform, untrustedExtra: "not evidence" } }));

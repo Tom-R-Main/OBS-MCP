@@ -262,6 +262,8 @@ The report lists individual source occurrences with their container, source UUID
 
 Checks report `pass`, `fail`, or `unknown`, with observation times and evidence. Missing fields, unreadable state, cycles, traversal limits, unsupported geometry, or detected changes during collection make the affected evidence unknown. Nested scene and group membership can be inspected, but composed geometry is not qualified. The report covers a sampling interval; it is not an atomic snapshot or a promise that OBS will stay unchanged.
 
+Zero-size media sources remain unknown: a filename extension does not prove that a file has no video. Inputs whose source kind establishes audio-only capture are exempt from visual dimension checks.
+
 Set `includeScreenshot: true` to request a bounded scene image for inspection. An unavailable image is reported as unknown. The tool does not save screenshots or reports to disk. A structural pass leaves `renderedContent` as `unverified`: it does not establish the intended capture content, readability, freedom from occlusion, audio policy, or readiness to record. Continue to use the recording preflight and inspect the rendered picture separately.
 
 ### Describing a scene
