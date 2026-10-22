@@ -33,6 +33,7 @@ import * as lease from "./lease.js";
 import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import * as demo from "./demo.js";
+import * as sceneAudit from "./scene-audit.js";
 import { withStructuredToolResults } from "./results.js";
 import { liveConfirmationEnabled, withLiveConfirmation } from "./confirm.js";
 import { ALL_TOOLS, scopedServer, type RegisteredTool, type ToolFilter, type ToolGroup } from "./toolsets.js";
@@ -61,6 +62,7 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["record", trim],
   ["scene-items", snapshots],
   ["scenes", applyScene],
+  ["scenes", sceneAudit],
 ];
 
 /**
