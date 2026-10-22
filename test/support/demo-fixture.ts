@@ -10,6 +10,10 @@ export function serveDemoFixture(fake: FakeOBSServer) {
   fake.respondWith("GetVersion", () => ({ platform: "macos", obsVersion: "32.2.2", obsWebSocketVersion: "5.6.3" }));
   fake.respondWith("GetStreamStatus", () => ({ outputActive: false }));
   fake.respondWith("GetRecordStatus", () => ({ outputActive: false }));
+  fake.respondWith("GetVirtualCamStatus", () => ({ outputActive: false }));
+  fake.respondWith("GetReplayBufferStatus", () => ({ outputActive: false }));
+  fake.respondWith("GetOutputList", () => ({ outputs: [{ outputName: "plugin-output", outputActive: false }] }));
+  fake.respondWith("GetOutputStatus", () => ({ outputActive: false, outputReconnecting: false }));
   fake.respondWith("GetSceneCollectionList", () => ({ currentSceneCollectionName: "Disposable" }));
   fake.respondWith("GetSceneList", () => ({ currentProgramSceneName: state.program, scenes: Object.keys(state.scenes).map((sceneName) => ({ sceneName, sceneUuid: `${sceneName}-uuid` })) }));
   fake.respondWith("GetInputList", () => ({ inputs: Object.entries(state.inputs).map(([inputName, input]) => ({ inputName, inputKind: input.kind, inputUuid: `${inputName}-uuid` })) }));

@@ -72,9 +72,17 @@ async function readState(client: OBSWebSocketClient, selection: Selection): Prom
   const request = async (type: string, data?: Obj) => obj(await client.sendRequest(type, data));
   if ((await request("GetVersion")).platform !== "macos") throw new Error("V1 requires macOS OBS");
   if ((await request("GetSceneCollectionList")).currentSceneCollectionName !== selection.sceneCollection) throw new Error("Selected scene collection is not current");
-  for (const type of ["GetStreamStatus", "GetRecordStatus"]) {
+  for (const type of ["GetStreamStatus", "GetRecordStatus", "GetVirtualCamStatus", "GetReplayBufferStatus"]) {
     const status = await request(type);
-    if (status.outputActive !== false || status.outputReconnecting === true) throw new Error("Preparation and recovery require inactive recording and streaming");
+    if (status.outputActive !== false || status.outputReconnecting === true) throw new Error(`Preparation and recovery require inactive outputs: ${type} was active or unavailable`);
+  }
+  // GetOutputList's pinned contract leaves entry fields opaque. Never infer
+  // inactivity from list metadata: request explicit status for every output.
+  const outputs = list((await request("GetOutputList")).outputs);
+  for (const output of outputs) {
+    const outputName = string(output.outputName);
+    const status = await request("GetOutputStatus", { outputName });
+    if (status.outputActive !== false || status.outputReconnecting !== false) throw new Error(`Preparation and recovery require inactive outputs: ${outputName} was active or unavailable`);
   }
   const scenes = await request("GetSceneList");
   if (scenes.currentProgramSceneName !== selection.sceneName) throw new Error("Selected scene must already be the current program scene");

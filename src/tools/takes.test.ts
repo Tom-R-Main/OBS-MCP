@@ -54,6 +54,19 @@ afterEach(async () => {
 });
 
 describe("recording takes", () => {
+  it.each(["status-read", "stop-request", "overlapping-deadline"])("keeps the deadline after an early uncertain %s", async (failure) => {
+    await startHarness();
+    await harness.call("obs-take-start", { maxDurationSeconds: 1 });
+    if (failure === "status-read") harness.fakeObs.queueError("GetRecordStatus", 500, "Temporary status failure");
+    else if (failure === "stop-request") harness.fakeObs.queueError("StopRecord", 500, "Temporary stop failure");
+    else harness.fakeObs.queueError("GetRecordStatus", 500, "Temporary status failure", 1200);
+    const early = await harness.call("obs-take-stop");
+    expect(early.structuredContent).toMatchObject({ stopConfirmed: false });
+    await vi.waitFor(() => expect(currentTake(harness.obsClient)).toBeUndefined(), { timeout: 3500 });
+    expect(state.recording).toBe(false);
+    expect(sent("StopRecord")).toBe(failure === "stop-request" ? 2 : 1);
+    expect((await harness.call("obs-take-stop")).structuredContent).toMatchObject({ stopConfirmed: true });
+  });
   it("preserves legacy silent-start refusal when an unmuted input's routing cannot be read", async () => {
     await startHarness();
     state.inputs[0]!.muted = false;

@@ -207,7 +207,14 @@ async function startTakeReserved(
   const ownedTake = take;
   takes.set(client, take);
   if (options.maxDurationSeconds !== undefined) {
-    take.deadline = setTimeout(() => { void stopTake(client, ownedTake); }, options.maxDurationSeconds * 1000);
+    take.deadline = setTimeout(() => {
+      // An early manual stop may still be awaiting its outcome at the deadline.
+      // Reconcile after it completes rather than consuming the deadline on its promise.
+      void (async () => {
+        if (ownedTake.stopPromise) await ownedTake.stopPromise;
+        if (takes.get(client) === ownedTake) await stopTake(client, ownedTake);
+      })();
+    }, options.maxDurationSeconds * 1000);
     take.deadline.unref();
   }
   try {
@@ -283,7 +290,6 @@ export async function stopTake(
 }
 
 async function stopTakeOnce(client: OBSWebSocketClient, take: Take, options: { requestedSeconds?: number }): Promise<CallToolResult> {
-  clearTimeout(take.deadline);
   const uncertain = (reason: string) => ({
     ...errorResult(`Take ${take.id}: ${reason}. Recording stop is unconfirmed; check OBS. No automatic retry was made`),
     structuredContent: { takeId: take.id, stopConfirmed: false, ownership: take.ownershipLost ? "unavailable" : "continuous", reason },
@@ -293,6 +299,7 @@ async function stopTakeOnce(client: OBSWebSocketClient, take: Take, options: { r
   catch { return uncertain("Recording status is unavailable"); }
   if (!isObject(status) || typeof status.outputActive !== "boolean") return uncertain("Recording status is unavailable");
   if (!status.outputActive && take.ownershipLost) {
+    clearTimeout(take.deadline);
     await take.monitor.stop();
     take.disposeOwnership?.();
     if (takes.get(client) === take) takes.delete(client);
@@ -301,6 +308,7 @@ async function stopTakeOnce(client: OBSWebSocketClient, take: Take, options: { r
   }
   if (!status.outputActive && !take.stoppedObserved) return uncertain("Inactive status has no matching stopped event or completed file");
   if (status.outputActive && (take.ownershipLost || take.stoppedObserved)) {
+    clearTimeout(take.deadline);
     await take.monitor.stop();
     return uncertain(take.ownershipLost ?? "The owned recording stopped; the current recording may belong to another operator");
   }
@@ -319,6 +327,7 @@ async function stopTakeOnce(client: OBSWebSocketClient, take: Take, options: { r
     try { after = await client.sendRequest("GetRecordStatus"); } catch { /* unavailable */ }
     if (!isObject(after) || after.outputActive !== false || !stopped) return uncertain("OBS did not confirm a completed stop and inactive status");
   }
+  clearTimeout(take.deadline);
   const summary = await take.monitor.stop();
   take.disposeOwnership?.();
   if (take.leaseHolder) release(client, take.leaseHolder);

@@ -18,6 +18,10 @@ function serve(): void {
   harness.fakeObs.respondWith("GetVersion", () => ({ platform: "macos" }));
   harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: false }));
   harness.fakeObs.respondWith("GetStreamStatus", () => ({ outputActive: false }));
+  harness.fakeObs.respondWith("GetVirtualCamStatus", () => ({ outputActive: false }));
+  harness.fakeObs.respondWith("GetReplayBufferStatus", () => ({ outputActive: false }));
+  harness.fakeObs.respondWith("GetOutputList", () => ({ outputs: [{ outputName: "plugin-output", outputActive: false }] }));
+  harness.fakeObs.respondWith("GetOutputStatus", () => ({ outputActive: false, outputReconnecting: false }));
   harness.fakeObs.respondWith("GetSceneCollectionList", () => { collectionReads++; return { currentSceneCollectionName: collection }; });
   harness.fakeObs.respondWith("GetInputList", () => ({ inputs: Object.entries(state.inputs).map(([inputName, input]) => ({ inputName, inputKind: input.kind, inputUuid: inputName === "Chrome" ? inputUuid : "background-uuid" })) }));
   harness.fakeObs.respondWith("GetSceneList", () => ({ currentProgramSceneName: state.program, scenes: Object.keys(state.scenes).map((sceneName) => ({ sceneName, sceneUuid: `${sceneName}-uuid` })) }));
@@ -49,6 +53,65 @@ async function prepare() {
   return response.structuredContent as { operationId: string; snapshotId: string; status: string };
 }
 describe("restricted demo preparation and recovery over MCP", () => {
+  describe.each(["prepare", "recover"] as const)("%s output admission", (operation) => {
+    it.each(["GetStreamStatus", "GetRecordStatus", "GetVirtualCamStatus", "GetReplayBufferStatus", "GetOutputStatus"])("refuses active, unknown, and failed %s without writes", async (requestType) => {
+      const operationId = operation === "recover" ? (await prepare()).operationId : undefined;
+      const baseline = mutations().length;
+      const before = structuredClone(state);
+      for (const status of [{ outputActive: true, outputReconnecting: false }, {}, null]) {
+        harness.fakeObs.respondWith(requestType, () => {
+          if (status === null) throw new FakeOBSRequestError(500, "status unavailable");
+          return status;
+        });
+        const response = operation === "prepare"
+          ? await harness.call("obs-prepare-demo", { ...selection, apply: true })
+          : await harness.call("obs-recover-demo", { operationId, apply: true });
+        expect(response.isError, `${operation} / ${requestType}: ${JSON.stringify(status)}`).toBe(true);
+        expect(response.structuredContent).toMatchObject({ applied: false });
+        expect(mutations()).toHaveLength(baseline);
+        expect(state).toEqual(before);
+      }
+    });
+    it.each([{}, { outputs: null }, { outputs: [null] }, { outputs: [{}] }])("refuses malformed output inventory %j without writes", async (inventory) => {
+      const operationId = operation === "recover" ? (await prepare()).operationId : undefined;
+      const baseline = mutations().length;
+      harness.fakeObs.respondWith("GetOutputList", () => inventory);
+      const response = operation === "prepare"
+        ? await harness.call("obs-prepare-demo", { ...selection, apply: true })
+        : await harness.call("obs-recover-demo", { operationId, apply: true });
+      expect(response.isError).toBe(true);
+      expect(response.structuredContent).toMatchObject({ applied: false });
+      expect(mutations()).toHaveLength(baseline);
+    });
+    it("queries every generic output and refuses a reconnecting or unknown reconnect state", async () => {
+      const operationId = operation === "recover" ? (await prepare()).operationId : undefined;
+      const baseline = mutations().length;
+      harness.fakeObs.respondWith("GetOutputList", () => ({ outputs: [{ outputName: "idle", outputActive: false }, { outputName: "plugin", outputActive: false }] }));
+      for (const reconnecting of [true, undefined]) {
+        const queried: unknown[] = [];
+        harness.fakeObs.respondWith("GetOutputStatus", ({ outputName }) => {
+          queried.push(outputName);
+          return { outputActive: false, ...(outputName === "idle" ? { outputReconnecting: false } : reconnecting === undefined ? {} : { outputReconnecting: reconnecting }) };
+        });
+        const response = operation === "prepare"
+          ? await harness.call("obs-prepare-demo", { ...selection, apply: true })
+          : await harness.call("obs-recover-demo", { operationId, apply: true });
+        expect(response.isError).toBe(true);
+        expect(queried).toEqual(["idle", "plugin"]);
+        expect(mutations()).toHaveLength(baseline);
+      }
+    });
+    it("refuses a failed output inventory request without writes", async () => {
+      const operationId = operation === "recover" ? (await prepare()).operationId : undefined;
+      const baseline = mutations().length;
+      harness.fakeObs.respondWith("GetOutputList", () => { throw new FakeOBSRequestError(500, "inventory unavailable"); });
+      const response = operation === "prepare"
+        ? await harness.call("obs-prepare-demo", { ...selection, apply: true })
+        : await harness.call("obs-recover-demo", { operationId, apply: true });
+      expect(response.isError).toBe(true);
+      expect(mutations()).toHaveLength(baseline);
+    });
+  });
   it("plans without mutations or state writes; apply persists complete recovery before the first mutation", async () => {
     const before = structuredClone(state);
     const plan = await harness.call("obs-prepare-demo", selection);
