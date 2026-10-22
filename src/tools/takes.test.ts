@@ -295,7 +295,10 @@ describe("recording takes", () => {
     expect(sent("SetProfileParameter")).toBe(0);
 
     expect((await harness.call("obs-stop-record")).isError).toBeFalsy();
-    await harness.call("obs-take-stop");
+    // StopRecord acknowledges before STOPPED; do not depend on Node scheduling
+    // delivering the fixture's delayed event between these two MCP calls.
+    await vi.waitFor(() => expect(currentTake(harness.obsClient)?.stoppedObserved).toBe(true));
+    expect((await harness.call("obs-take-stop")).structuredContent).toMatchObject({ stopConfirmed: true });
     expect((await harness.call("obs-set-current-profile", { profileName: "Streaming" })).isError).toBeFalsy();
   });
 
