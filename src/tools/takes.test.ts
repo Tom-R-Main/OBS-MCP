@@ -11,6 +11,7 @@ import { EventSubscription } from "../client.js";
 import { FakeOBSRequestError } from "../../test/support/fake-obs-server.js";
 import { healthyObsState, servePreflightState, serveRecordOutput, type FakeObsState } from "../../test/support/fake-obs-state.js";
 import { resultText, startMcpHarness, type HarnessOptions, type McpHarness } from "../../test/support/mcp-harness.js";
+import { TakeMonitor } from "./take-monitor.js";
 import { currentTake, stopTake } from "./takes.js";
 
 let harness: McpHarness;
@@ -26,7 +27,10 @@ async function startHarness(options: HarnessOptions = {}): Promise<void> {
   harness = await startMcpHarness({ platform: "macos", ...options });
   servePreflightState(harness.fakeObs, () => state);
   const { fakeObs } = harness;
-  serveRecordOutput(fakeObs, () => clipPath);
+  serveRecordOutput(fakeObs, () => clipPath, (active) => { state.recording = active; });
+  harness.obsClient.on("RecordStateChanged", (data: { outputActive?: boolean }) => {
+    if (typeof data.outputActive === "boolean") state.recording = data.outputActive;
+  });
   fakeObs.respondWith("CreateRecordChapter", () => ({}));
   fakeObs.respondWith("SetCurrentProfile", () => ({}));
   fakeObs.respondWith("SetProfileParameter", () => ({}));
@@ -71,6 +75,80 @@ describe("recording takes", () => {
     expect(sent("CreateRecordChapter")).toBe(2);
     expect(currentTake(harness.obsClient)).toBeUndefined();
     await vi.waitFor(() => expect(harness.fakeObs.eventSubscriptions()).toBe(EventSubscription.All));
+  });
+
+  it("stops at the server deadline without another tool call", async () => {
+    await startHarness();
+    await harness.call("obs-take-start", { maxDurationSeconds: 1 });
+    await vi.waitFor(() => expect(currentTake(harness.obsClient)).toBeUndefined(), { timeout: 4000 });
+    expect(sent("StopRecord")).toBe(1);
+  });
+
+  it("shares one stop request between simultaneous cleanup callers", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    const take = currentTake(harness.obsClient)!;
+    const results = await Promise.all([stopTake(harness.obsClient, take), stopTake(harness.obsClient, take)]);
+    expect(results[0]).toEqual(results[1]);
+    expect(sent("StopRecord")).toBe(1);
+    await stopTake(harness.obsClient, take);
+    expect(sent("StopRecord")).toBe(1);
+  });
+
+  it("cleans up a confirmed recording after monitor initialization fails", async () => {
+    await startHarness();
+    vi.spyOn(TakeMonitor.prototype, "start").mockRejectedValueOnce(new Error("monitor unavailable"));
+    const result = await harness.call("obs-take-start", { maxDurationSeconds: 30 });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("monitor initialization failed");
+    expect(sent("StopRecord")).toBe(1);
+    expect(currentTake(harness.obsClient)).toBeUndefined();
+  });
+
+  it("does not stop when status cannot establish what is running", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    harness.fakeObs.respondWith("GetRecordStatus", () => ({}));
+    const result = await harness.call("obs-take-stop");
+    expect(resultText(result)).toContain("status is unavailable");
+    expect(sent("StopRecord")).toBe(0);
+    harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: state.recording }));
+  });
+
+  it("does not claim a completed stop when OBS still reports active", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: true }));
+    const result = await harness.call("obs-take-stop");
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ stopConfirmed: false });
+    expect(resultText(result)).not.toContain("File checks pass");
+    expect(sent("StopRecord")).toBe(1);
+    harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: state.recording }));
+  });
+
+  it("does not stop an external recording after the owned take stops", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    harness.fakeObs.sendEvent("RecordStateChanged", { outputActive: false, outputState: "OBS_WEBSOCKET_OUTPUT_STOPPED", outputPath: clipPath });
+    harness.fakeObs.sendEvent("RecordStateChanged", { outputActive: true, outputState: "OBS_WEBSOCKET_OUTPUT_STARTED", outputPath: "external.mp4" });
+    await vi.waitFor(() => expect(currentTake(harness.obsClient)?.ownershipLost).toBeDefined());
+    const result = await harness.call("obs-take-stop");
+    expect(result.isError).toBe(true);
+    expect(sent("StopRecord")).toBe(0);
+    harness.fakeObs.sendEvent("RecordStateChanged", { outputActive: false, outputState: "OBS_WEBSOCKET_OUTPUT_STOPPED" });
+    await vi.waitFor(() => expect(state.recording).toBe(false));
+  });
+
+  it("does not stop after disconnect invalidates ownership", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    harness.obsClient.emit("disconnected");
+    const result = await harness.call("obs-take-stop");
+    expect(resultText(result)).toContain("ownership cannot be established");
+    expect(sent("StopRecord")).toBe(0);
+    harness.fakeObs.sendEvent("RecordStateChanged", { outputActive: false, outputState: "OBS_WEBSOCKET_OUTPUT_STOPPED" });
+    await vi.waitFor(() => expect(state.recording).toBe(false));
   });
 
   it("refuses a second take while one records", async () => {
@@ -121,6 +199,15 @@ describe("recording takes", () => {
 
     expect(start.isError).toBe(true);
     expect(resultText(start)).toContain("record-directory");
+    expect(sent("StartRecord")).toBe(0);
+  });
+
+  it("blocks an unknown required check when verified preflight is requested", async () => {
+    await startHarness();
+    harness.fakeObs.respondWith("GetStats", () => ({}));
+    const result = await harness.call("obs-take-start", { expectSilent: true, maxDurationSeconds: 30, requireVerifiedPreflight: true });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("disk-space");
     expect(sent("StartRecord")).toBe(0);
   });
 

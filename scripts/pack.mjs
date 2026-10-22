@@ -65,9 +65,12 @@ export async function pack({
     // the pinned dependency graph and compiler configuration to be rebuildable.
     writeFileSync(
       resolve(staging, ".mcpbignore"),
-      "!package-lock.json\n!tsconfig.json\n",
+      "!package-lock.json\n!tsconfig.json\n!.agents/\n!.agents/skills/\n!.agents/skills/obs-demo/\n!.agents/skills/obs-demo/SKILL.md\n",
     );
     mkdirSync(resolve(staging, "docs"), { recursive: true });
+    cpSync(resolve(root, "docs/recipes"), resolve(staging, "docs/recipes"), { recursive: true });
+    mkdirSync(resolve(staging, ".agents/skills"), { recursive: true });
+    cpSync(resolve(root, ".agents/skills/obs-demo"), resolve(staging, ".agents/skills/obs-demo"), { recursive: true });
     cpSync(
       resolve(root, "docs/protocol.json"),
       resolve(staging, "docs/protocol.json"),

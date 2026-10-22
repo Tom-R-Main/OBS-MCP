@@ -61,7 +61,9 @@
     "tsconfig.json",
     "manifest.json",
     "icon.png",
-    "NOTICE.md"
+    "NOTICE.md",
+    ".agents/skills/obs-demo",
+    "docs/recipes"
   ],
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",

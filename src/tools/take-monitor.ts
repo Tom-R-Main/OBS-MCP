@@ -188,6 +188,8 @@ export class TakeMonitor {
     this.listeners.push(["disconnected", onDisconnect]);
 
     await Promise.all([this.loadTracks(), this.loadProgramScene(), this.sampleStats().catch(() => undefined)]);
+    // The take's deadline may have stopped us while setup requests were pending.
+    if (this.stoppedAtMs !== null) return;
     this.releaseMeters = this.client.subscribeHighVolume(EventSubscription.InputVolumeMeters);
 
     const formats = this.client.getConnectionStatus().versionInfo?.supportedImageFormats;

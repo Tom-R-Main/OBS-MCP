@@ -11,6 +11,7 @@ import { withoutAudioOnly } from "./audio-only.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
 
 export type PreflightStatus = "pass" | "warn" | "fail" | "unknown";
+export const DEMO_REQUIRED_CHECKS = ["connection", "record-idle", "record-directory", "disk-space", "encoder", "audio", "scene-items"] as const;
 
 export type PreflightCheck = {
   id: string;
@@ -62,6 +63,7 @@ async function runCheck(id: string, check: () => Promise<PreflightCheck | Prefli
 
 async function checkOutputsIdle(client: OBSWebSocketClient): Promise<PreflightCheck> {
   const record = await request(client, "GetRecordStatus");
+  if (typeof record.outputActive !== "boolean") return { id: "record-idle", status: "unknown", message: "OBS did not report recording state" };
   return record.outputActive === true
     ? { id: "record-idle", status: "fail", message: "Recording is already active" }
     : { id: "record-idle", status: "pass", message: "Recording is not active" };
@@ -198,11 +200,17 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Pr
     { requestType: "GetInputAudioTracks", requestData: { inputName } },
   ]));
   const audible: string[] = [];
+  const unreadable: string[] = [];
 
   names.forEach((inputName, index) => {
     const mute = results[index * 2];
     const trackResult = results[index * 2 + 1];
-    if (!mute?.ok || !isObject(mute.responseData) || mute.responseData.inputMuted === true) return;
+    if (!mute?.ok) {
+      if (mute?.code !== 604) unreadable.push(inputName);
+      return;
+    }
+    if (!isObject(mute.responseData) || typeof mute.responseData.inputMuted !== "boolean") { unreadable.push(inputName); return; }
+    if (mute.responseData.inputMuted === true) return;
     const inputAudioTracks = trackResult?.ok && isObject(trackResult.responseData)
       ? trackResult.responseData.inputAudioTracks
       : undefined;
@@ -213,6 +221,7 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Pr
   });
 
   if (audible.length === 0) {
+    if (unreadable.length > 0) return { id: "audio", status: "unknown", message: `Could not read audio state for: ${unreadable.join(", ")}` };
     return { id: "audio", status: "pass", message: "No unmuted input feeds a recorded audio track" };
   }
   return {

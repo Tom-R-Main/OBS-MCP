@@ -44,6 +44,10 @@ afterEach(async () => {
 });
 
 describe("obs-preflight", () => {
+  it("reports unknown audio instead of silence when a mute read fails unexpectedly", async () => {
+    harness.fakeObs.respondWith("GetInputMute", () => { throw new FakeOBSRequestError(600, "Input disappeared"); });
+    expect((await preflight({ expectSilent: true })).byId("audio")?.status).toBe("unknown");
+  });
   it("reports ready with no failures or warnings for a healthy setup", async () => {
     const { ready, checks, result } = await preflight();
 

@@ -18,6 +18,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
 import { TOOL_COUNT } from "../support/tool-count.js";
+import { serveDemoFixture } from "../support/demo-fixture.js";
 import { obsWebSocketConfigPaths } from "../../src/obs-config.js";
 
 type JsonObject = Record<string, unknown>;
@@ -268,6 +269,26 @@ afterEach(async () => {
 });
 
 describe("compiled stdio MCP boundary", () => {
+  it("discovers the recipe and prepares and recovers through the compiled server", async () => {
+    const fake = await FakeOBSServer.start();
+    fakeServers.push(fake);
+    const state = serveDemoFixture(fake);
+    const original = structuredClone(state);
+    const { client } = await connectClient(fake, "modern");
+    const prompt = await client.getPrompt({ name: "software-demo", arguments: { sceneCollection: "Disposable", sceneName: "Demo", inputName: "Chrome" } });
+    expect(JSON.stringify(prompt)).toContain("requireVerifiedPreflight:true");
+    const selection = { sceneCollection: "Disposable", sceneName: "Demo", inputName: "Chrome" };
+    const plan = await client.callTool({ name: "obs-prepare-demo", arguments: selection });
+    expect(plan.structuredContent).toMatchObject({ status: "planned", applied: false });
+    expect(state).toEqual(original);
+    const prepared = await client.callTool({ name: "obs-prepare-demo", arguments: { ...selection, apply: true } });
+    expect(prepared.isError).toBeFalsy();
+    expect(state.inputs.Chrome!.muted).toBe(true);
+    const operationId = (prepared.structuredContent as Record<string, unknown>).operationId;
+    const recovered = await client.callTool({ name: "obs-recover-demo", arguments: { operationId, apply: true } });
+    expect(recovered.structuredContent).toMatchObject({ status: "recovered" });
+    expect(state).toEqual(original);
+  });
   it("negotiates modern MCP and calls through to fake OBS", async () => {
     const fake = await FakeOBSServer.start({
       password: testPassword,

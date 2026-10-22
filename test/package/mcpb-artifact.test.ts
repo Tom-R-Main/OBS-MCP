@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { listTools } from "../../scripts/list-tools.mjs";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
 import { TOOL_COUNT } from "../support/tool-count.js";
+import { serveDemoFixture } from "../support/demo-fixture.js";
 
 type ArtifactManifest = {
   version: string;
@@ -84,6 +85,9 @@ describe("MCPB artifact", () => {
       "scripts",
       "tsconfig.json",
       "docs/protocol.json",
+      "docs/recipes/software-demo.v1.json",
+      ".agents/skills/obs-demo/SKILL.md",
+      "scripts/verify-demo.mjs",
       "server/index.js",
       "node_modules/ws/package.json",
       "node_modules/@modelcontextprotocol/server/package.json",
@@ -97,6 +101,8 @@ describe("MCPB artifact", () => {
     }
 
     const fake = await FakeOBSServer.start();
+    const demoState = serveDemoFixture(fake);
+    const originalDemo = structuredClone(demoState);
     fakeServers.push(fake);
     const client = new Client(
       { name: "obs-mcp-artifact-test", version: "1.0.0" },
@@ -117,9 +123,19 @@ describe("MCPB artifact", () => {
     clients.push(client);
 
     expect((await client.listTools()).tools).toHaveLength(TOOL_COUNT);
+    const guide = await readFile(path.join(extracted, ".agents/skills/obs-demo/SKILL.md"), "utf8");
+    const prompt = await client.getPrompt({ name: "software-demo", arguments: { sceneCollection: "Disposable", sceneName: "Demo", inputName: "Capture" } });
+    expect(guide).toContain("obs-prepare-demo");
+    expect(JSON.stringify(prompt)).toContain("maxDurationSeconds:120");
+    expect(JSON.stringify(prompt)).toContain("obs-recover-demo");
     await waitForObsConnected(client);
     const version = await client.callTool({ name: "obs-get-version", arguments: {} });
     expect(version.isError).not.toBe(true);
+    const prepared = await client.callTool({ name: "obs-prepare-demo", arguments: { sceneCollection: "Disposable", sceneName: "Demo", inputName: "Chrome", apply: true } });
+    expect(prepared.isError).toBeFalsy();
+    const recovered = await client.callTool({ name: "obs-recover-demo", arguments: { operationId: (prepared.structuredContent as Record<string, unknown>).operationId, apply: true } });
+    expect(recovered.isError).toBeFalsy();
+    expect(demoState).toEqual(originalDemo);
 
     await client.close();
     clients.splice(clients.indexOf(client), 1);

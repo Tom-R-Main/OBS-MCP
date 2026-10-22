@@ -151,6 +151,64 @@ describe("live action confirmation", () => {
     expect(sent("StopStream")).toBe(false);
   });
 
+  describe("stream and output starts", () => {
+    const starts = [
+      { tool: "obs-start-stream", args: {}, requestType: "StartStream" },
+      { tool: "obs-start-output", args: { outputName: "simple_stream" }, requestType: "StartOutput" },
+      { tool: "obs-call-request", args: { requestType: "StartStream" }, requestType: "StartStream" },
+      { tool: "obs-call-request", args: { requestType: "StartOutput", requestData: { outputName: "simple_stream" } }, requestType: "StartOutput" },
+      { tool: "obs-batch", args: { requests: [{ requestType: "SetInputMute", requestData: { inputName: "Mic", inputMuted: true } }, { requestType: "StartStream" }] }, requestType: "StartStream" },
+      { tool: "obs-batch", args: { requests: [{ requestType: "SetInputMute", requestData: { inputName: "Mic", inputMuted: true } }, { requestType: "StartOutput", requestData: { outputName: "simple_stream" } }] }, requestType: "StartOutput" },
+    ];
+
+    it.each(starts)("declining $tool ($requestType) forwards no mutation even with confirm: true", async ({ tool, args, requestType }) => {
+      const questions: string[] = [];
+      const { call } = await start({ confirmLive: true, onElicit: (message) => {
+        questions.push(message);
+        return { action: "decline" };
+      } });
+      const result = await call(tool, { ...args, confirm: true });
+      expect(questions).toHaveLength(1);
+      expect(resultText(result)).toContain("Cancelled");
+      expect(sent(requestType)).toBe(false);
+      expect(sent("SetInputMute")).toBe(false);
+      expect(harness!.fakeObs.history().some(({ frame }) => frame.op === 8)).toBe(false);
+    });
+
+    it.each(starts)("accepting $tool ($requestType) forwards the action", async ({ tool, args, requestType }) => {
+      const questions: string[] = [];
+      const { call } = await start({ confirmLive: true, onElicit: (message) => {
+        questions.push(message);
+        return { action: "accept", content: { confirm: true } };
+      } });
+      harness!.fakeObs.respondWith(requestType, () => {
+        if (requestType === "StartStream") harness!.fakeObs.sendEvent("StreamStateChanged", { outputState: "OBS_WEBSOCKET_OUTPUT_STARTED" });
+        return {};
+      });
+      harness!.fakeObs.respondWith("SetInputMute", () => ({}));
+      const result = await call(tool, args);
+      expect(questions).toHaveLength(1);
+      expect(result.isError).toBeFalsy();
+      expect(sent(requestType)).toBe(true);
+    });
+
+    it.each(starts)("requires the fallback confirm argument for $tool ($requestType) when elicitation is unavailable", async ({ tool, args, requestType }) => {
+      const { call } = await start({ confirmLive: true });
+      harness!.fakeObs.respondWith(requestType, () => {
+        if (requestType === "StartStream") harness!.fakeObs.sendEvent("StreamStateChanged", { outputState: "OBS_WEBSOCKET_OUTPUT_STARTED" });
+        return {};
+      });
+      harness!.fakeObs.respondWith("SetInputMute", () => ({}));
+      const refused = await call(tool, args);
+      expect(refused.isError).toBe(true);
+      expect(sent(requestType)).toBe(false);
+      expect(sent("SetInputMute")).toBe(false);
+      const accepted = await call(tool, { ...args, confirm: true });
+      expect(accepted.isError).toBeFalsy();
+      expect(sent(requestType)).toBe(true);
+    });
+  });
+
   it("confirms through the 2026-07-28 input_required round trip", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fakeObs = await FakeOBSServer.start();

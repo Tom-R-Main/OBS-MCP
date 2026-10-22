@@ -13,8 +13,9 @@ import {
 } from "@modelcontextprotocol/server";
 import { z, type ZodObject } from "zod";
 
-/** Tools that end a live broadcast or a take, with the question to ask. */
+/** Tools that start/end a broadcast or end a take, with the question to ask. */
 export const LIVE_ACTIONS: Readonly<Record<string, string>> = {
+  "obs-start-stream": "Start the live stream?",
   "obs-stop-stream": "Stop the live stream?",
   "obs-toggle-stream": "Toggle the live stream? If it is live, this ends the broadcast.",
   "obs-stop-record": "Stop the recording?",
@@ -22,13 +23,15 @@ export const LIVE_ACTIONS: Readonly<Record<string, string>> = {
   "obs-take-stop": "Stop the recording?",
 };
 
-/** OBS requests that end a live broadcast or a take, with the question to ask. */
+/** OBS requests that start/end a broadcast or output, or end a take. */
 const LIVE_REQUESTS: Readonly<Record<string, (data: Record<string, unknown>) => string>> = {
+  StartStream: () => "Start the live stream?",
   StopStream: () => "Stop the live stream?",
   ToggleStream: () => "Toggle the live stream? If it is live, this ends the broadcast.",
   StopRecord: () => "Stop the recording?",
   ToggleRecord: () => "Toggle recording? If it is recording, this ends the take.",
   // The generic output requests reach the stream and recording outputs too (e.g. simple_stream, adv_file_output).
+  StartOutput: ({ outputName }) => `Start the output ${String(outputName)}? This may start a live broadcast or recording.`,
   StopOutput: ({ outputName }) => `Stop the output ${String(outputName)}? If it is the stream or the recording, this ends it.`,
   ToggleOutput: ({ outputName }) => `Toggle the output ${String(outputName)}? If it is the stream or the recording, this can end it.`,
 };
@@ -50,6 +53,7 @@ function questionForRequests(requests: RequestLike[]): string | undefined {
 export const CONDITIONAL_LIVE_ACTIONS: Readonly<Record<string, (args: Record<string, unknown>) => string | undefined>> = {
   "obs-call-request": ({ requestType, requestData }) => questionForRequests([{ requestType, requestData }]),
   "obs-batch": ({ requests }) => questionForRequests(Array.isArray(requests) ? requests as RequestLike[] : []),
+  "obs-start-output": (args) => questionForRequests([{ requestType: "StartOutput", requestData: args }]),
   "obs-stop-output": (args) => questionForRequests([{ requestType: "StopOutput", requestData: args }]),
   "obs-toggle-output": (args) => questionForRequests([{ requestType: "ToggleOutput", requestData: args }]),
 };

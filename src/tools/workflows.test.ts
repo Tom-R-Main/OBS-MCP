@@ -50,7 +50,7 @@ async function startHarness(platform = "macos"): Promise<void> {
   harness = await startMcpHarness({ platform });
   servePreflightState(harness.fakeObs, () => state);
   const { fakeObs } = harness;
-  serveRecordOutput(fakeObs, () => clipPath);
+  serveRecordOutput(fakeObs, () => clipPath, (active) => { state.recording = active; });
   fakeObs.respondWith("CreateRecordChapter", () => ({}));
 }
 
@@ -119,16 +119,17 @@ describe("obs-record-clip", () => {
     expect(requestTypes()).toContain("StopRecord");
   });
 
-  it("stops the recording even when waiting fails", async () => {
+  it("reports uncertainty without a stop request after connection loss", async () => {
     await startHarness();
     harness.fakeObs.respondWith("CreateRecordChapter", () => {
       harness.fakeObs.disconnect();
       return {};
     });
 
-    await harness.call("obs-record-clip", { durationSeconds: 0.1, chapters: [{ atSeconds: 0, name: "x" }] });
-
-    await vi.waitFor(() => expect(requestTypes()).toContain("StopRecord"));
+    const result = await harness.call("obs-record-clip", { durationSeconds: 0.1, chapters: [{ atSeconds: 0, name: "x" }] });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("unconfirmed");
+    expect(requestTypes()).not.toContain("StopRecord");
   });
 
   it.skipIf(!ffmpegAvailable)("verifies the file's length and that it is silent", async () => {
@@ -141,7 +142,7 @@ describe("obs-record-clip", () => {
     expect(result.structuredContent).toMatchObject({ audioStreams: 1, problems: [] });
     // Encoded digital silence measures about -91 dB rather than -inf.
     expect((result.structuredContent as { maxVolumeDb: number | null }).maxVolumeDb ?? -Infinity).toBeLessThan(-60);
-    expect(resultText(result)).toMatch(/Verified: 1\.0s, 1 audio stream/);
+    expect(resultText(result)).toMatch(/File checks pass: 1\.0s, 1 audio stream/);
   });
 
   it.skipIf(!ffmpegAvailable)("flags audible audio and a short file", async () => {

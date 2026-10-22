@@ -10,7 +10,7 @@ import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
 import { RECORD_OUTPUT, startOutputAndConfirm } from "./output-start.js";
-import { runPreflight } from "./preflight.js";
+import { DEMO_REQUIRED_CHECKS, runPreflight } from "./preflight.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
 import { callerName, claim, release } from "./lease.js";
 import { describeTake, TakeMonitor, writeTakeLog, type TakeSummary } from "./take-monitor.js";
@@ -37,6 +37,7 @@ const finite = (value: number): number | null => (Number.isFinite(value) ? value
 export type ClipCheck = {
   durationSeconds?: number;
   audioStreams?: number;
+  videoStreams?: number;
   maxVolumeDb?: number;
   skipped?: string;
 };
@@ -63,6 +64,7 @@ export async function inspectRecording(outputPath: string, measureLoudness: bool
   if (!Number.isFinite(duration)) return { skipped: "ffprobe could not read the file's length; it may be incomplete" };
   const check: ClipCheck = {
     durationSeconds: duration,
+    videoStreams: streams.filter((stream) => stream.codec_type === "video").length,
     audioStreams: streams.filter((stream) => stream.codec_type === "audio").length,
   };
   if (!measureLoudness || check.audioStreams === 0) return check;
@@ -74,7 +76,10 @@ export async function inspectRecording(outputPath: string, measureLoudness: bool
         "-hide_banner", "-nostats", "-i", outputPath, "-map", `0:a:${track}`, "-af", "volumedetect", "-f", "null", "-",
       ], { timeout: 60_000 });
       const match = /max_volume:\s*(-?[\d.]+|-inf) dB/.exec(stderr);
-      if (!match?.[1]) continue;
+      if (!match?.[1]) {
+        check.skipped = `ffmpeg did not report loudness for audio track ${track}`;
+        continue;
+      }
       const level = match[1] === "-inf" ? -Infinity : Number(match[1]);
       check.maxVolumeDb = Math.max(check.maxVolumeDb ?? -Infinity, level);
     }
@@ -96,9 +101,18 @@ export type Take = {
   chapterNotes: string[];
   /** The client that holds control of OBS because it started this take. */
   leaseHolder?: string;
+  deadline?: NodeJS.Timeout;
+  maxDurationSeconds?: number;
+  ownershipLost?: string;
+  stoppedObserved?: boolean;
+  outputPath?: string;
+  disposeOwnership?: () => void;
+  stopPromise?: Promise<CallToolResult>;
+  stopResult?: CallToolResult;
 };
 
 const takes = new WeakMap<OBSWebSocketClient, Take>();
+const completedTakes = new WeakMap<OBSWebSocketClient, CallToolResult>();
 /** Clients with a take being started: preflight and the start take time, and a second start must not slip in. */
 const starting = new WeakSet<OBSWebSocketClient>();
 
@@ -111,6 +125,8 @@ export type StartTakeOptions = {
   minFreeDiskMb: number;
   lock: boolean;
   chapter?: string;
+  maxDurationSeconds?: number;
+  requireVerifiedPreflight?: boolean;
 };
 
 /** Preflights, starts recording, waits for OBS to confirm, and starts the monitor. */
@@ -123,6 +139,7 @@ export async function startTake(
   if (running) return refuse(errorResult(`Take ${running.id} is already recording; stop it with obs-take-stop first`));
   if (starting.has(client)) return refuse(errorResult("Another take is being started; wait for it, then stop it with obs-take-stop"));
   starting.add(client);
+  completedTakes.delete(client);
   try {
     return await startTakeReserved(client, options);
   } finally {
@@ -137,6 +154,10 @@ async function startTakeReserved(
   const refuse = (result: CallToolResult) => ({ ok: false as const, result });
 
   const preflight = await runPreflight(client, { minFreeDiskMb: options.minFreeDiskMb, expectSilent: options.expectSilent });
+  if (options.requireVerifiedPreflight) {
+    const missing = DEMO_REQUIRED_CHECKS.filter((id) => !preflight.checks.some((check) => check.id === id && check.status === "pass"));
+    if (missing.length > 0) return refuse(errorResult(`Not recording; required preflight checks are not verified: ${missing.join(", ")}`));
+  }
   if (!preflight.ready) {
     const failures = preflight.checks.filter(({ status }) => status === "fail");
     return refuse(errorResult(
@@ -144,20 +165,62 @@ async function startTakeReserved(
     ));
   }
 
+  // Observe continuity before StartRecord, including during monitor initialization.
+  let startedObserved = false;
+  let stoppedObserved = false;
+  let ownershipLost: string | undefined;
+  let outputPath: string | undefined;
+  let take: Take | undefined;
+  const onRecord = (data: unknown) => {
+    if (!isObject(data)) return;
+    if (data.outputState === "OBS_WEBSOCKET_OUTPUT_STARTED") {
+      if (startedObserved || stoppedObserved) ownershipLost = "A different recording may have started";
+      startedObserved = true;
+    }
+    if (data.outputState === "OBS_WEBSOCKET_OUTPUT_STOPPED") stoppedObserved = true;
+    if (typeof data.outputPath === "string" && data.outputPath && !ownershipLost) outputPath = data.outputPath;
+    if (take) Object.assign(take, { stoppedObserved, ownershipLost, outputPath });
+  };
+  const onDisconnect = () => {
+    ownershipLost = "OBS disconnected; recording ownership cannot be established after reconnect";
+    if (take) take.ownershipLost = ownershipLost;
+  };
+  const disposeOwnership = () => {
+    client.off("RecordStateChanged", onRecord);
+    client.off("disconnected", onDisconnect);
+  };
+  client.on("RecordStateChanged", onRecord);
+  client.on("disconnected", onDisconnect);
   const started = await startOutputAndConfirm(client, RECORD_OUTPUT);
-  if (started.isError) return refuse(started);
-
-  const take: Take = {
+  if (started.isError) { disposeOwnership(); return refuse(started); }
+  if (!startedObserved) ownershipLost = "Start was confirmed only by status; recording identity is uncertain";
+  take = {
     id: crypto.randomUUID().slice(0, 8),
     monitor: new TakeMonitor(client, { expectSilent: options.expectSilent }),
     expectSilent: options.expectSilent,
     local: preflight.checks.some(({ id, status }) => id === "record-directory" && status === "pass"),
     locked: options.lock,
     chapterNotes: [],
+    maxDurationSeconds: options.maxDurationSeconds,
+    ownershipLost, stoppedObserved, outputPath, disposeOwnership,
   };
+  const ownedTake = take;
   takes.set(client, take);
-  await take.monitor.start();
-  if (options.chapter) await markTake(client, take, options.chapter);
+  if (options.maxDurationSeconds !== undefined) {
+    take.deadline = setTimeout(() => { void stopTake(client, ownedTake); }, options.maxDurationSeconds * 1000);
+    take.deadline.unref();
+  }
+  try {
+    await take.monitor.start();
+    if (take.stopPromise || take.stopResult) {
+      const stopped = await stopTake(client, take);
+      return refuse({ ...stopped, isError: true, content: [{ type: "text", text: "Take deadline elapsed during monitor initialization; inspect the stop result", }, ...stopped.content] });
+    }
+    if (options.chapter) await markTake(client, take, options.chapter);
+  } catch (error) {
+    const cleanup = await stopTake(client, take);
+    return refuse({ ...cleanup, isError: true, content: [{ type: "text", text: `Take monitor initialization failed: ${errorMessage(error)}\n${cleanup.content.filter((item) => item.type === "text").map((item) => item.text).join("\n")}` }] });
+  }
   return { ok: true, take };
 }
 
@@ -205,33 +268,68 @@ export async function stopTake(
   take: Take,
   options: { requestedSeconds?: number } = {},
 ): Promise<CallToolResult> {
-  take.monitor.expectStop();
-  let outputPath: string | undefined;
-  let stopError: string | undefined;
-  // StopRecord answers before OBS has finished writing the file; wait for the
-  // STOPPED state before inspecting it.
-  const finished = recordStopped(client, STOP_TIMEOUT_MS);
+  if (take.stopResult) return take.stopResult;
+  if (take.stopPromise) return take.stopPromise;
+  take.stopPromise = stopTakeOnce(client, take, options).catch((error) =>
+    errorResult(`Take ${take.id}: stop outcome unavailable: ${errorMessage(error)}; check OBS before retrying`));
   try {
-    const stopped: unknown = await client.sendRequest("StopRecord");
-    if (isObject(stopped) && typeof stopped.outputPath === "string") outputPath = stopped.outputPath;
-  } catch (error) {
-    // The recording may have stopped already; OBS reported the file when it did.
-    stopError = errorMessage(error);
-    finished.cancel();
-  }
-  const stoppedState = await finished.done;
-  outputPath ??= stoppedState?.outputPath;
-  const summary = await take.monitor.stop();
-  if (takes.get(client) === take) takes.delete(client);
-  outputPath ??= take.monitor.outputPath() ?? undefined;
+    const result = await take.stopPromise;
+    if (takes.get(client) !== take) {
+      take.stopResult = result;
+      completedTakes.set(client, result);
+    }
+    return result;
+  } finally { take.stopPromise = undefined; }
+}
 
-  if (!outputPath) {
-    return errorResult(
-      `Take ${take.id} ran ${summary.durationSeconds}s, but OBS did not confirm the stop or report the file`
-        + `${stopError ? ` (${stopError})` : ""}. Check obs-get-record-status`,
-    );
+async function stopTakeOnce(client: OBSWebSocketClient, take: Take, options: { requestedSeconds?: number }): Promise<CallToolResult> {
+  clearTimeout(take.deadline);
+  const uncertain = (reason: string) => ({
+    ...errorResult(`Take ${take.id}: ${reason}. Recording stop is unconfirmed; check OBS. No automatic retry was made`),
+    structuredContent: { takeId: take.id, stopConfirmed: false, ownership: take.ownershipLost ? "unavailable" : "continuous", reason },
+  });
+  let status: unknown;
+  try { status = await client.sendRequest("GetRecordStatus"); }
+  catch { return uncertain("Recording status is unavailable"); }
+  if (!isObject(status) || typeof status.outputActive !== "boolean") return uncertain("Recording status is unavailable");
+  if (!status.outputActive && take.ownershipLost) {
+    await take.monitor.stop();
+    take.disposeOwnership?.();
+    if (takes.get(client) === take) takes.delete(client);
+    if (take.leaseHolder) release(client, take.leaseHolder);
+    return uncertain(`${take.ownershipLost}; OBS is now inactive, but the owned file cannot be established`);
   }
-  return takeResult(take, summary, outputPath, options.requestedSeconds);
+  if (!status.outputActive && !take.stoppedObserved) return uncertain("Inactive status has no matching stopped event or completed file");
+  if (status.outputActive && (take.ownershipLost || take.stoppedObserved)) {
+    await take.monitor.stop();
+    return uncertain(take.ownershipLost ?? "The owned recording stopped; the current recording may belong to another operator");
+  }
+  take.monitor.expectStop();
+  let outputPath = take.outputPath;
+  if (status.outputActive) {
+    const finished = recordStopped(client, STOP_TIMEOUT_MS);
+    try { await client.sendRequest("StopRecord"); }
+    catch (error) {
+      finished.cancel();
+      return uncertain(`Stop request outcome is uncertain (${errorMessage(error)})`);
+    }
+    const stopped = await finished.done;
+    outputPath = stopped?.outputPath ?? outputPath;
+    let after: unknown;
+    try { after = await client.sendRequest("GetRecordStatus"); } catch { /* unavailable */ }
+    if (!isObject(after) || after.outputActive !== false || !stopped) return uncertain("OBS did not confirm a completed stop and inactive status");
+  }
+  const summary = await take.monitor.stop();
+  take.disposeOwnership?.();
+  if (take.leaseHolder) release(client, take.leaseHolder);
+  outputPath ??= take.monitor.outputPath() ?? undefined;
+  if (!outputPath) {
+    if (takes.get(client) === take) takes.delete(client);
+    return errorResult(`Take ${take.id} stopped, but OBS did not report its file`);
+  }
+  const result = await takeResult(take, summary, outputPath, options.requestedSeconds);
+  if (takes.get(client) === take) takes.delete(client);
+  return { ...result, structuredContent: { ...(isObject(result.structuredContent) ? result.structuredContent : {}), stopConfirmed: true } };
 }
 
 async function takeResult(
@@ -261,11 +359,17 @@ async function takeResult(
     problems.push(`Expected silence, but the audio peaks at ${inspection.maxVolumeDb} dB`);
   }
 
+  if (inspection.videoStreams === 0) problems.push("The recording has no video stream");
+  const verification = {
+    status: problems.length ? "fail" : inspection.skipped ? "unavailable" : "pass",
+    scope: "File duration, video presence, expected silence, and observed monitor warnings; capture identity and framing require separate review",
+    ...(inspection.skipped ? { reason: inspection.skipped } : {}),
+  };
   const lines = [
     `Recorded ${requestedSeconds ?? summary.durationSeconds}s to ${outputPath}`,
     inspection.skipped
       ? `Not verified: ${inspection.skipped}`
-      : `Verified: ${inspection.durationSeconds?.toFixed(1)}s, ${inspection.audioStreams} audio stream(s)`
+      : `File checks ${verification.status}: ${inspection.durationSeconds?.toFixed(1)}s, ${inspection.audioStreams} audio stream(s)`
         + (inspection.maxVolumeDb !== undefined ? `, peak ${inspection.maxVolumeDb} dB` : ""),
     ...describeTake(summary).filter((line) => !line.startsWith("Warning")),
     ...(summary.chapters.length > 0
@@ -279,6 +383,7 @@ async function takeResult(
     content: [{ type: "text", text: lines.join("\n") }],
     structuredContent: {
       takeId: take.id,
+      verification,
       outputPath,
       ...inspection,
       ...(inspection.maxVolumeDb === -Infinity ? { maxVolumeDb: null } : {}),
@@ -385,6 +490,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         minFreeDiskMb: z.number().int().nonnegative().default(1024).describe("Minimum free disk space in MB"),
         lock: z.boolean().default(true).describe("Refuse profile, scene collection, and output setting changes until the take stops"),
         chapter: z.string().min(1).optional().describe("Name of a chapter to add at the start"),
+        maxDurationSeconds: z.number().int().min(1).max(3600).optional()
+          .describe("Server wall-clock stop deadline. Requires this process and OBS connection to remain alive; uncertain ownership prevents automatic stop"),
+        requireVerifiedPreflight: z.boolean().optional()
+          .describe("Require every software-demo preflight check to exist and pass before starting"),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -404,12 +513,14 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
             text: `Take ${take.id} is recording${take.locked ? " (profile and output changes locked)" : ""}. `
               + `Watching audio${status.pictureChecks === "on" ? ", frames, and picture" : " and frames"}; `
               + "stop it with obs-take-stop"
+              + (take.maxDurationSeconds === undefined ? "" : `. Server stop deadline: ${take.maxDurationSeconds}s (requires this process and continuous OBS connection)`)
+              + (take.ownershipLost ? `. Ownership unavailable: ${take.ownershipLost}; automatic stop is disabled` : "")
               + (claimed.ok ? "" : claimed.lease
                 ? `. ${claimed.lease.holder} already has control of OBS`
                 : ". Other clients sharing this server can still change OBS: this client did not identify itself "
                   + "(over HTTP, add ?client=<name> to the URL)"),
           }],
-          structuredContent: { takeId: take.id, locked: take.locked, pictureChecks: status.pictureChecks, chapterNotes: take.chapterNotes },
+          structuredContent: { takeId: take.id, maxDurationSeconds: take.maxDurationSeconds, ownership: take.ownershipLost ? "unavailable" : "continuous", locked: take.locked, pictureChecks: status.pictureChecks, chapterNotes: take.chapterNotes },
         };
       } catch (error) {
         return errorResult(`Start Take failed: ${errorMessage(error)}`);
@@ -460,6 +571,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         content: [{ type: "text", text: lines.join("\n") }],
         structuredContent: {
           takeId: take.id,
+          maxDurationSeconds: take.maxDurationSeconds,
+          ownership: take.ownershipLost ? "unavailable" : "continuous",
+          ownershipReason: take.ownershipLost,
           record,
           take: {
             ...summary,
@@ -482,9 +596,8 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
     },
     async () => {
       const take = currentTake(client);
-      if (!take) return noTake();
+      if (!take) return completedTakes.get(client) ?? noTake();
       const result = await stopTake(client, take);
-      if (take.leaseHolder) release(client, take.leaseHolder);
       return result;
     },
   );
