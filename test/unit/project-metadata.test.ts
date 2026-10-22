@@ -7,6 +7,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { TOOL_COUNT } from "../support/tool-count.js";
 
 type PackageMetadata = {
   version: string;
@@ -15,6 +16,7 @@ type PackageMetadata = {
 
 type ManifestMetadata = {
   version: string;
+  description: string;
   long_description: string;
   compatibility: { runtimes: { node: string } };
 };
@@ -46,6 +48,15 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 describe("project metadata", () => {
+  it("does not publish a stale tool count in manifest descriptions", async () => {
+    const manifest = JSON.parse(await readProjectFile("manifest.json")) as ManifestMetadata;
+    for (const description of [manifest.description, manifest.long_description]) {
+      for (const match of description.matchAll(/\b(\d+)\s+(?:(?:current|annotated)\s*[, ]*\s*)*(?:MCP\s+)?tools\b/gi)) {
+        expect(Number(match[1])).toBe(TOOL_COUNT);
+      }
+    }
+  });
+
   it("keeps package and manifest versions aligned", async () => {
     const packageMetadata = JSON.parse(await readProjectFile("package.json")) as PackageMetadata;
     const packageLock = JSON.parse(await readProjectFile("package-lock.json")) as PackageLockMetadata;

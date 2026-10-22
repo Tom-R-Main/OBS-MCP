@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import crypto from "node:crypto";
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
@@ -22,6 +22,8 @@ export type InputState = {
   muted?: boolean;
   volumeMul?: number;
   audioTracks?: JsonObject;
+  /** Optional audio reads distinguish a video-only source from failed observation. */
+  unavailable?: Partial<Record<"muted" | "volumeMul" | "audioTracks", "unsupported" | "failed">>;
 };
 
 /** Saved state of one scene item. */
@@ -39,6 +41,8 @@ export type Snapshot = {
   id: string;
   /** The OBS WebSocket URL the snapshot was taken from. */
   obsUrl?: string;
+  /** Additive collection binding; legacy snapshots remain manual restores. */
+  sceneCollection?: string;
   /** Taken automatically before a change, not by a user. */
   auto?: boolean;
   label?: string;
@@ -195,18 +199,25 @@ function withFileLock(change: () => void): void {
   }
 }
 
+/** Persist before returning; callers must not mutate OBS when persistence fails. */
 function saveSnapshot(snapshot: Snapshot): void {
   const path = snapshotFile();
-  try {
-    withFileLock(() => {
-      const list = prune([...loadAll(), snapshot]);
-      const temporary = `${path}.${process.pid}.tmp`;
-      writeFileSync(temporary, `${JSON.stringify(list, null, 2)}\n`, { mode: 0o600 });
-      renameSync(temporary, path);
-    });
-  } catch (error) {
-    logger.error(`Could not save snapshots to ${path}: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  withFileLock(() => {
+    const list = prune([...loadAll(), snapshot]);
+    const temporary = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    const fd = openSync(temporary, "wx", 0o600);
+    try {
+      writeFileSync(fd, `${JSON.stringify(list, null, 2)}\n`);
+      fsyncSync(fd);
+    } finally { closeSync(fd); }
+    renameSync(temporary, path);
+    // Windows does not support opening directories with this Node API. The
+    // restricted demo workflow additionally requires macOS OBS on loopback.
+    if (process.platform !== "win32") {
+      const directory = openSync(stateDirectory(), "r");
+      try { fsyncSync(directory); } finally { closeSync(directory); }
+    }
+  });
 }
 
 /** Snapshots of the OBS instance this client connects to, oldest first. */
@@ -244,7 +255,9 @@ export async function readItems(client: OBSWebSocketClient, sceneNames: string[]
   return items;
 }
 
-export async function readInputs(client: OBSWebSocketClient, inputNames: string[]): Promise<InputState[]> {
+export type RequiredInputFields = readonly ("inputSettings" | "muted" | "volumeMul" | "audioTracks")[];
+
+export async function readInputs(client: OBSWebSocketClient, inputNames: string[], required: RequiredInputFields = []): Promise<InputState[]> {
   const per = 4;
   const results = await batch(client, inputNames.flatMap((inputName) => [
     { requestType: "GetInputSettings", requestData: { inputName } },
@@ -254,19 +267,31 @@ export async function readInputs(client: OBSWebSocketClient, inputNames: string[
   ]));
   return inputNames.flatMap((inputName, index) => {
     const [settings, mute, volume, tracks] = results.slice(index * per, index * per + per);
-    if (!settings?.ok || !isObject(settings.responseData)) return [];
+    if (!settings?.ok || !isObject(settings.responseData)) {
+      if (required.length) throw new Error(`Incomplete snapshot: cannot read settings for ${inputName}`);
+      return [];
+    }
     const data = (result: typeof mute) => (result?.ok && isObject(result.responseData) ? result.responseData : undefined);
     const muteData = data(mute);
     const volumeData = data(volume);
     const trackData = data(tracks);
-    return [{
+    const saved: InputState = {
       inputName,
       inputKind: String(settings.responseData.inputKind ?? ""),
       inputSettings: isObject(settings.responseData.inputSettings) ? settings.responseData.inputSettings : {},
       ...(typeof muteData?.inputMuted === "boolean" ? { muted: muteData.inputMuted } : {}),
       ...(typeof volumeData?.inputVolumeMul === "number" ? { volumeMul: volumeData.inputVolumeMul } : {}),
       ...(isObject(trackData?.inputAudioTracks) ? { audioTracks: trackData.inputAudioTracks } : {}),
-    }];
+    };
+    for (const [field, result] of [["muted", mute], ["volumeMul", volume], ["audioTracks", tracks]] as const) {
+      if (saved[field] === undefined) (saved.unavailable ??= {})[field] = result?.code === 604 ? "unsupported" : "failed";
+    }
+    for (const field of required) {
+      if (field === "inputSettings" ? !isObject(settings.responseData.inputSettings) : saved[field] === undefined) {
+        throw new Error(`Incomplete snapshot: ${inputName} ${field} unavailable (${field === "inputSettings" ? "failed" : saved.unavailable?.[field] ?? "failed"})`);
+      }
+    }
+    return [saved];
   });
 }
 
@@ -276,7 +301,7 @@ export async function readInputs(client: OBSWebSocketClient, inputNames: string[
  */
 export async function takeSnapshot(
   client: OBSWebSocketClient,
-  options: { scenes?: string[]; inputs?: string[]; label?: string; auto?: boolean },
+  options: { scenes?: string[]; inputs?: string[]; label?: string; auto?: boolean; sceneCollection?: string; requiredInputFields?: RequiredInputFields },
 ): Promise<Snapshot> {
   let scenes = options.scenes;
   if (!scenes && !options.inputs) {
@@ -297,9 +322,10 @@ export async function takeSnapshot(
     id: crypto.randomUUID().slice(0, 8),
     obsUrl: client.getConnectionStatus().url,
     ...(options.auto ? { auto: true } : {}),
+    ...(options.sceneCollection ? { sceneCollection: options.sceneCollection } : {}),
     ...(options.label ? { label: options.label } : {}),
     takenAt: new Date().toISOString(),
-    inputs: await readInputs(client, inputNames),
+    inputs: await readInputs(client, inputNames, options.requiredInputFields),
     items,
   };
   saveSnapshot(snapshot);

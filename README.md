@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 171 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 173 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -100,7 +100,7 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_TOOLS` | No | none | Comma-separated tool names to register in addition to `OBS_MCP_TOOLSETS` |
 | `OBS_MCP_READ_ONLY` | No | `false` | Register only read-only tools; overrides both lists |
 | `OBS_MCP_DYNAMIC_TOOLSETS` | No | `false` | Start with only the `OBS_MCP_TOOLSETS` groups (default `general`) and let the model turn others on and off (see [Choosing tools](#choosing-tools)) |
-| `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before stopping or toggling a stream or recording (see [Confirming live actions](#confirming-live-actions)) |
+| `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before starting a stream/output or stopping or toggling a stream, recording, or output (see [Confirming live actions](#confirming-live-actions)) |
 | `OBS_MCP_HTTP_PORT` | No | none (stdio) | Serve MCP over Streamable HTTP at `http://127.0.0.1:<port>/mcp` instead of stdio, so several agents share one server (see [Sharing one server](#sharing-one-server)); `0` picks a free port |
 | `OBS_MCP_HTTP_TOKEN` | No | none | With `OBS_MCP_HTTP_PORT`, require `Authorization: Bearer <token>` on every request |
 | `OBS_MCP_STATE_DIR` | No | `~/Library/Application Support/obs-mcp` (macOS), `%LOCALAPPDATA%\obs-mcp` (Windows), `$XDG_STATE_HOME/obs-mcp` (Linux) | Where snapshots are saved |
@@ -110,7 +110,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 171 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 173 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -175,7 +175,7 @@ Two prompts appear as slash commands in clients that show MCP prompts: `record-d
 
 ### Confirming live actions
 
-With `OBS_MCP_CONFIRM_LIVE=true`, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, `obs-toggle-record`, `obs-take-stop`, `obs-stop-output`, and `obs-toggle-output` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. The generic output tools are included because the stream and the recording are outputs too. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation, and `confirm: true` from the model does not skip it. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
+With `OBS_MCP_CONFIRM_LIVE=true`, `obs-start-stream`, generic `StartStream`/`StartOutput` requests, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, `obs-toggle-record`, `obs-take-stop`, `obs-stop-output`, and `obs-toggle-output` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. The generic output tools are included because the stream and the recording are outputs too. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation, and `confirm: true` from the model does not skip it. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
 
 ## Where it fits
 
@@ -195,7 +195,7 @@ Pay particular attention to approvals for tools that:
 - invoke vendor requests
 - save files or use the generic `obs-call-request` fallback
 
-`obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StopStream`, `ToggleStream`, `StopRecord`, or `ToggleRecord`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
+`obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StartStream`, `StartOutput`, `StopStream`, `ToggleStream`, `StopRecord`, `ToggleRecord`, `StopOutput`, or `ToggleOutput`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
 
 ### Watching a take
 
@@ -215,6 +215,24 @@ While a take records, the server watches OBS instead of waiting for the file:
 - **Picture**: once a second it takes a 96-pixel-wide PPM screenshot of the program scene. Two black samples in a row raise a warning (a capture that lost its window or permission looks like this). Stretches of 3 seconds or more where the picture holds still are recorded as stills, which mark dead time to trim. A spinner or a shimmering "thinking" label counts as still; text that appears and stays does not (see below).
 
 The result lists the findings, and when OBS records to this machine the server writes them next to the recording as `<name>.take.json`, with chapter times and OBS events (scene switches, mutes, output state) in seconds from the start. `obs://take/current` shows the same data while the take runs.
+
+### Bounded software demos
+
+The `software-demo` MCP prompt and [obs-demo agent skill](.agents/skills/obs-demo/SKILL.md) use the [version 1 recipe](docs/recipes/software-demo.v1.json). The skill ships in the npm package and MCPB source bundle. Open this checkout in your agent host and explicitly load the linked skill, or request the `software-demo` prompt through MCP. Merely installing an MCPB does not install a skill into every host. Automatic host discovery and real rendered OBS output have not been qualified by the hermetic checks.
+
+V1 uses local macOS OBS, an existing current scene, and one enabled, preconfigured window capture. The capture must appear exactly once in a collection without groups or nested scenes. The tools require stable OBS object identifiers and complete state; they refuse unsupported setups rather than create or retarget sources. Streaming, recording, virtual camera, replay buffer, and every listed generic output must be inactive during preparation and recovery. Missing output status blocks the operation.
+
+1. Plan with `obs-prepare-demo` and exact `sceneCollection`, `sceneName`, and `inputName`. After authorization, repeat with `apply: true`. It mutes the capture, clears its audio tracks, fits it to the canvas, and returns an `operationId` when changes require recovery.
+2. Inspect a screenshot for the intended window and framing. Run silent preflight and require every check named in the recipe to pass. A required unknown or missing check blocks this workflow.
+3. Start a take with `maxDurationSeconds` (120 by default in the prompt, at most 3600), mark steps, and stop it when finished. The server attempts to stop its own take at the deadline and retains the result for `obs-take-stop` to read. The deadline requires a running server; process death and sleep prevent an unattended cleanup guarantee.
+4. Inspect the final file and contact sheet. Chapters may be in the `.take.json` sidecar. After trimming, verify the exported copy and its remapped chapters. Use the local verifier below to bind measurements to the delivered file hash.
+5. Plan `obs-recover-demo` with the retained `operationId`; apply recovery when requested. It restores only the preparation's changed fields after checking collection/object identity and expected values. A conflict stops recovery. It does not lock OBS's UI or other processes; incomplete recovery needs operator inspection. Existing `obs-restore` remains a manual tool for legacy snapshots.
+
+```sh
+node scripts/verify-demo.mjs --file /path/demo.mp4 --reference /path/expected.png --seconds 30 --chapter Intro --checkpoint 10=/path/step-two.png --report /path/demo.verification.json
+```
+
+The verifier uses local `ffmpeg` and `ffprobe`; it never contacts OBS. It checks duration within 2 seconds, a video stream, every audio track at or below -60 dB, requested chapters, and reference frames scaled to 160×90 grayscale (mean absolute error at most 12). These frame comparisons test selected checkpoints, not semantic recognition or every frame. Use reference images from the intended scene. Missing tools or evidence produce `unavailable`; failed requirements produce `fail`. The report must be a new file. Synthetic-media tests cover the verifier; a real recording still needs visual review.
 
 ### Trimming a take
 
@@ -295,7 +313,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 171 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 173 tool definitions, and calls the extracted server through MCP against fake OBS.
 
 ### Live OBS tests
 

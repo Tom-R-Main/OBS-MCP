@@ -150,7 +150,7 @@ describe("prompts", () => {
   it("lists the workflow prompts", async () => {
     const { prompts } = await harness.mcpClient.listPrompts();
 
-    expect(prompts.map(({ name }) => name).sort()).toEqual(["pre-stream-check", "record-demo"]);
+    expect(prompts.map(({ name }) => name).sort()).toEqual(["pre-stream-check", "record-demo", "software-demo"]);
   });
 
   it("fills record-demo with the window, scene, and length", async () => {

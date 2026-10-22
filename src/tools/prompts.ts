@@ -5,6 +5,14 @@
  */
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { readFileSync } from "node:fs";
+
+export const demoRecipe = z.object({
+  id: z.literal("software-demo"), version: z.literal(1),
+  defaultMaxDurationSeconds: z.number().int().positive(),
+  maxDurationSeconds: z.number().int().positive(),
+  requiredPreflightChecks: z.array(z.string()),
+}).parse(JSON.parse(readFileSync(new URL("../../docs/recipes/software-demo.v1.json", import.meta.url), "utf8")));
 
 function userMessage(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] };
@@ -15,6 +23,27 @@ function userMessage(text: string) {
  * as slash commands; every step is also reachable through tools alone.
  */
 export function initialize(server: McpServer): void {
+  server.registerPrompt("software-demo", {
+    title: "Record a bounded software demo",
+    description: "Prepare an existing local macOS capture, record a bounded silent take, and inspect the final file",
+    argsSchema: z.object({
+      sceneCollection: z.string(), sceneName: z.string(), inputName: z.string(),
+      maxDurationSeconds: z.string().default(String(demoRecipe.defaultMaxDurationSeconds)),
+    }),
+  }, ({ sceneCollection, sceneName, inputName, maxDurationSeconds }) => {
+    const duration = Number(maxDurationSeconds);
+    if (!Number.isInteger(duration) || duration < 1 || duration > demoRecipe.maxDurationSeconds) throw new Error("maxDurationSeconds must be an integer from 1 to 3600");
+    return userMessage([
+      `Follow software-demo/v${demoRecipe.version} for ${JSON.stringify({ sceneCollection, sceneName, inputName })}.`,
+      "Use the packaged .agents/skills/obs-demo/SKILL.md and docs/recipes/software-demo.v1.json when file access is available. These instructions grant no permission to record or change OBS.",
+      "Plan with obs-prepare-demo for that exact target. After user authorization, apply the same request with apply:true and retain operationId. Refuse creation, retargeting, shared capture, active outputs, and unsupported targets; do not substitute the legacy record-demo workflow.",
+      "Inspect obs-get-source-screenshot of the program scene for the expected window and framing. Nonblack is insufficient. Stop if content cannot be checked.",
+      `Run obs-preflight expectSilent:true. Require pass for ${demoRecipe.requiredPreflightChecks.join(", ")} and no failed checks. Required unknown/missing evidence blocks recording.`,
+      `Start with obs-take-start expectSilent:true, lock:true, requireVerifiedPreflight:true, maxDurationSeconds:${duration}. Mark steps with obs-take-mark and inspect obs-take-status. Stop your own take with obs-take-stop after steps or failure. Reconcile an uncertain stop with obs-get-record-status before another action.`,
+      "Inspect the final file, verification status, chapter sidecar, and obs-contact-sheet. Optional obs-trim-take exports a copy; recheck that copy. Use scripts/verify-demo.mjs with an expected reference, duration, chapter names, and visual checkpoints when local file tooling is available. Missing required evidence means unverified, even if recording succeeded.",
+      "Plan obs-recover-demo using operationId; apply only when requested. Conflicts need operator review; never replace guarded recovery with unconditional obs-restore. The deadline requires a running server; process death and competing controllers remain outside the guarantee.",
+    ].join("\n\n"));
+  });
   server.registerPrompt(
     "record-demo",
     {

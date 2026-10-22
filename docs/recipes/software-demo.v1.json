@@ -1,0 +1,20 @@
+{
+  "id": "software-demo",
+  "version": 1,
+  "platform": "macos",
+  "scope": "Local OBS; existing current scene and configured window capture; one server process",
+  "prepareTool": "obs-prepare-demo",
+  "recoverTool": "obs-recover-demo",
+  "startTool": "obs-take-start",
+  "defaultMaxDurationSeconds": 120,
+  "maxDurationSeconds": 3600,
+  "requiredPreflightChecks": ["connection", "record-idle", "record-directory", "disk-space", "encoder", "audio", "scene-items"],
+  "delivery": {
+    "durationToleranceSeconds": 2,
+    "maxSilentPeakDb": -60,
+    "maxFrameMeanAbsoluteError": 12,
+    "chapters": "sidecar",
+    "verificationScript": "scripts/verify-demo.mjs"
+  },
+  "tools": ["obs-prepare-demo", "obs-recover-demo", "obs-get-source-screenshot", "obs-preflight", "obs-take-start", "obs-take-mark", "obs-take-status", "obs-take-stop", "obs-get-record-status", "obs-contact-sheet", "obs-trim-take"]
+}

@@ -291,10 +291,11 @@ export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, ap
       label: "before obs-apply-scene",
       auto: true,
     }).catch((error: unknown) => {
-      snapshotNote = `Could not save a snapshot first, so obs-restore cannot undo this: ${errorMessage(error)}`;
+      snapshotNote = `Nothing changed: could not save a recovery snapshot: ${errorMessage(error)}`;
       return undefined;
     })
     : undefined;
+  if (snapshotNote) return errorResult(snapshotNote);
 
   // Pass 1 creates the scene, inputs, and items; pass 2 plans again with their IDs and changes the rest.
   const problems: string[] = [];

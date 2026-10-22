@@ -11,6 +11,7 @@ import { withoutAudioOnly } from "./audio-only.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
 
 export type PreflightStatus = "pass" | "warn" | "fail" | "unknown";
+export const DEMO_REQUIRED_CHECKS = ["connection", "record-idle", "record-directory", "disk-space", "encoder", "audio", "scene-items"] as const;
 
 export type PreflightCheck = {
   id: string;
@@ -21,6 +22,7 @@ export type PreflightCheck = {
 export type PreflightOptions = {
   minFreeDiskMb: number;
   expectSilent: boolean;
+  requireVerified?: boolean;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -62,6 +64,7 @@ async function runCheck(id: string, check: () => Promise<PreflightCheck | Prefli
 
 async function checkOutputsIdle(client: OBSWebSocketClient): Promise<PreflightCheck> {
   const record = await request(client, "GetRecordStatus");
+  if (typeof record.outputActive !== "boolean") return { id: "record-idle", status: "unknown", message: "OBS did not report recording state" };
   return record.outputActive === true
     ? { id: "record-idle", status: "fail", message: "Recording is already active" }
     : { id: "record-idle", status: "pass", message: "Recording is not active" };
@@ -164,29 +167,40 @@ async function checkEncoder(client: OBSWebSocketClient): Promise<PreflightCheck[
  * quality or to FLV (track 1 only); Advanced mode writes AdvOut/RecTracks,
  * or AdvOut/FFAudioMixes when it records through FFmpeg.
  */
-export async function recordedTracks(client: OBSWebSocketClient): Promise<number[]> {
-  const mode = await profileParameter(client, "Output", "Mode") ?? "Simple";
+export async function recordedTracks(client: OBSWebSocketClient, requireVerified = false): Promise<number[]> {
+  const reportedMode = await profileParameter(client, "Output", "Mode");
+  if (requireVerified && reportedMode !== "Simple" && reportedMode !== "Advanced") throw new Error("Recording output mode is unavailable");
+  const mode = reportedMode ?? "Simple";
+  const maskValue = (value: string | null): number => {
+    const mask = Number(value ?? "1");
+    if (requireVerified && (value === null || value.trim() === "" || !Number.isInteger(mask) || mask < 1 || mask > 63)) throw new Error("Recorded audio track selection is unavailable");
+    return mask;
+  };
   let mask: number;
   if (mode === "Advanced") {
-    const ffmpeg = await profileParameter(client, "AdvOut", "RecType") === "FFmpeg";
-    mask = Number(await profileParameter(client, "AdvOut", ffmpeg ? "FFAudioMixes" : "RecTracks") ?? "1");
+    const recType = await profileParameter(client, "AdvOut", "RecType");
+    if (requireVerified && recType !== "Standard" && recType !== "FFmpeg") throw new Error("Recording output type is unavailable");
+    const ffmpeg = recType === "FFmpeg";
+    mask = maskValue(await profileParameter(client, "AdvOut", ffmpeg ? "FFAudioMixes" : "RecTracks"));
   } else {
     const [quality, format] = await Promise.all([
       profileParameter(client, "SimpleOutput", "RecQuality"),
       profileParameter(client, "SimpleOutput", "RecFormat2"),
     ]);
     if (quality === "Stream" || format === "flv") return [1];
-    mask = Number(await profileParameter(client, "SimpleOutput", "RecTracks") ?? "1");
+    if (requireVerified && (!quality || !format)) throw new Error("Recording format or quality is unavailable");
+    mask = maskValue(await profileParameter(client, "SimpleOutput", "RecTracks"));
   }
   const tracks = [1, 2, 3, 4, 5, 6].filter((track) => (mask & (1 << (track - 1))) !== 0);
   return tracks.length > 0 ? tracks : [1];
 }
 
-async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Promise<PreflightCheck> {
+async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean, requireVerified = false): Promise<PreflightCheck> {
   const [{ inputs }, tracks] = await Promise.all([
     request(client, "GetInputList"),
-    recordedTracks(client),
+    recordedTracks(client, requireVerified),
   ]);
+  if (!Array.isArray(inputs) || inputs.some((input) => !isObject(input) || typeof input.inputName !== "string" || !input.inputName)) return { id: "audio", status: "unknown", message: "OBS did not report a complete input list" };
   const names = (Array.isArray(inputs) ? inputs : [])
     .filter(isObject)
     .map(({ inputName }) => inputName)
@@ -198,14 +212,27 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Pr
     { requestType: "GetInputAudioTracks", requestData: { inputName } },
   ]));
   const audible: string[] = [];
+  const unreadable: string[] = [];
 
   names.forEach((inputName, index) => {
     const mute = results[index * 2];
     const trackResult = results[index * 2 + 1];
-    if (!mute?.ok || !isObject(mute.responseData) || mute.responseData.inputMuted === true) return;
+    if (!mute?.ok) {
+      if (mute?.code !== 604) unreadable.push(inputName);
+      return;
+    }
+    if (!isObject(mute.responseData) || typeof mute.responseData.inputMuted !== "boolean") { unreadable.push(inputName); return; }
+    if (mute.responseData.inputMuted === true) return;
     const inputAudioTracks = trackResult?.ok && isObject(trackResult.responseData)
       ? trackResult.responseData.inputAudioTracks
       : undefined;
+    if (!isObject(inputAudioTracks) || tracks.some((track) => typeof inputAudioTracks[String(track)] !== "boolean")) {
+      unreadable.push(inputName);
+      // Legacy checks conservatively assumed an unreadable route was recorded.
+      // Strict admission needs an observed route instead of that assumption.
+      if (!requireVerified) audible.push(`${inputName} (audio routing unavailable; assumed recorded)`);
+      return;
+    }
     const enabled = isObject(inputAudioTracks)
       ? tracks.filter((track) => inputAudioTracks[String(track)] === true)
       : tracks;
@@ -213,6 +240,7 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean): Pr
   });
 
   if (audible.length === 0) {
+    if (unreadable.length > 0) return { id: "audio", status: "unknown", message: `Could not read audio state for: ${unreadable.join(", ")}` };
     return { id: "audio", status: "pass", message: "No unmuted input feeds a recorded audio track" };
   }
   return {
@@ -230,6 +258,7 @@ async function checkSceneItems(client: OBSWebSocketClient): Promise<PreflightChe
     return { id: "scene-items", status: "unknown", message: "OBS did not report the program scene" };
   }
   const { sceneItems } = await request(client, "GetSceneItemList", { sceneName });
+  if (!Array.isArray(sceneItems) || sceneItems.some((item) => !isObject(item) || typeof item.sceneItemEnabled !== "boolean")) return { id: "scene-items", status: "unknown", message: "OBS did not report a complete scene item list" };
   const items = (Array.isArray(sceneItems) ? sceneItems : []).filter(isObject);
   const visible = items.filter((item) => item.sceneItemEnabled !== false);
   // GetSceneItemList includes transforms; look up any it left out in one batch.
@@ -241,6 +270,11 @@ async function checkSceneItems(client: OBSWebSocketClient): Promise<PreflightChe
     const result = looked[index];
     return [item, result?.ok && isObject(result.responseData) ? result.responseData.sceneItemTransform : undefined];
   }));
+  if (visible.length === 0 && items.length > 0) return { id: "scene-items", status: "warn", message: `Program scene ${sceneName} has no enabled items` };
+  if (visible.some((item) => {
+    const transform = isObject(item.sceneItemTransform) ? item.sceneItemTransform : transforms.get(item);
+    return !isObject(transform) || ![transform.sourceWidth, transform.sourceHeight].every((size) => typeof size === "number" && Number.isFinite(size) && size >= 0);
+  })) return { id: "scene-items", status: "unknown", message: "OBS did not report dimensions for every visible scene item" };
   // Audio-only sources (microphones, audio files) are always 0×0.
   const blank = await withoutAudioOnly(client, visible
     .filter((item) => {
@@ -287,7 +321,7 @@ export async function runPreflight(
     runCheck("record-directory", () => checkRecordDirectory(client)),
     runCheck("disk-space", () => checkDiskSpace(client, options.minFreeDiskMb)),
     runCheck("encoder", () => checkEncoder(client)),
-    runCheck("audio", () => checkAudio(client, options.expectSilent)),
+    runCheck("audio", () => checkAudio(client, options.expectSilent, options.requireVerified)),
     runCheck("scene-items", () => checkSceneItems(client)),
   ]);
   const checks = [

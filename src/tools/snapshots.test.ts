@@ -3,10 +3,10 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OBS_OP } from "../../test/support/fake-obs-server.js";
+import { FakeOBSRequestError, OBS_OP } from "../../test/support/fake-obs-server.js";
 import { demoSceneState, serveSceneState, type FakeSceneInput, type FakeSceneItem } from "../../test/support/fake-obs-scene.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
 
@@ -46,6 +46,28 @@ function breakEverything(): void {
 }
 
 describe("obs-snapshot and obs-restore", () => {
+  it("reports persistence failure instead of claiming an unsaved snapshot succeeded", async () => {
+    mkdirSync(join(process.env.OBS_MCP_STATE_DIR!, "snapshots.json"));
+    const response = await harness.call("obs-snapshot");
+    expect(response.isError).toBe(true);
+    expect(resultText(response)).toContain("Snapshot failed");
+  });
+  it("halts general scene application when its required recovery snapshot cannot be persisted", async () => {
+    mkdirSync(join(process.env.OBS_MCP_STATE_DIR!, "snapshots.json"));
+    const response = await harness.call("obs-apply-scene", {
+      sceneName: "Demo", sources: [{ name: "Chrome", settings: { type: 1, window: 40000 } }], apply: true,
+    });
+    expect(response.isError).toBe(true);
+    expect(resultText(response)).toContain("Nothing changed");
+    expect(sent("SetInputSettings")).toEqual([]);
+    expect(inputs.Chrome!.settings).toEqual({ type: 1, window: 31875 });
+  });
+  it("distinguishes unsupported optional audio from failed optional observation", async () => {
+    harness.fakeObs.respondWith("GetInputVolume", () => { throw new FakeOBSRequestError(500, "read failed"); });
+    await harness.call("obs-snapshot");
+    const [saved] = JSON.parse(readFileSync(join(process.env.OBS_MCP_STATE_DIR!, "snapshots.json"), "utf8"));
+    expect(saved.inputs.find((input: { inputName: string }) => input.inputName === "Background").unavailable).toMatchObject({ muted: "unsupported", volumeMul: "failed", audioTracks: "unsupported" });
+  });
   it("saves the program scene and its inputs, and undoes later changes in one batch", async () => {
     const snapshot = await harness.call("obs-snapshot", { label: "before capture" });
     expect(resultText(snapshot)).toMatch(/Saved snapshot \w+ "before capture" .*: 2 input\(s\), 2 item\(s\) in Demo/);

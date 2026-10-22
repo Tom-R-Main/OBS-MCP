@@ -40,6 +40,8 @@ export function healthyObsState(recordDirectory: string): FakeObsState {
       "Output/Mode": "Simple",
       "SimpleOutput/RecQuality": "Small",
       "SimpleOutput/RecEncoder": "apple_h264",
+      "SimpleOutput/RecTracks": "1",
+      "SimpleOutput/RecFormat2": "mkv",
     },
     inputs: [
       { inputName: "Chrome", inputKind: "screen_capture", muted: true, tracks: { 1: false } },
@@ -89,9 +91,13 @@ export function servePreflightState(fakeObs: FakeOBSServer, getState: () => Fake
  * Answers StartRecord and StopRecord the way OBS does: each returns at once,
  * and the RecordStateChanged event that confirms it follows shortly after.
  */
-export function serveRecordOutput(fakeObs: FakeOBSServer, outputPath: () => string): void {
+export function serveRecordOutput(fakeObs: FakeOBSServer, outputPath: () => string, setRecording?: (active: boolean) => void): void {
+  let recording = false;
+  if (!setRecording) fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: recording }));
   const later = (outputState: string, outputActive: boolean) => setTimeout(() => {
     try {
+      recording = outputActive;
+      setRecording?.(outputActive);
       fakeObs.sendEvent("RecordStateChanged", { outputActive, outputState, outputPath: outputPath() });
     } catch {
       // The connection closed first.

@@ -4230,6 +4230,43 @@
     }
   },
   {
+    "name": "obs-prepare-demo",
+    "title": "Prepare Existing Demo Capture",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneCollection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sceneName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "apply": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sceneCollection",
+        "sceneName",
+        "inputName"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-press-input-property-button",
     "title": "Press Input Property Button",
     "inputSchema": {
@@ -4325,6 +4362,34 @@
       "readOnlyHint": false,
       "destructiveHint": false,
       "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-recover-demo",
+    "title": "Recover Restricted Demo Preparation",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "apply": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
       "openWorldHint": false
     }
   },
@@ -6819,6 +6884,16 @@
           "description": "Name of a chapter to add at the start",
           "type": "string",
           "minLength": 1
+        },
+        "maxDurationSeconds": {
+          "description": "Server wall-clock stop deadline. Requires this process and OBS connection to remain alive; uncertain ownership prevents automatic stop",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "requireVerifiedPreflight": {
+          "description": "Require every software-demo preflight check to exist and pass before starting",
+          "type": "boolean"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema"

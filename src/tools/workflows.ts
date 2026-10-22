@@ -50,7 +50,7 @@ async function recordClip(
     }
     await sleep(Math.max(0, startedAt + args.durationSeconds * 1000 - Date.now()));
   } finally {
-    // stopTake never throws, so the recording always stops.
+    // Cleanup reconciles status and reports uncertainty rather than stopping another recording.
     result = await stopTake(client, take, { requestedSeconds: args.durationSeconds });
   }
   return result;
