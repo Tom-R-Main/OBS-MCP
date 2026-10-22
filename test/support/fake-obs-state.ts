@@ -40,6 +40,8 @@ export function healthyObsState(recordDirectory: string): FakeObsState {
       "Output/Mode": "Simple",
       "SimpleOutput/RecQuality": "Small",
       "SimpleOutput/RecEncoder": "apple_h264",
+      "SimpleOutput/RecTracks": "1",
+      "SimpleOutput/RecFormat2": "mkv",
     },
     inputs: [
       { inputName: "Chrome", inputKind: "screen_capture", muted: true, tracks: { 1: false } },

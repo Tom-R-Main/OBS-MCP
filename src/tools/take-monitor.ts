@@ -103,6 +103,7 @@ export class TakeMonitor {
   private readonly options: Required<TakeMonitorOptions>;
   private startedAtMs = 0;
   private stoppedAtMs: number | null = null;
+  private stopPromise: Promise<TakeSummary> | undefined;
   private stopExpected = false;
   private readonly warnings: TakeWarning[] = [];
   private readonly events: TakeEvent[] = [];
@@ -215,8 +216,14 @@ export class TakeMonitor {
     this.stopExpected = true;
   }
 
-  async stop(): Promise<TakeSummary> {
+  stop(): Promise<TakeSummary> {
+    return this.stopPromise ??= this.finishStop();
+  }
+
+  private async finishStop(): Promise<TakeSummary> {
     if (this.stoppedAtMs === null) {
+      // Publish stopping before any await: pending start() must not arm new work.
+      this.stoppedAtMs = Date.now();
       this.stopExpected = true;
       for (const timer of this.timers) clearInterval(timer);
       this.timers.length = 0;
@@ -225,7 +232,6 @@ export class TakeMonitor {
       for (const [event, listener] of this.listeners) this.client.off(event, listener);
       this.listeners.length = 0;
       await this.sampleStats().catch(() => undefined);
-      this.stoppedAtMs = Date.now();
       const end = this.now();
       this.closeStill(end);
       this.closeBlank(end);

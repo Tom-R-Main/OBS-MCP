@@ -54,6 +54,58 @@ afterEach(async () => {
 });
 
 describe("recording takes", () => {
+  it("preserves legacy silent-start refusal when an unmuted input's routing cannot be read", async () => {
+    await startHarness();
+    state.inputs[0]!.muted = false;
+    harness.fakeObs.respondWith("GetInputAudioTracks", () => { throw new FakeOBSRequestError(500, "Track read failed"); });
+    const result = await harness.call("obs-take-start", { expectSilent: true });
+    expect(result.isError, resultText(result)).toBe(true);
+    expect(sent("StartRecord")).toBe(0);
+  });
+  it("keeps monitor subscriptions stopped when the deadline overlaps pending startup and cleanup", async () => {
+    await startHarness();
+    harness.fakeObs.queueSuccess("GetStats", { availableDiskSpace: 50_000 });
+    harness.fakeObs.queueSuccess("GetStats", {}, 1300);
+    harness.fakeObs.queueSuccess("GetStats", {}, 800);
+    const result = await harness.call("obs-take-start", { maxDurationSeconds: 1 });
+    expect(result.isError).toBe(true);
+    expect(currentTake(harness.obsClient)).toBeUndefined();
+    expect(sent("StopRecord")).toBe(1);
+    await vi.waitFor(() => expect(harness.fakeObs.eventSubscriptions()).toBe(EventSubscription.All));
+    const statsRequests = sent("GetStats");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(sent("GetStats")).toBe(statsRequests);
+  });
+  it("admits a strict silent take when the required observations are complete", async () => {
+    await startHarness();
+    const result = await harness.call("obs-take-start", { expectSilent: true, requireVerifiedPreflight: true, maxDurationSeconds: 30 });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(sent("StartRecord")).toBe(1);
+  });
+  it.each(["missing-inputs", "malformed-input", "empty-tracks", "incomplete-tracks", "missing-transform", "invalid-dimensions", "missing-visibility", "all-hidden", "missing-record-tracks", "invalid-record-tracks"])("refuses strict recording when %s leaves required evidence unavailable", async (defect) => {
+    await startHarness();
+    if (defect === "missing-inputs") harness.fakeObs.respondWith("GetInputList", () => ({}));
+    if (defect === "malformed-input") harness.fakeObs.respondWith("GetInputList", () => ({ inputs: [{}] }));
+    if (defect === "empty-tracks" || defect === "incomplete-tracks") {
+      state.inputs[0]!.muted = false;
+      state.inputs[0]!.tracks = defect === "empty-tracks" ? {} : { 2: false };
+    }
+    if (defect === "missing-record-tracks" || defect === "invalid-record-tracks") {
+      state.inputs[0]!.muted = false;
+      state.inputs[0]!.tracks = { 1: false, 2: true };
+      if (defect === "missing-record-tracks") delete state.profile["SimpleOutput/RecTracks"];
+      else state.profile["SimpleOutput/RecTracks"] = "not-a-mask";
+    }
+    if (["missing-transform", "invalid-dimensions", "missing-visibility"].includes(defect)) {
+      harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [{ sceneItemId: 2, sourceName: "Chrome", ...(defect !== "missing-visibility" ? { sceneItemEnabled: true } : {}), ...(defect === "invalid-dimensions" ? { sceneItemTransform: { sourceWidth: "1512", sourceHeight: 949 } } : {}) }] }));
+      harness.fakeObs.respondWith("GetSceneItemTransform", () => ({}));
+    }
+    if (defect === "all-hidden") state.sceneItems.forEach((item) => { item.sceneItemEnabled = false; });
+    const result = await harness.call("obs-take-start", { expectSilent: true, requireVerifiedPreflight: true, maxDurationSeconds: 30 });
+    expect(result.isError, resultText(result)).toBe(true);
+    expect(sent("StartRecord")).toBe(0);
+    expect(currentTake(harness.obsClient)).toBeUndefined();
+  });
   it("starts, marks, reports status, and stops with a take log", async () => {
     await startHarness();
 

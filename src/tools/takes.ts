@@ -153,7 +153,7 @@ async function startTakeReserved(
 ): Promise<{ ok: true; take: Take } | { ok: false; result: CallToolResult }> {
   const refuse = (result: CallToolResult) => ({ ok: false as const, result });
 
-  const preflight = await runPreflight(client, { minFreeDiskMb: options.minFreeDiskMb, expectSilent: options.expectSilent });
+  const preflight = await runPreflight(client, { minFreeDiskMb: options.minFreeDiskMb, expectSilent: options.expectSilent, requireVerified: options.requireVerifiedPreflight });
   if (options.requireVerifiedPreflight) {
     const missing = DEMO_REQUIRED_CHECKS.filter((id) => !preflight.checks.some((check) => check.id === id && check.status === "pass"));
     if (missing.length > 0) return refuse(errorResult(`Not recording; required preflight checks are not verified: ${missing.join(", ")}`));
