@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
 import { TOOL_COUNT } from "../support/tool-count.js";
 import { serveDemoFixture } from "../support/demo-fixture.js";
+import { SCENE_AUDIT_READS, serveSceneAuditFixture } from "../support/scene-audit-fixture.js";
 import { obsWebSocketConfigPaths } from "../../src/obs-config.js";
 
 type JsonObject = Record<string, unknown>;
@@ -269,6 +270,48 @@ afterEach(async () => {
 });
 
 describe("compiled stdio MCP boundary", () => {
+  it.each(["modern", "legacy"] as const)("audits an explicit scene without mutations in %s read-only mode", async (mode) => {
+    const fake = await FakeOBSServer.start();
+    fakeServers.push(fake);
+    const state = serveSceneAuditFixture(fake);
+    const original = structuredClone(state);
+    const { client } = await connectClient(fake, mode, { OBS_MCP_TOOLSETS: "core", OBS_MCP_READ_ONLY: "true", OBS_MCP_READ_OBS_CONFIG: "false" });
+    const tool = (await client.listTools()).tools.find(({ name }) => name === "obs-audit-scene");
+    expect(tool?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(tool?.outputSchema).toBeDefined();
+    const args = { sceneCollection: "Audit collection", sceneName: "Review", requiredItems: [{ sourceName: "Application", sourceUuid: "application-source-uuid", containerUuid: "review-scene-uuid", sceneItemId: 7 }] };
+    const healthy = await client.callTool({ name: "obs-audit-scene", arguments: args });
+    expect(healthy.isError).toBeFalsy();
+    expect(healthy.structuredContent).toMatchObject({ version: 1, scope: "structural", status: "pass", renderedContent: "unverified", target: { sceneUuid: "review-scene-uuid" } });
+    expect(state).toEqual(original);
+    expect(fake.history().some(({ frame }) => frame.op === 6 && frame.d.requestType === "GetSourceScreenshot")).toBe(false);
+
+    state.items[0]!.sceneItemEnabled = false;
+    const hidden = await client.callTool({ name: "obs-audit-scene", arguments: args });
+    expect(hidden.structuredContent).toMatchObject({ status: "fail", renderedContent: "unverified" });
+    state.items[0]!.sceneItemEnabled = true;
+    const missing = await client.callTool({ name: "obs-audit-scene", arguments: { ...args, requiredItems: [{ sourceName: "Missing source" }] } });
+    expect(missing.structuredContent).toMatchObject({ status: "fail" });
+
+    fake.respondWith("GetSourceScreenshot", () => ({ imageData: "invalid-image-data" }));
+    const unavailable = await client.callTool({ name: "obs-audit-scene", arguments: { ...args, includeScreenshot: true } });
+    expect(unavailable.structuredContent).toMatchObject({ status: "unknown" });
+    expect(unavailable.content.some(({ type }) => type === "image")).toBe(false);
+    const fresh = serveSceneAuditFixture(fake);
+    const image = await client.callTool({ name: "obs-audit-scene", arguments: { ...args, includeScreenshot: true } });
+    expect(image.structuredContent).toMatchObject({ status: "pass", renderedContent: "unverified" });
+    expect(image.content.some(({ type }) => type === "image")).toBe(true);
+    expect(fresh).toEqual(original);
+    expect(state).toEqual(original);
+    const secondary = serveSceneAuditFixture(fake, "secondary-canvas");
+    const scopedImage = await client.callTool({ name: "obs-audit-scene", arguments: { ...args, canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true } });
+    expect(scopedImage.structuredContent).toMatchObject({ status: "pass", target: { canvasUuid: "secondary-canvas", sceneUuid: secondary.sceneUuid } });
+    expect(scopedImage.content.some(({ type }) => type === "image")).toBe(true);
+    const requests = fake.history().flatMap(({ frame }) => frame.op === 6 ? [frame.d.requestType] : frame.op === 8 ? (frame.d.requests as { requestType: string }[]).map(({ requestType }) => requestType) : []);
+    expect(requests.length).toBeGreaterThan(10);
+    expect(requests.filter((type) => typeof type !== "string" || !SCENE_AUDIT_READS.has(type))).toEqual([]);
+  });
+
   it("discovers the recipe and prepares and recovers through the compiled server", async () => {
     const fake = await FakeOBSServer.start();
     fakeServers.push(fake);

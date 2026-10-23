@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 173 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 174 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
 
 The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
 
@@ -110,7 +110,7 @@ The server never prints the password. Connection and protocol diagnostics are wr
 
 ## Tool surface
 
-The 173 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 174 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -119,6 +119,7 @@ The 173 tools are organized around the OBS protocol rather than a smaller opinio
 - transitions, transition overrides, the transition cursor, and the T-Bar
 - canvases, screenshots, profiles, scene collections, and persistent data
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
+- `obs-audit-scene`, which inspects one selected scene for missing or hidden required items, incomplete observations, and structural problems without changing OBS
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
 - `obs-take-start`, `obs-take-mark`, `obs-take-status`, and `obs-take-stop` for a watched recording of any length, with a chapter per step (see [Watching a take](#watching-a-take))
 - `obs-trim-take`, which cuts dead time out of a recording, and `obs-contact-sheet`, which tiles frames from it into one image (see [Trimming a take](#trimming-a-take))
@@ -139,7 +140,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 | Group | Covers |
 |---|---|
 | `general` | status, version, statistics, hotkeys, vendor requests, custom events, sleep, control of a shared server |
-| `scenes` | scenes, canvases, program and preview scene, `obs-apply-scene` |
+| `scenes` | scenes, canvases, program and preview scene, `obs-apply-scene`, `obs-audit-scene` |
 | `scene-items` | scene items, groups, transforms, ordering, locking, blend modes, `obs-snapshot`, and `obs-restore` |
 | `sources` | source screenshots and active state |
 | `inputs` | inputs, input settings and properties, audio, deinterlacing, and `obs-capture-window` |
@@ -171,7 +172,7 @@ Resources give clients that support them a live view without tool calls. Each on
 
 Clients on the 2025 protocol receive `notifications/resources/updated` for URIs they subscribe to; 2026-07-28 clients choose them on their `subscriptions/listen` stream.
 
-Two prompts appear as slash commands in clients that show MCP prompts: `record-demo` (capture a window silently, preflight, record a clip) and `pre-stream-check` (a read-only go/no-go review).
+Three prompts appear as slash commands in clients that show MCP prompts: `record-demo` (capture a window silently, preflight, record a clip), `software-demo` (the bounded demo recipe below), and `pre-stream-check` (a read-only go/no-go review).
 
 ### Confirming live actions
 
@@ -244,6 +245,29 @@ Without `apply: true` it returns only the plan: the cuts, the new length, and th
 
 `obs-contact-sheet` tiles frames from a recording into one JPEG: one second after each chapter start by default, or at the times you give. Both tools work only on files inside OBS's recording directory, and need `ffmpeg` and `ffprobe` on `PATH`.
 
+### Auditing a scene
+
+`obs-audit-scene` reads one scene in the current collection without changing OBS. The selected scene can be off program. It is available in the `scenes` group and in read-only mode:
+
+```json
+{
+  "sceneCollection": "Demo collection",
+  "sceneName": "Demo",
+  "requiredItems": [{ "sourceName": "Application" }],
+  "includeScreenshot": false
+}
+```
+
+For a secondary canvas, add `canvasUuid` from `obs-get-canvas-list`. The audit uses that canvas for scene discovery, item and group reads, transform rereads, and the optional screenshot. Omitting it keeps OBS's default-canvas behavior. The report includes the supplied canvas UUID in its target.
+
+The report lists individual source occurrences with their container, source UUID, scene-item ID, and containment path. A required source that is missing or hidden fails its check. Repeated occurrences need a more specific selector: add `sourceUuid`, `containerUuid`, or `sceneItemId` to the required item. Ambiguous selectors remain unknown.
+
+Checks report `pass`, `fail`, or `unknown`, with observation times and evidence. Missing fields, unreadable state, cycles, traversal limits, unsupported geometry, or detected changes during collection make the affected evidence unknown. Nested scene and group membership can be inspected, but composed geometry is not qualified. The report covers a sampling interval; it is not an atomic snapshot or a promise that OBS will stay unchanged.
+
+Zero-size media sources remain unknown: a filename extension does not prove that a file has no video. Inputs whose source kind establishes audio-only capture are exempt from visual dimension checks.
+
+Set `includeScreenshot: true` to request a bounded scene image for inspection. An unavailable image is reported as unknown. The tool does not save screenshots or reports to disk. A structural pass leaves `renderedContent` as `unverified`: it does not establish the intended capture content, readability, freedom from occlusion, audio policy, or readiness to record. Continue to use the recording preflight and inspect the rendered picture separately.
+
 ### Describing a scene
 
 `obs-apply-scene` takes the scene you want instead of the steps to build it:
@@ -313,7 +337,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 173 tool definitions, and calls the extracted server through MCP against fake OBS.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 174 tool definitions, and calls the extracted server through MCP against fake OBS, including a read-only scene audit.
 
 ### Live OBS tests
 

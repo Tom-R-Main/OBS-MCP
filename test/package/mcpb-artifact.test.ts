@@ -16,6 +16,7 @@ import { listTools } from "../../scripts/list-tools.mjs";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
 import { TOOL_COUNT } from "../support/tool-count.js";
 import { serveDemoFixture } from "../support/demo-fixture.js";
+import { SCENE_AUDIT_READS, serveSceneAuditFixture } from "../support/scene-audit-fixture.js";
 
 type ArtifactManifest = {
   version: string;
@@ -136,6 +137,44 @@ describe("MCPB artifact", () => {
     const recovered = await client.callTool({ name: "obs-recover-demo", arguments: { operationId: (prepared.structuredContent as Record<string, unknown>).operationId, apply: true } });
     expect(recovered.isError).toBeFalsy();
     expect(demoState).toEqual(originalDemo);
+
+    // Exercise the new tool from the extracted executable in read-only mode.
+    const auditFake = await FakeOBSServer.start();
+    fakeServers.push(auditFake);
+    const auditState = serveSceneAuditFixture(auditFake, "secondary-canvas");
+    const auditOriginal = structuredClone(auditState);
+    const auditClient = new Client(
+      { name: "obs-mcp-audit-artifact-test", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+    );
+    const auditTransport = new StdioClientTransport({
+      command: process.execPath,
+      args: [path.join(extracted, "server/index.js")],
+      cwd: extracted,
+      env: { ...getDefaultEnvironment(), OBS_WEBSOCKET_URL: auditFake.url, OBS_MCP_READ_ONLY: "true", OBS_MCP_TOOLSETS: "core", OBS_MCP_READ_OBS_CONFIG: "false" },
+      stderr: "pipe",
+    });
+    auditTransport.stderr?.on("data", () => undefined);
+    clients.push(auditClient);
+    await auditClient.connect(auditTransport);
+    const auditTools = (await auditClient.listTools()).tools;
+    expect(auditTools.find(({ name }) => name === "obs-audit-scene")?.annotations?.readOnlyHint).toBe(true);
+    expect(auditTools.some(({ name }) => name === "obs-set-current-scene")).toBe(false);
+    const audit = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true } });
+    expect(audit.isError).toBeFalsy();
+    expect(audit.structuredContent).toMatchObject({ version: 1, scope: "structural", status: "pass", renderedContent: "unverified", target: { canvasUuid: "secondary-canvas", sceneUuid: auditState.sceneUuid } });
+    expect(audit.content.some(({ type }) => type === "image")).toBe(true);
+    auditState.items[0]!.sceneItemEnabled = false;
+    const hidden = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }] } });
+    expect(hidden.structuredContent).toMatchObject({ status: "fail" });
+    auditState.items[0]!.sceneItemEnabled = true;
+    expect(auditState).toEqual(auditOriginal);
+    const auditRequests = auditFake.history().flatMap(({ frame }) => frame.op === 6 ? [frame.d.requestType] : frame.op === 8 ? (frame.d.requests as { requestType: string }[]).map(({ requestType }) => requestType) : []);
+    expect(auditRequests.length).toBeGreaterThan(5);
+    expect(auditRequests.filter((type) => typeof type !== "string" || !SCENE_AUDIT_READS.has(type))).toEqual([]);
+    await auditClient.close();
+    clients.splice(clients.indexOf(auditClient), 1);
+    await vi.waitFor(() => expect(auditFake.openConnectionCount).toBe(0));
 
     await client.close();
     clients.splice(clients.indexOf(client), 1);

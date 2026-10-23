@@ -169,6 +169,390 @@
     }
   },
   {
+    "name": "obs-audit-scene",
+    "title": "Audit Scene Structure",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneCollection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sceneName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "canvasUuid": {
+          "description": "UUID of the canvas containing the scene; omit for OBS's default canvas",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "requiredItems": {
+          "default": [],
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sourceName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sourceUuid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "containerUuid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sceneItemId": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "sourceName"
+            ]
+          }
+        },
+        "includeScreenshot": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sceneCollection",
+        "sceneName"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "scope": {
+          "type": "string",
+          "const": "structural"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "unknown"
+          ]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "sceneCollection": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "sceneName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "canvasUuid": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "sceneUuid": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "sceneCollection",
+            "sceneName"
+          ],
+          "additionalProperties": false
+        },
+        "observedAt": {
+          "type": "string"
+        },
+        "completedAt": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "requests": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "maxItems": {
+              "type": "number"
+            },
+            "maxDepth": {
+              "type": "number"
+            },
+            "maxRequests": {
+              "type": "number"
+            },
+            "maxDurationMs": {
+              "type": "number"
+            },
+            "requestTimeoutMs": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "maxItems",
+            "maxDepth",
+            "maxRequests",
+            "maxDurationMs",
+            "requestTimeoutMs"
+          ],
+          "additionalProperties": false
+        },
+        "items": {
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sourceName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sourceUuid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "containerUuid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sceneItemId": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "path": {
+                "maxItems": 9,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sourceName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "sourceUuid": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "containerUuid": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "sceneItemId": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "sourceName",
+                    "sourceUuid",
+                    "containerUuid",
+                    "sceneItemId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "effectiveEnabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "transform": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "sourceName",
+              "sourceUuid",
+              "containerUuid",
+              "sceneItemId",
+              "path",
+              "enabled",
+              "effectiveEnabled"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "checks": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail",
+                  "unknown"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 1024
+              },
+              "identity": {
+                "type": "object",
+                "properties": {
+                  "sourceName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sourceUuid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "containerUuid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sceneItemId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "sourceName",
+                  "sourceUuid",
+                  "containerUuid",
+                  "sceneItemId"
+                ],
+                "additionalProperties": false
+              },
+              "evidence": {
+                "type": "object",
+                "properties": {
+                  "sourceName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sourceUuid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "containerUuid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "sceneItemId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "sourceName"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "renderedContent": {
+          "type": "string",
+          "const": "unverified"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "version",
+        "scope",
+        "status",
+        "target",
+        "observedAt",
+        "completedAt",
+        "durationMs",
+        "requests",
+        "limits",
+        "items",
+        "checks",
+        "renderedContent",
+        "limitations"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-batch",
     "title": "Run OBS Requests in a Batch",
     "inputSchema": {
