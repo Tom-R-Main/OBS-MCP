@@ -303,6 +303,10 @@ describe("compiled stdio MCP boundary", () => {
     expect(image.content.some(({ type }) => type === "image")).toBe(true);
     expect(fresh).toEqual(original);
     expect(state).toEqual(original);
+    const secondary = serveSceneAuditFixture(fake, "secondary-canvas");
+    const scopedImage = await client.callTool({ name: "obs-audit-scene", arguments: { ...args, canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true } });
+    expect(scopedImage.structuredContent).toMatchObject({ status: "pass", target: { canvasUuid: "secondary-canvas", sceneUuid: secondary.sceneUuid } });
+    expect(scopedImage.content.some(({ type }) => type === "image")).toBe(true);
     const requests = fake.history().flatMap(({ frame }) => frame.op === 6 ? [frame.d.requestType] : frame.op === 8 ? (frame.d.requests as { requestType: string }[]).map(({ requestType }) => requestType) : []);
     expect(requests.length).toBeGreaterThan(10);
     expect(requests.filter((type) => typeof type !== "string" || !SCENE_AUDIT_READS.has(type))).toEqual([]);

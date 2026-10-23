@@ -141,7 +141,7 @@ describe("MCPB artifact", () => {
     // Exercise the new tool from the extracted executable in read-only mode.
     const auditFake = await FakeOBSServer.start();
     fakeServers.push(auditFake);
-    const auditState = serveSceneAuditFixture(auditFake);
+    const auditState = serveSceneAuditFixture(auditFake, "secondary-canvas");
     const auditOriginal = structuredClone(auditState);
     const auditClient = new Client(
       { name: "obs-mcp-audit-artifact-test", version: "1.0.0" },
@@ -160,12 +160,12 @@ describe("MCPB artifact", () => {
     const auditTools = (await auditClient.listTools()).tools;
     expect(auditTools.find(({ name }) => name === "obs-audit-scene")?.annotations?.readOnlyHint).toBe(true);
     expect(auditTools.some(({ name }) => name === "obs-set-current-scene")).toBe(false);
-    const audit = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true } });
+    const audit = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true } });
     expect(audit.isError).toBeFalsy();
-    expect(audit.structuredContent).toMatchObject({ version: 1, scope: "structural", status: "pass", renderedContent: "unverified" });
+    expect(audit.structuredContent).toMatchObject({ version: 1, scope: "structural", status: "pass", renderedContent: "unverified", target: { canvasUuid: "secondary-canvas", sceneUuid: auditState.sceneUuid } });
     expect(audit.content.some(({ type }) => type === "image")).toBe(true);
     auditState.items[0]!.sceneItemEnabled = false;
-    const hidden = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", requiredItems: [{ sourceName: "Application" }] } });
+    const hidden = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }] } });
     expect(hidden.structuredContent).toMatchObject({ status: "fail" });
     auditState.items[0]!.sceneItemEnabled = true;
     expect(auditState).toEqual(auditOriginal);

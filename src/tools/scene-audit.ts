@@ -18,6 +18,7 @@ const selector = z.object({
 });
 const inputSchema = z.object({
   sceneCollection: name, sceneName: name,
+  canvasUuid: name.optional().describe("UUID of the canvas containing the scene; omit for OBS's default canvas"),
   requiredItems: z.array(selector).max(64).default([]), includeScreenshot: z.boolean().default(false),
 });
 type Options = z.infer<typeof inputSchema>;
@@ -27,7 +28,7 @@ const statusSchema = z.enum(["pass", "fail", "unknown"]);
 const identitySchema = z.object({ sourceName: name, sourceUuid: name, containerUuid: name, sceneItemId: z.number().int().nonnegative() });
 const outputSchema = z.object({
   version: z.literal(1), scope: z.literal("structural"), status: statusSchema,
-  target: z.object({ sceneCollection: name, sceneName: name, sceneUuid: name.optional() }),
+  target: z.object({ sceneCollection: name, sceneName: name, canvasUuid: name.optional(), sceneUuid: name.optional() }),
   observedAt: z.string(), completedAt: z.string(), durationMs: z.number().nonnegative(), requests: z.number().int().nonnegative(),
   limits: z.object({ maxItems: z.number(), maxDepth: z.number(), maxRequests: z.number(), maxDurationMs: z.number(), requestTimeoutMs: z.number() }),
   items: z.array(identitySchema.extend({ path: z.array(identitySchema).max(LIMITS.maxDepth + 1), enabled: z.boolean().nullable(), effectiveEnabled: z.boolean().nullable(), transform: z.record(z.string(), z.union([z.number(), z.string()])).optional() })).max(LIMITS.maxItems),
@@ -61,7 +62,8 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
   const observedAt = new Date(started).toISOString();
   const checks: Check[] = [];
   const items: Item[] = [];
-  const target: Obj = { sceneCollection: options.sceneCollection, sceneName: options.sceneName };
+  const canvas: Obj = options.canvasUuid === undefined ? {} : { canvasUuid: options.canvasUuid };
+  const target: Obj = { sceneCollection: options.sceneCollection, sceneName: options.sceneName, ...canvas };
   let requests = 0;
   let invalidated = false;
   let complete = true;
@@ -74,7 +76,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
   // Transform events require a separate subscription. Full transform rereads
   // below provide a second observation without changing subscriptions.
   const onEvent = (type: string) => {
-    if (/^(CurrentSceneCollection|SceneCollection|SceneCreated|SceneRemoved|SceneNameChanged|SceneItem|InputCreated|InputRemoved|InputNameChanged|InputSettingsChanged|VideoSettingsChanged)/.test(type)) invalidate();
+    if (/^(CurrentSceneCollection|SceneCollection|Canvas|SceneCreated|SceneRemoved|SceneNameChanged|SceneItem|InputCreated|InputRemoved|InputNameChanged|InputSettingsChanged|VideoSettingsChanged)/.test(type)) invalidate();
   };
   client.on("disconnected", invalidate);
   client.on("identified", onIdentified);
@@ -103,7 +105,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
     const collection = await request("GetSceneCollectionList");
     if (collection.currentSceneCollectionName !== options.sceneCollection) throw new Error("The selected scene collection is not current or was not reported");
     add("collection", "pass", "Selected scene collection is current");
-    const scenes = objects((await request("GetSceneList")).scenes);
+    const scenes = objects((await request("GetSceneList", canvas)).scenes);
     if (scenes.length > 256 || scenes.some((scene) => !text(scene.sceneName) || !text(scene.sceneUuid))
       || new Set(scenes.map((scene) => scene.sceneUuid)).size !== scenes.length) throw new Error("Scene inventory is incomplete, ambiguous, or exceeds the limit");
     const selected = scenes.filter((scene) => scene.sceneName === options.sceneName);
@@ -117,7 +119,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
     const walk = async (uuid: string, group: boolean, path: Identity[], ancestors: Set<string>, ancestorEnabled: boolean | null): Promise<void> => {
       if (path.length > LIMITS.maxDepth || ancestors.has(uuid)) { complete = false; add("membership", "unknown", "Nested scene cycle or depth limit reached"); return; }
       const type = group ? "GetGroupSceneItemList" : "GetSceneItemList";
-      const members = objects((await request(type, { sceneUuid: uuid })).sceneItems);
+      const members = objects((await request(type, { ...canvas, sceneUuid: uuid })).sceneItems);
       if (members.length > LIMITS.maxItems || new Set(members.map((item) => item.sceneItemId)).size !== members.length) throw new Error("Scene item inventory is ambiguous or exceeds the item limit");
       containers.push({ uuid, group, before: signature(membership(members)) });
       for (const member of members) {
@@ -129,7 +131,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
         const item: Item = { ...identity, path: [...path, identity], enabled, effectiveEnabled };
         items.push(item);
         if (enabled === null) add("item-enabled", "unknown", "OBS did not report item enabled state", identity);
-        const response = await request("GetSceneItemTransform", { sceneUuid: uuid, sceneItemId: identity.sceneItemId });
+        const response = await request("GetSceneItemTransform", { ...canvas, sceneUuid: uuid, sceneItemId: identity.sceneItemId });
         const transform = boundedTransform(response.sceneItemTransform);
         if (!object(transform)) { add("transform", "unknown", "OBS did not report an item transform", identity); }
         else {
@@ -185,19 +187,19 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
       else add("required-item", matches[0]!.effectiveEnabled === null ? "unknown" : matches[0]!.effectiveEnabled ? "pass" : "fail", matches[0]!.effectiveEnabled === null ? "Required item or ancestor enabled state is unavailable" : matches[0]!.effectiveEnabled ? "Required item and its ancestors are enabled" : "Required item or an ancestor is disabled", matches[0]);
     }
     if (options.includeScreenshot) {
-      try { screenshot = screenshotResult(await request("GetSourceScreenshot", { sourceUuid: sceneUuid, imageFormat: "png", imageWidth: 960 })); add("screenshot", "pass", "Bounded scene screenshot included for separate visual inspection"); }
+      try { screenshot = screenshotResult(await request("GetSourceScreenshot", { ...canvas, sourceUuid: sceneUuid, imageFormat: "png", imageWidth: 960 })); add("screenshot", "pass", "Bounded scene screenshot included for separate visual inspection"); }
       catch (error) { add("screenshot", "unknown", `Screenshot unavailable: ${message(error)}`); }
     }
     // Recheck observed values, identities, and membership; no atomic snapshot is claimed.
     for (const container of containers) {
-      const members = objects((await request(container.group ? "GetGroupSceneItemList" : "GetSceneItemList", { sceneUuid: container.uuid })).sceneItems);
+      const members = objects((await request(container.group ? "GetGroupSceneItemList" : "GetSceneItemList", { ...canvas, sceneUuid: container.uuid })).sceneItems);
       if (signature(membership(members)) !== container.before) invalidate();
     }
     for (const { item, before } of transforms) {
-      const now = await request("GetSceneItemTransform", { sceneUuid: item.containerUuid, sceneItemId: item.sceneItemId });
+      const now = await request("GetSceneItemTransform", { ...canvas, sceneUuid: item.containerUuid, sceneItemId: item.sceneItemId });
       if (signature(boundedTransform(now.sceneItemTransform)) !== before) invalidate();
     }
-    if (signature(objects((await request("GetSceneList")).scenes)) !== signature(scenes)
+    if (signature(objects((await request("GetSceneList", canvas)).scenes)) !== signature(scenes)
       || signature(objects((await request("GetInputList")).inputs)) !== signature(inputs)
       || (await request("GetSceneCollectionList")).currentSceneCollectionName !== options.sceneCollection) invalidate();
     if (!client.getConnectionStatus().identified) invalidate();

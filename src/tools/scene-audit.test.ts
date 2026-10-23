@@ -21,6 +21,17 @@ beforeEach(async () => {
 afterEach(async () => { await harness.close(); vi.restoreAllMocks(); });
 
 describe("scene structural audit through MCP", () => {
+  it("audits the selected canvas rather than a same-named scene on the main canvas", async () => {
+    const secondary = serveSceneAuditFixture(harness.fakeObs, "secondary-canvas");
+    harness.fakeObs.respondWith("GetSceneList", ({ canvasUuid }) => ({ scenes: [{ sceneName: "Review", sceneUuid: canvasUuid === "secondary-canvas" ? secondary.sceneUuid : "main-scene-uuid" }] }));
+    const { result, report } = await audit({ canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true });
+    expect(report).toMatchObject({ status: "pass", target: { canvasUuid: "secondary-canvas", sceneUuid: secondary.sceneUuid }, items: [{ containerUuid: secondary.sceneUuid }] });
+    expect(result.content.some(({ type }) => type === "image")).toBe(true);
+    const scoped = new Set(["GetSceneList", "GetSceneItemList", "GetGroupSceneItemList", "GetSceneItemTransform", "GetSourceScreenshot"]);
+    const reads = harness.fakeObs.history().filter(({ frame }) => frame.op === 6);
+    expect(reads.filter(({ frame }) => scoped.has(String(frame.d.requestType))).every(({ frame }) => (frame.d.requestData as Record<string, unknown>).canvasUuid === "secondary-canvas")).toBe(true);
+    expect(reads.filter(({ frame }) => !scoped.has(String(frame.d.requestType))).every(({ frame }) => !(frame.d.requestData as Record<string, unknown> | undefined)?.canvasUuid)).toBe(true);
+  });
   it("reports a nonvacuous off-program scene pass with stable occurrence identity and only reads", async () => {
     const listeners = harness.obsClient.listenerCount("event");
     const { report } = await audit({ requiredItems: [{ sourceName: "Application" }] });
@@ -28,6 +39,29 @@ describe("scene structural audit through MCP", () => {
     expect(report.checks.filter((check) => check.status === "pass").length).toBeGreaterThanOrEqual(5);
     expect(harness.fakeObs.history().filter(({ frame }) => frame.d.requestType).every(({ frame }) => SCENE_AUDIT_READS.has(String(frame.d.requestType)))).toBe(true);
     expect(harness.obsClient.listenerCount("event")).toBe(listeners);
+  });
+  it("keeps the canvas on nested-scene and group reads and their final rereads", async () => {
+    const canvasUuid = "secondary-canvas";
+    const secondary = serveSceneAuditFixture(harness.fakeObs, canvasUuid);
+    const group = { ...structuredClone(secondary.items[0]!), sourceName: "Group", sourceUuid: "group-uuid", isGroup: true };
+    const nested = { ...structuredClone(secondary.items[0]!), sourceName: "Child", sourceUuid: "child-scene-uuid" };
+    harness.fakeObs.respondWith("GetSceneList", (data) => {
+      expect(data.canvasUuid).toBe(canvasUuid);
+      return { scenes: [{ sceneName: "Review", sceneUuid: secondary.sceneUuid }, { sceneName: "Child", sceneUuid: nested.sourceUuid }] };
+    });
+    harness.fakeObs.respondWith("GetSceneItemList", (data) => {
+      expect(data.canvasUuid).toBe(canvasUuid);
+      return { sceneItems: data.sceneUuid === secondary.sceneUuid ? [nested] : [group] };
+    });
+    harness.fakeObs.respondWith("GetGroupSceneItemList", (data) => {
+      expect(data.canvasUuid).toBe(canvasUuid);
+      return { sceneItems: secondary.items };
+    });
+    const { report } = await audit({ canvasUuid, requiredItems: [{ sourceName: "Application" }] });
+    expect(report.status).toBe("unknown"); // Composed geometry remains outside the audit.
+    expect(report.items).toHaveLength(3);
+    expect(report.checks).toContainEqual(expect.objectContaining({ id: "consistency", status: "pass" }));
+    expect(harness.fakeObs.history().filter(({ frame }) => frame.d.requestType === "GetGroupSceneItemList")).toHaveLength(2);
   });
   it("fails missing required items only after complete membership observations", async () => {
     const { report } = await audit({ requiredItems: [{ sourceName: "Missing" }] });
@@ -155,7 +189,7 @@ describe("scene structural audit through MCP", () => {
     harness.fakeObs.respondWith("GetSceneCollectionList", () => ({ currentSceneCollectionName: ++reads > 1 ? "Other" : state.collection }));
     expect((await audit()).report.status).toBe("unknown");
   });
-  it.each(["SceneItemEnableStateChanged", "CurrentSceneCollectionChanging"])("invalidates a %s event during the sample", async (event) => {
+  it.each(["SceneItemEnableStateChanged", "CurrentSceneCollectionChanging", "CanvasRemoved"])("invalidates a %s event during the sample", async (event) => {
     harness.fakeObs.respondWith("GetSceneItemTransform", () => {
       harness.fakeObs.sendEvent(event, { sceneUuid: state.sceneUuid, sceneItemId: 7 });
       return { sceneItemTransform: state.items[0]!.sceneItemTransform };

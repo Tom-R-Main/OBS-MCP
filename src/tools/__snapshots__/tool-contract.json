@@ -184,6 +184,12 @@
           "minLength": 1,
           "maxLength": 256
         },
+        "canvasUuid": {
+          "description": "UUID of the canvas containing the scene; omit for OBS's default canvas",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "requiredItems": {
           "default": [],
           "maxItems": 64,
@@ -256,6 +262,11 @@
               "maxLength": 256
             },
             "sceneName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "canvasUuid": {
               "type": "string",
               "minLength": 1,
               "maxLength": 256

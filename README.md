@@ -258,6 +258,8 @@ Without `apply: true` it returns only the plan: the cuts, the new length, and th
 }
 ```
 
+For a secondary canvas, add `canvasUuid` from `obs-get-canvas-list`. The audit uses that canvas for scene discovery, item and group reads, transform rereads, and the optional screenshot. Omitting it keeps OBS's default-canvas behavior. The report includes the supplied canvas UUID in its target.
+
 The report lists individual source occurrences with their container, source UUID, scene-item ID, and containment path. A required source that is missing or hidden fails its check. Repeated occurrences need a more specific selector: add `sourceUuid`, `containerUuid`, or `sceneItemId` to the required item. Ambiguous selectors remain unknown.
 
 Checks report `pass`, `fail`, or `unknown`, with observation times and evidence. Missing fields, unreadable state, cycles, traversal limits, unsupported geometry, or detected changes during collection make the affected evidence unknown. Nested scene and group membership can be inspected, but composed geometry is not qualified. The report covers a sampling interval; it is not an atomic snapshot or a promise that OBS will stay unchanged.
