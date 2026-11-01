@@ -2,9 +2,21 @@
 
 [![CI](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Tom-R-Main/OBS-MCP/actions/workflows/ci.yml)
 
-OBS MCP gives MCP clients a current, inspectable interface to OBS Studio. It exposes 174 tools for scenes, sources, audio, transitions, filters, recording, streaming, canvases, and the rest of the OBS WebSocket v5 request surface.
+OBS MCP helps agents and operators inspect OBS Studio, plan scene changes, and supervise recordings. Preview a change before taking it to program, watch a bounded take as it records, and retain operation receipts when a command's outcome needs review.
 
-The server is built against MCP 2026-07-28 and still accepts legacy 2025-era clients. MCP discovery stays available when OBS is closed, and the server reconnects in the background when OBS returns.
+Start with `obs-observe`, resolve a layout with `obs-plan-scene-template`, then stage and inspect the preview before calling `obs-take-scene`. The observation tool and `obs://status` resource share their consistency checks and missing-evidence contract. See [production workflows and Linux support](docs/production-assistant.md) for examples, platform boundaries, and verification limits.
+
+The server uses MCP 2026-07-28 and accepts legacy 2025-era clients. Tool discovery remains available while OBS is closed.
+
+## Choose a runtime
+
+| Entry | Runtime | Current surface |
+| --- | --- | --- |
+| `node build/index.js` or the npm `obs-mcp` executable | Node.js 20.19 or newer | The full 178-tool compatibility interface, including background reconnection. The source-install instructions below use this entry. |
+| `npm start`, after `npm run native:build` | Rust entry with Node compatibility | Discovery and eligible reads run in Rust. Other workflows transfer the session exclusively to the included Node server. Node remains required for compatibility and encrypted OBS endpoints. |
+| Rust entry with `OBS_MCP_NATIVE_STATEFUL=1` | Persistent Rust service | Up to 157 candidate tools, with explicit refusal for unowned interfaces and no SDK handoff. Approved state/recording roots and existing media tools determine the exposed inventory. See the [checkpoint and limits](#rust-native-entry). |
+
+The persistent mode is an explicit qualification lane. Default full Rust cutover, native TLS, and Linux/Windows desktop qualification remain open. Build and package details are in the [native architecture guide](docs/native-architecture.md).
 
 ## How it works
 
@@ -12,9 +24,11 @@ The server is built against MCP 2026-07-28 and still accepts legacy 2025-era cli
 MCP client  <-- stdio -->  OBS MCP  <-- WebSocket v5 -->  OBS Studio
 ```
 
-OBS MCP runs as a separate Node.js process. It does not patch OBS or require an OBS plugin; it uses the WebSocket server built into OBS Studio. MCP handles tool discovery, schemas, results, and approval hints. OBS WebSocket handles the live application state.
+OBS MCP runs as a separate MCP server process using the entry selected above. It does not patch OBS or require an OBS plugin; it uses the WebSocket server built into OBS Studio. MCP handles tool discovery, schemas, results, and approval hints. OBS WebSocket handles the live application state.
 
 ## What is covered
+
+The full compatibility interface exposes 178 tools across the OBS WebSocket v5 request surface.
 
 - All 147 request types in the OBS WebSocket protocol revision pinned by the current OBS Studio source tree
 - Explicit read-only, destructive, idempotent, and open-world annotations on every tool
@@ -103,14 +117,14 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before starting a stream/output or stopping or toggling a stream, recording, or output (see [Confirming live actions](#confirming-live-actions)) |
 | `OBS_MCP_HTTP_PORT` | No | none (stdio) | Serve MCP over Streamable HTTP at `http://127.0.0.1:<port>/mcp` instead of stdio, so several agents share one server (see [Sharing one server](#sharing-one-server)); `0` picks a free port |
 | `OBS_MCP_HTTP_TOKEN` | No | none | With `OBS_MCP_HTTP_PORT`, require `Authorization: Bearer <token>` on every request |
-| `OBS_MCP_STATE_DIR` | No | `~/Library/Application Support/obs-mcp` (macOS), `%LOCALAPPDATA%\obs-mcp` (Windows), `$XDG_STATE_HOME/obs-mcp` (Linux) | Where snapshots are saved |
+| `OBS_MCP_STATE_DIR` | No | `~/Library/Application Support/obs-mcp` (macOS), `%LOCALAPPDATA%\obs-mcp` (Windows), `$XDG_STATE_HOME/obs-mcp` (Linux) | Where snapshots, recovery journals, and operation receipts are saved |
 | `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
 
 The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
 
 ## Tool surface
 
-The 174 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The 178 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -125,7 +139,7 @@ The 174 tools are organized around the OBS protocol rather than a smaller opinio
 - `obs-trim-take`, which cuts dead time out of a recording, and `obs-contact-sheet`, which tiles frames from it into one image (see [Trimming a take](#trimming-a-take))
 - `obs-apply-scene`, which takes a description of a scene and makes OBS match it (see [Describing a scene](#describing-a-scene))
 - `obs-snapshot` and `obs-restore`, which save the state of inputs and scene items and later undo changes to them (see [Undoing changes](#undoing-changes))
-- `obs-capture-window` (macOS), which points a `screen_capture` input at a window or app by name, silences it, and fits it to the canvas
+- `obs-capture-window`, which plans or selects macOS or Linux X11 windows from an existing capture inventory, or fits an existing user-authorized Wayland portal capture
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
 - protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message, in order or one per rendered frame (so a change to two sources lands on the same frame), with `Sleep` between them. OBS's parallel mode is not offered: in obs-websocket 5.7, concurrent parallel batches deadlock its WebSocket server until OBS restarts
 
@@ -221,7 +235,7 @@ The result lists the findings, and when OBS records to this machine the server w
 
 The `software-demo` MCP prompt and [obs-demo agent skill](.agents/skills/obs-demo/SKILL.md) use the [version 1 recipe](docs/recipes/software-demo.v1.json). The skill ships in the npm package and MCPB source bundle. Open this checkout in your agent host and explicitly load the linked skill, or request the `software-demo` prompt through MCP. Merely installing an MCPB does not install a skill into every host. Automatic host discovery and real rendered OBS output have not been qualified by the hermetic checks.
 
-V1 uses local macOS OBS, an existing current scene, and one enabled, preconfigured window capture. The capture must appear exactly once in a collection without groups or nested scenes. The tools require stable OBS object identifiers and complete state; they refuse unsupported setups rather than create or retarget sources. Streaming, recording, virtual camera, replay buffer, and every listed generic output must be inactive during preparation and recovery. Missing output status blocks the operation.
+V1 uses local OBS on macOS or Linux, an existing current scene, and one enabled, preconfigured window capture. Linux supports XComposite on X11 and an existing portal-authorized PipeWire capture on Wayland. A portal selection still needs visual inspection for window identity. Video-only Linux capture sources have no mute or audio tracks to change; preflight checks the complete recording audio path. The capture must appear exactly once in a collection without groups or nested scenes. The tools require stable OBS object identifiers and complete state; they refuse unsupported setups rather than create or retarget sources. Streaming, recording, virtual camera, replay buffer, and every listed generic output must be inactive during preparation and recovery. Missing or failed output status blocks the operation. OBS code 604 explicitly reporting an unavailable virtual camera or replay buffer is accepted as an unavailable feature; named output statuses must still establish inactivity.
 
 1. Plan with `obs-prepare-demo` and exact `sceneCollection`, `sceneName`, and `inputName`. After authorization, repeat with `apply: true`. It mutes the capture, clears its audio tracks, fits it to the canvas, and returns an `operationId` when changes require recovery.
 2. Inspect a screenshot for the intended window and framing. Run silent preflight and require every check named in the recipe to pass. A required unknown or missing check blocks this workflow.
@@ -233,7 +247,7 @@ V1 uses local macOS OBS, an existing current scene, and one enabled, preconfigur
 node scripts/verify-demo.mjs --file /path/demo.mp4 --reference /path/expected.png --seconds 30 --chapter Intro --checkpoint 10=/path/step-two.png --report /path/demo.verification.json
 ```
 
-The verifier uses local `ffmpeg` and `ffprobe`; it never contacts OBS. It checks duration within 2 seconds, a video stream, every audio track at or below -60 dB, requested chapters, and reference frames scaled to 160×90 grayscale (mean absolute error at most 12). These frame comparisons test selected checkpoints, not semantic recognition or every frame. Use reference images from the intended scene. Missing tools or evidence produce `unavailable`; failed requirements produce `fail`. The report must be a new file. Synthetic-media tests cover the verifier; a real recording still needs visual review.
+The verifier uses local `ffmpeg` and `ffprobe`; it never contacts OBS. It reports strict full-file decoding separately from metadata and sampled pictures. A decode timeout is unavailable evidence. It checks duration within 2 seconds, a video stream, every audio track at or below -60 dB, requested chapters, and reference frames scaled to 160×90 grayscale (mean absolute error at most 12). These frame comparisons test selected checkpoints, not semantic recognition or every frame. Use reference images from the intended scene. Missing tools or evidence produce `unavailable`; failed requirements produce `fail`. The report must be a new file. Synthetic-media tests cover the verifier; a real recording still needs visual review.
 
 ### Trimming a take
 
@@ -241,7 +255,9 @@ The verifier uses local `ffmpeg` and `ffprobe`; it never contacts OBS. It checks
 
 By default, a still stretch of 4 seconds or more loses its middle, keeping 1 second at each side. Nothing is cut from 3 seconds before to 1.5 seconds after each chapter start, or in the last 3 seconds, so each step's finished result stays on screen long enough to read. Chapters come from the file, or from the take log when the file has none, and are moved to their new times.
 
-Without `apply: true` it returns only the plan: the cuts, the new length, and the new chapter times. With it, the tool writes `<name>.trimmed.mp4` next to the original, which it never changes, and returns a contact sheet with a frame either side of each seam. It re-encodes with libx264 (or VideoToolbox), so cuts land on exact frames.
+Without `apply: true` it returns only the plan: the cuts, the new length, and the new chapter times. With it, the tool validates a staged copy before publishing `<name>.trimmed.mp4` next to the original. Validation checks the planned duration, video dimensions, audio stream count, remapped chapters, and strict full-file decoding. Publication refuses an existing destination. Cancellation before publication discards the staged copy; after publication, optional contact-sheet failure retains the output path and SHA-256 in the result.
+
+Exports retain the first audio track and use H.264 with `yuv420p`. Other audio tracks are omitted; choose a separate workflow when they must remain independent. High bit depth and explicitly tagged PQ/HLG HDR inputs are refused; no implicit tone mapping occurs. Missing color tags remain unknown, so a successful export does not establish color fidelity. The contact sheet shows frames on either side of each seam for review.
 
 `obs-contact-sheet` tiles frames from a recording into one JPEG: one second after each chapter start by default, or at the times you give. Both tools work only on files inside OBS's recording directory, and need `ffmpeg` and `ffprobe` on `PATH`.
 
@@ -337,7 +353,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 174 tool definitions, and calls the extracted server through MCP against fake OBS, including a read-only scene audit.
+That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 178 tool definitions, and calls the extracted server through MCP against fake OBS, including a read-only scene audit.
 
 ### Live OBS tests
 
@@ -402,3 +418,10 @@ This project began with [Roy Shilkrot's `obs-mcp`](https://github.com/royshil/ob
 ## License
 
 OBS MCP is licensed under GPL-2.0-only. Published npm and MCPB packages include the corresponding TypeScript source and build scripts. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
+
+### Rust native entry
+
+After `npm run native:build`, `npm start` runs the Rust executable. `npm run start:compat` runs the existing Node server. The Rust executable serves static filtered discovery, 59 read-only OBS routes, offline `obs-describe-request`, qualified read-only `obs-plan-scene-template`, structural `obs-audit-scene`, three offline prompts, static resource-template discovery and live resource listing without starting Node. All 178 tools remain available through an exclusive, one-way handoff to the included compatibility server for stateful workflows. Node remains required for that path and for encrypted OBS endpoints. See [native architecture, build commands and migration boundaries](docs/native-architecture.md). `npm run native:check` exercises both runtimes and the offline dependency gate; `npm run pack:native` builds the host-specific MCPB.
+
+
+The explicit `OBS_MCP_NATIVE_STATEFUL=1` qualification lane owns up to 157 candidate tools on one persistent Rust service, including all 75 Source read-only annotated tools, snapshots, guarded input-property enumeration, and 72 closed mutation tools. Input creation/settings include readback. It also serves resource readers and scene-name completion. The frozen 157p checkpoint (review commit `add32a3f3903a1eb5b2f698a7a2d351efebab290`) passes 520 public process checks in both source and extracted package runs. It includes closed public Stop progress through separate frontend, broker and transport admission. New helper modules outside that checkpoint remain unqualified. No start or toggle routes are added. Approved state/recording roots and existing media tools determine the exposed inventory. Its separately pinned 95-tool Mac artifact completed a bounded recording/recovery journey; the final quiet clip and preserved earlier render warning are distinguished in the [artifact evidence and limits](docs/native-architecture.md#qualified-95-tool-artifact). Default 178-tool compatibility routing remains available; full Rust default cutover, TLS and Linux/Windows desktop qualification remain open.

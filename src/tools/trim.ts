@@ -5,7 +5,7 @@
  */
 import { execFile, spawn } from "node:child_process";
 import crypto from "node:crypto";
-import { lstatSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, linkSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
 import { StillTracker } from "./frame-sample.js";
 import { takeLogPath } from "./take-monitor.js";
+import { localMediaInputOptions, strictDecode } from "./media-verification.js";
 
 type JsonObject = Record<string, unknown>;
 export type Span = { start: number; end: number };
@@ -161,11 +162,16 @@ function parseSilence(stderr: string, duration: number): Span[] {
   return spans;
 }
 
-type Probe = { duration: number; audioStreams: number; chapters: Chapter[]; width?: number; height?: number };
+export type MediaProbe = {
+  duration: number; audioStreams: number; videoStreams: number; chapters: Chapter[];
+  width?: number; height?: number; codec?: string; pixelFormat?: string; bitDepth?: number;
+  colorTransfer?: string; colorPrimaries?: string; colorSpace?: string; colorRange?: string;
+};
+type Probe = MediaProbe;
 
 async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   const { stdout } = await execFileAsync("ffprobe", [
-    "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-show_chapters", path,
+    "-v", "error", "-print_format", "json", "-show_format", "-show_streams", "-show_chapters", ...localMediaInputOptions(), path,
   ], { timeout: 15_000, signal });
   const data = JSON.parse(stdout) as JsonObject;
   const streams = Array.isArray(data.streams) ? data.streams.filter(isObject) : [];
@@ -177,9 +183,94 @@ async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   return {
     duration: Number(isObject(data.format) ? data.format.duration : NaN),
     audioStreams: streams.filter((stream) => stream.codec_type === "audio").length,
+    videoStreams: streams.filter((stream) => stream.codec_type === "video").length,
     chapters,
-    ...(video ? { width: Number(video.width), height: Number(video.height) } : {}),
+    ...(video ? {
+      width: Number(video.width), height: Number(video.height),
+      codec: typeof video.codec_name === "string" ? video.codec_name : undefined,
+      pixelFormat: typeof video.pix_fmt === "string" ? video.pix_fmt : undefined,
+      bitDepth: Number(video.bits_per_raw_sample) || undefined,
+      colorTransfer: typeof video.color_transfer === "string" ? video.color_transfer : undefined,
+      colorPrimaries: typeof video.color_primaries === "string" ? video.color_primaries : undefined,
+      colorSpace: typeof video.color_space === "string" ? video.color_space : undefined,
+      colorRange: typeof video.color_range === "string" ? video.color_range : undefined,
+    } : {}),
   };
+}
+
+const EIGHT_BIT_FORMATS = new Set([
+  "yuv420p", "yuvj420p", "yuv422p", "yuvj422p", "yuv444p", "yuvj444p", "nv12", "nv21",
+  "uyvy422", "yuyv422", "rgb24", "bgr24", "rgba", "bgra", "argb", "abgr", "gbrp", "gray", "pal8",
+  "0rgb", "rgb0", "0bgr", "bgr0",
+]);
+
+export function requireSdrInput(info: MediaProbe): void {
+  if (["smpte2084", "arib-std-b67"].includes(info.colorTransfer ?? "")) {
+    throw new Error("Trim export supports 8-bit SDR only; PQ/HLG input requires an explicit tone-mapping workflow");
+  }
+  if ((info.bitDepth ?? 0) > 8 || !EIGHT_BIT_FORMATS.has(info.pixelFormat ?? "")) {
+    throw new Error(`Trim export requires a known 8-bit pixel format; got ${info.pixelFormat ?? "unknown"}`);
+  }
+}
+
+const chapterTitle = (name: string) => name.replace(/[\u0000-\u001f\u007f]/g, " ");
+
+export function validateTrimmedMetadata(actual: MediaProbe, expected: { duration: number; width?: number; height?: number; audioStreams: number; chapters: Chapter[] }): void {
+  if (!Number.isFinite(actual.duration) || Math.abs(actual.duration - expected.duration) > 0.25) throw new Error("Staged export duration differs from the cut plan");
+  if (actual.videoStreams !== 1 || actual.codec !== "h264" || actual.pixelFormat !== "yuv420p") throw new Error("Staged export must contain one H.264 yuv420p video stream");
+  if (actual.width !== expected.width || actual.height !== expected.height) throw new Error("Staged export dimensions differ from the source");
+  if (actual.audioStreams !== Math.min(1, expected.audioStreams)) throw new Error("Staged export audio stream count differs from the first-track policy");
+  if (actual.chapters.length !== expected.chapters.length || expected.chapters.some((chapter, i) => {
+    const observed = actual.chapters[i];
+    return !observed || observed.name !== chapterTitle(chapter.name) || !Number.isFinite(observed.at) || Math.abs(observed.at - chapter.at) > 0.05;
+  })) throw new Error("Staged export chapters differ from the remapped cut plan");
+}
+
+function mediaHash(path: string): string {
+  const hash = crypto.createHash("sha256");
+  const fd = openSync(path, "r");
+  try {
+    const buffer = Buffer.alloc(64 * 1024);
+    let count: number;
+    while ((count = readSync(fd, buffer)) > 0) hash.update(buffer.subarray(0, count));
+    return hash.digest("hex");
+  } finally { closeSync(fd); }
+}
+
+/** Encode/verify before a no-clobber publication. Optional preview cannot erase a committed outcome. */
+export async function publishTrimmedExport<T>(
+  partial: string, outputPath: string,
+  steps: { encode: () => Promise<void>; verify: () => Promise<T>; preview?: () => Promise<Buffer> },
+  signal?: AbortSignal,
+): Promise<{ verified: T; sha256: string; preview?: Buffer; previewWarning?: string; cleanupWarning?: string }> {
+  let committed = false;
+  let cleanupWarning: string | undefined;
+  let verified: T;
+  let sha256: string;
+  try {
+    signal?.throwIfAborted();
+    await steps.encode();
+    signal?.throwIfAborted();
+    verified = await steps.verify();
+    sha256 = mediaHash(partial);
+    signal?.throwIfAborted();
+    // link is atomic and fails if ANY destination appeared; rename would overwrite it.
+    linkSync(partial, outputPath);
+    committed = true;
+  } finally {
+    try { rmSync(partial, { force: true }); }
+    catch (error) {
+      if (!committed) throw error;
+      cleanupWarning = `Export committed; temporary-file cleanup failed: ${errorMessage(error)}`;
+    }
+  }
+  let preview: Buffer | undefined;
+  let previewWarning: string | undefined;
+  if (steps.preview) {
+    try { preview = await steps.preview(); }
+    catch (error) { previewWarning = `Export committed; contact sheet unavailable: ${errorMessage(error)}`; }
+  }
+  return { verified, sha256, ...(preview ? { preview } : {}), ...(previewWarning ? { previewWarning } : {}), ...(cleanupWarning ? { cleanupWarning } : {}) };
 }
 
 /** Chapters from the file, or from the take log when the file has none. */
@@ -201,7 +292,7 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
   const frameBytes = SAMPLE_WIDTH * height;
   return new Promise((resolvePromise, reject) => {
     const child = spawn("ffmpeg", [
-      "-hide_banner", "-nostats", "-i", path,
+      "-hide_banner", "-nostats", ...localMediaInputOptions(), "-i", path,
       "-map", "0:v:0", "-vf", `fps=${SAMPLE_FPS},scale=${SAMPLE_WIDTH}:${height},format=gray`, "-f", "rawvideo", "pipe:1",
       ...silenceArgs,
     ], { stdio: ["ignore", "pipe", "pipe"], ...(signal ? { signal } : {}) });
@@ -265,21 +356,22 @@ async function detectIdle(path: string, info: Probe, minIdleSeconds: number, sig
 }
 
 let cachedEncoder: string[] | null = null;
+export function qualifiedEncoderArgs(encoders: string): string[] {
+  if (/\blibx264\b/.test(encoders)) return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"];
+  if (/\bh264_videotoolbox\b/.test(encoders)) return ["-c:v", "h264_videotoolbox", "-q:v", "65", "-pix_fmt", "yuv420p"];
+  throw new Error("Trim export requires libx264 or h264_videotoolbox; no qualified H.264 encoder is available");
+}
 async function videoEncoderArgs(): Promise<string[]> {
   if (cachedEncoder) return cachedEncoder;
   const { stdout } = await execFileAsync("ffmpeg", ["-hide_banner", "-encoders"], { timeout: 10_000 });
-  cachedEncoder = /\blibx264\b/.test(stdout)
-    ? ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"]
-    : /\bh264_videotoolbox\b/.test(stdout)
-      ? ["-c:v", "h264_videotoolbox", "-q:v", "65", "-pix_fmt", "yuv420p"]
-      : [];
+  cachedEncoder = qualifiedEncoderArgs(stdout);
   return cachedEncoder;
 }
 
 function ffmetadata(chapters: Chapter[], duration: number): string {
   // ffmetadata ends a line at \r as well as \n: drop control characters, then escape its special characters.
   // eslint-disable-next-line no-control-regex
-  const escape = (text: string) => text.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/([=;#\\])/g, "\\$1");
+  const escape = (text: string) => chapterTitle(text).replace(/([=;#\\])/g, "\\$1");
   const lines = [";FFMETADATA1"];
   chapters.forEach((chapter, index) => {
     const end = chapters[index + 1]?.at ?? duration;
@@ -309,7 +401,7 @@ async function exportTrimmed(
     const inputs = keep.map((_span, index) => `[v${index}]${withAudio ? `[a${index}]` : ""}`).join("");
     const filter = `${parts.join(";")};${inputs}concat=n=${keep.length}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
     await execFileAsync("ffmpeg", [
-      "-hide_banner", "-nostats", "-y", "-i", path, "-f", "ffmetadata", "-i", metadata,
+      "-hide_banner", "-nostats", "-y", ...localMediaInputOptions(), "-i", path, "-f", "ffmetadata", ...localMediaInputOptions("metadata"), "-i", metadata,
       "-filter_complex", filter, "-map", "[v]", ...(withAudio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []),
       "-map_metadata", "1", "-map_chapters", "1", ...(await videoEncoderArgs()), "-movflags", "+faststart", outputPath,
     ], { timeout: 600_000, maxBuffer: 32 * 1024 * 1024, signal });
@@ -324,14 +416,14 @@ export async function contactSheet(path: string, times: number[], columns: numbe
   try {
     for (const [index, time] of times.entries()) {
       await execFileAsync("ffmpeg", [
-        "-hide_banner", "-v", "error", "-y", "-ss", String(Math.max(0, time)), "-i", path,
+        "-hide_banner", "-v", "error", "-y", "-ss", String(Math.max(0, time)), ...localMediaInputOptions(), "-i", path,
         "-frames:v", "1", "-vf", `scale=${width}:-2`, "-q:v", "4", join(work, `${String(index).padStart(3, "0")}.jpg`),
       ], { timeout: 30_000, signal });
     }
     const rows = Math.ceil(times.length / columns);
     const sheet = join(work, "sheet.jpg");
     await execFileAsync("ffmpeg", [
-      "-hide_banner", "-v", "error", "-y", "-framerate", "1", "-i", join(work, "%03d.jpg"),
+      "-hide_banner", "-v", "error", "-y", "-framerate", "1", ...localMediaInputOptions("images"), "-i", join(work, "%03d.jpg"),
       "-vf", `tile=${Math.min(columns, times.length)}x${rows}:padding=4:color=white`, "-frames:v", "1", "-q:v", "4", sheet,
     ], { timeout: 30_000, signal });
     return readFileSync(sheet);
@@ -361,6 +453,11 @@ function describeSpans(spans: Span[]): string {
   return spans.map(({ start, end }) => `${start}–${end}s`).join(", ");
 }
 
+export function seamSampleTimes(seams: number[], duration: number): number[] {
+  const last = Math.max(0, duration - Math.min(0.1, duration / 2));
+  return seams.flatMap((seam) => [Math.max(0, seam - 0.5), Math.min(last, seam + 0.2)]).slice(0, MAX_SHEET_FRAMES);
+}
+
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   server.registerTool(
     "obs-trim-take",
@@ -370,7 +467,8 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         + "the picture does not change (and the sound, if any, is silent). A spinner or shimmering label counts "
         + "as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before "
         + "the next chapter and the end, and moves chapters to match. Without apply it only returns the "
-        + "plan. Needs ffmpeg; works on files in the OBS recording directory",
+        + "plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full "
+        + "decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory",
       inputSchema: z.object({
         path: z.string().describe("Recording to trim; absolute, or relative to the OBS recording directory"),
         apply: z.boolean().default(false).describe("Export the trimmed copy; otherwise only plan"),
@@ -391,6 +489,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         const path = await recordingFile(client, args.path);
         const info = await probe(path, signal);
         if (!Number.isFinite(info.duration)) return errorResult(`ffprobe could not read the length of ${path}`);
+        if (args.apply) requireSdrInput(info);
         const chapters = info.chapters.length > 0 ? info.chapters : takeLogChapters(path);
         const { idle, audible } = await detectIdle(path, info, args.minIdleSeconds, signal);
         const { cuts, keep } = planCuts({ ...args, duration: info.duration, idle, chapters });
@@ -434,26 +533,37 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         // A unique name, so it can never be the recording being trimmed, which the finally block would delete.
         const partial = join(dirname(outputPath), `.${basename(outputPath)}.${process.pid}-${crypto.randomUUID().slice(0, 8)}.partial${extname(outputPath)}`);
         if (partial === path || pathTaken(partial)) return errorResult("Could not choose a temporary name for the export; try again");
-        try {
-          await exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal);
-          if (pathTaken(outputPath)) return errorResult(`${outputPath} appeared while exporting; the export is discarded`);
-          renameSync(partial, outputPath);
-        } finally {
-          rmSync(partial, { force: true });
-        }
-        const result = await probe(outputPath, signal);
+        const times = seamSampleTimes(seams, plan.trimmedSeconds);
+        const exported = await publishTrimmedExport(partial, outputPath, {
+          encode: () => exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal),
+          verify: async () => {
+            const result = await probe(partial, signal);
+            validateTrimmedMetadata(result, { duration: plan.trimmedSeconds, width: info.width, height: info.height, audioStreams: info.audioStreams, chapters: newChapters });
+            await strictDecode(partial, signal);
+            return result;
+          },
+          ...(args.contactSheet && times.length > 0 ? { preview: () => contactSheet(outputPath, times, 4, 320, signal) } : {}),
+        }, signal);
+        const result = exported.verified;
         lines.push(`Exported ${outputPath}: ${round(result.duration)}s, ${result.chapters.length} chapter(s)`);
 
         const content: CallToolResult["content"] = [];
-        if (args.contactSheet && seams.length > 0) {
-          const times = seams.flatMap((seam) => [Math.max(0, seam - 0.5), seam + 0.2]).slice(0, MAX_SHEET_FRAMES);
-          const sheet = await contactSheet(outputPath, times, 4, 320, signal);
-          lines.push(`Contact sheet: frames 0.5s before and 0.2s after each seam, in pairs, left to right: ${times.map((t) => `${round(t)}s`).join(", ")}`);
-          content.push({ type: "image", data: sheet.toString("base64"), mimeType: "image/jpeg" });
+        if (exported.preview) {
+          lines.push(`Contact sheet: frames around each seam (clamped near the end), in pairs, left to right: ${times.map((t) => `${round(t)}s`).join(", ")}`);
+          content.push({ type: "image", data: exported.preview.toString("base64"), mimeType: "image/jpeg" });
         }
+        const warnings = [exported.previewWarning, exported.cleanupWarning].filter((value): value is string => !!value);
+        lines.push(...warnings);
         return {
           content: [{ type: "text", text: lines.join("\n") }, ...content],
-          structuredContent: { ...plan, outputPath, outputDurationSeconds: round(result.duration), outputChapters: result.chapters.length },
+          structuredContent: {
+            ...plan, committed: true, outputPath, sha256: exported.sha256,
+            outputDurationSeconds: round(result.duration), outputChapters: result.chapters.length,
+            verification: { metadata: "pass", strictDecode: "pass", scope: "Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review" },
+            format: { codec: result.codec, pixelFormat: result.pixelFormat, colorTransfer: result.colorTransfer ?? "unknown", colorPrimaries: result.colorPrimaries ?? "unknown", colorSpace: result.colorSpace ?? "unknown", colorFidelity: "unverified" },
+            previewStatus: exported.preview ? "available" : exported.previewWarning ? "unavailable" : "not-requested",
+            warnings,
+          },
         };
       } catch (error) {
         return errorResult(missingTool(error)

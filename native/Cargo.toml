@@ -1,0 +1,26 @@
+[package]
+name = "obs-mcp-native"
+version = "1.1.1"
+edition = "2024"
+rust-version = "1.95"
+license = "GPL-2.0-only"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+tokio = { version = "=1.54.1", features = ["rt", "macros", "sync", "io-util", "io-std", "net", "time", "process", "signal"] }
+tokio-tungstenite = "=0.26.2"
+futures-util = { version = "=0.3.34", features = ["sink"] }
+sha2 = "=0.10.9"
+base64 = "=0.22.1"
+getrandom = "=0.3.4"
+
+[lints.rust]
+unsafe_code = "forbid"
+[lints.clippy]
+all = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

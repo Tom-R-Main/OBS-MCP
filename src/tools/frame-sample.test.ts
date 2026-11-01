@@ -61,6 +61,51 @@ describe("StillTracker", () => {
     return luma;
   };
 
+  it("requires a six-sample comparison before reporting four-frame A/B warmup as unchanged", () => {
+    const tracker = new StillTracker(3);
+    [20, 20, 200, 200].forEach((value, index) => tracker.push(1.05 + index, new Uint8Array(3).fill(value)));
+    expect(tracker.stillSince()).toBeNull();
+    expect(tracker.finish(4.99)).toEqual([]);
+  });
+
+  it("does not qualify a continuously changing six-sample tail as unchanged", () => {
+    const tracker = new StillTracker(3);
+    for (let at = 0; at < 6; at++) tracker.push(at, new Uint8Array(3).fill(20 + at * 20));
+    expect(tracker.stillSince()).toBeNull();
+    expect(tracker.finish(6)).toEqual([]);
+  });
+
+  it("waits for a stable comparison after motion and does not qualify alternating full frames", () => {
+    const moving = new StillTracker(3);
+    for (let at = 0; at < 6; at++) moving.push(at, new Uint8Array(3).fill(20 + at * 20));
+    for (let at = 6; at < 9; at++) {
+      moving.push(at, new Uint8Array(3).fill(120));
+      expect(moving.stillSince()).toBeNull();
+    }
+    moving.push(9, new Uint8Array(3).fill(120));
+    expect(moving.stillSince()).toBe(5);
+    expect(moving.finish(10)).toEqual([{ start: 5, end: 10 }]);
+    const alternating = new StillTracker(3);
+    for (let at = 0; at < 12; at++) alternating.push(at, new Uint8Array(3).fill(at % 2 ? 200 : 20));
+    expect(alternating.finish(12)).toEqual([]);
+  });
+
+  it("qualifies first-comparison stable and old median spans, then revokes qualification on size reset", () => {
+    const tracker = new StillTracker(3);
+    for (let at = 0; at < 5; at++) {
+      tracker.push(at, new Uint8Array(3).fill(20));
+      expect(tracker.stillSince()).toBeNull();
+    }
+    tracker.push(5, new Uint8Array(3).fill(20));
+    expect(tracker.stillSince()).toBe(0);
+    tracker.push(6, new Uint8Array(4).fill(200));
+    expect(tracker.stillSince()).toBeNull();
+    expect(tracker.finish(10)).toEqual([{ start: 0, end: 5 }]);
+    const changed = new StillTracker(3);
+    for (let at = 0; at < 6; at++) changed.push(at, new Uint8Array(3).fill(at < 3 ? 20 : 200));
+    expect(changed.spans).toEqual([{ start: 0, end: 3 }]);
+  });
+
   it("treats a shimmer that comes and goes as still", () => {
     const tracker = new StillTracker(3);
     for (let second = 0; second < 10; second++) {
@@ -90,6 +135,11 @@ describe("StillTracker", () => {
     tracker.push(2, frame());
     expect(tracker.stillSince()).toBeNull();
     tracker.push(3, frame());
+    expect(tracker.stillSince()).toBeNull();
+    tracker.push(4, frame());
+    tracker.push(5, frame());
+    expect(tracker.stillSince()).toBeNull();
+    tracker.push(6, frame());
     expect(tracker.stillSince()).toBe(0);
   });
 });

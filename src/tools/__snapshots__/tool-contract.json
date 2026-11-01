@@ -721,28 +721,38 @@
   },
   {
     "name": "obs-capture-window",
-    "title": "Capture Window (macOS)",
+    "title": "Capture Window",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "backend": {
+          "default": "auto",
+          "description": "OBS capture backend; portal reuses a user-authorized Wayland window selection",
+          "type": "string",
+          "enum": [
+            "auto",
+            "x11",
+            "portal"
+          ]
+        },
         "sceneName": {
           "type": "string",
           "description": "Scene to add the input to if it does not exist"
         },
         "inputName": {
           "type": "string",
-          "description": "Name of the screen_capture input to create or reuse"
+          "description": "Name of the capture input to create or reuse"
         },
         "window": {
           "description": "Case-insensitive part of \"[App] Title\", or the window ID",
           "type": "string"
         },
         "application": {
-          "description": "Case-insensitive part of the app name, or its bundle ID",
+          "description": "Linux only: case-insensitive application name identifying one window; Mac application auto-discovery is refused",
           "type": "string"
         },
         "displayUuid": {
-          "description": "Display UUID; defaults to the first display OBS lists",
+          "description": "Legacy parameter retained for compatibility; ignored for window capture, which does not need a display",
           "type": "string"
         },
         "silent": {
@@ -757,7 +767,12 @@
         },
         "includeScreenshot": {
           "default": false,
-          "description": "Also return a screenshot of the capture",
+          "description": "Also return a screenshot after applying; ignored for apply:false",
+          "type": "boolean"
+        },
+        "apply": {
+          "default": true,
+          "description": "Apply the resolved selection; false returns a read-only plan with unverified rendering",
           "type": "boolean"
         }
       },
@@ -4372,6 +4387,27 @@
     }
   },
   {
+    "name": "obs-observe",
+    "title": "Observe Production",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "canvasUuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-offset-media-input-cursor",
     "title": "Offset Media Input Cursor",
     "inputSchema": {
@@ -4580,6 +4616,273 @@
     },
     "annotations": {
       "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-plan-scene-template",
+    "title": "Plan Portable Scene Template",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneCollection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sceneName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "canvasUuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "template": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "number",
+              "const": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "canvas": {
+              "type": "object",
+              "properties": {
+                "width": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "height": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "width",
+                "height"
+              ]
+            },
+            "roles": {
+              "minItems": 1,
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "inputKinds": {
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
+                  },
+                  "transform": {
+                    "type": "object",
+                    "properties": {
+                      "positionX": {
+                        "type": "number"
+                      },
+                      "positionY": {
+                        "type": "number"
+                      },
+                      "scaleX": {
+                        "type": "number"
+                      },
+                      "scaleY": {
+                        "type": "number"
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "alignment": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "const": 0
+                          },
+                          {
+                            "type": "number",
+                            "const": 1
+                          },
+                          {
+                            "type": "number",
+                            "const": 2
+                          },
+                          {
+                            "type": "number",
+                            "const": 4
+                          },
+                          {
+                            "type": "number",
+                            "const": 5
+                          },
+                          {
+                            "type": "number",
+                            "const": 6
+                          },
+                          {
+                            "type": "number",
+                            "const": 8
+                          },
+                          {
+                            "type": "number",
+                            "const": 9
+                          },
+                          {
+                            "type": "number",
+                            "const": 10
+                          }
+                        ]
+                      },
+                      "boundsType": {
+                        "type": "string",
+                        "enum": [
+                          "OBS_BOUNDS_NONE",
+                          "OBS_BOUNDS_STRETCH",
+                          "OBS_BOUNDS_SCALE_INNER",
+                          "OBS_BOUNDS_SCALE_OUTER",
+                          "OBS_BOUNDS_SCALE_TO_WIDTH",
+                          "OBS_BOUNDS_SCALE_TO_HEIGHT",
+                          "OBS_BOUNDS_MAX_ONLY"
+                        ]
+                      },
+                      "boundsWidth": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "boundsHeight": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "boundsAlignment": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10
+                      },
+                      "cropLeft": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cropRight": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cropTop": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cropBottom": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "locked": {
+                    "type": "boolean"
+                  },
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "role",
+                  "inputKinds",
+                  "transform",
+                  "enabled",
+                  "locked",
+                  "index"
+                ]
+              }
+            }
+          },
+          "required": [
+            "version",
+            "name",
+            "canvas",
+            "roles"
+          ]
+        },
+        "bindings": {
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sourceName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sourceUuid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "containerUuid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "sceneItemId": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "role",
+              "sourceName",
+              "sourceUuid",
+              "containerUuid",
+              "sceneItemId"
+            ]
+          }
+        }
+      },
+      "required": [
+        "sceneCollection",
+        "sceneName",
+        "template",
+        "bindings"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
       "openWorldHint": false
@@ -6990,6 +7293,41 @@
     }
   },
   {
+    "name": "obs-stage-scene",
+    "title": "Stage Scene in Preview",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "sceneCollection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sceneName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "canvasUuid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "sceneCollection",
+        "sceneName"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-start-output",
     "title": "Start Output",
     "inputSchema": {
@@ -7237,6 +7575,30 @@
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-take-scene",
+    "title": "Take Staged Scene to Program",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "stageId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "stageId"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
       "idempotentHint": false,
       "openWorldHint": false
     }

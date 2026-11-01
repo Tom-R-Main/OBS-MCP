@@ -3,8 +3,8 @@
   "name": "obs-mcp",
   "version": "1.1.1",
   "display_name": "OBS MCP",
-  "description": "Control OBS Studio through current, annotated MCP tools",
-  "long_description": "OBS MCP connects compatible MCP clients to OBS Studio through the built-in WebSocket v5 server. It covers the synchronized OBS request surface for scenes, sources, audio, filters, transitions, recording, streaming, canvases, and configuration. Tool discovery remains available while OBS is offline, and the server reconnects in the background.\n\nRequirements:\n- Node.js 20.19 or newer\n- OBS Studio 28 or newer with WebSocket Server enabled under Tools > WebSocket Server Settings",
+  "description": "Inspect, plan and supervise OBS Studio workflows through MCP",
+  "long_description": "Inspect OBS Studio, plan and stage scene changes, and supervise bounded recordings through MCP. Results include structured evidence and durable operation receipts for review. The full compatibility interface covers scenes, sources, audio, filters, transitions, recording, streaming, canvases and configuration through the built-in WebSocket v5 server. Tool discovery remains available while OBS is offline.\n\nThis package uses Node.js 20.19 or newer. OBS Studio 28 or newer must have its WebSocket server enabled under Tools > WebSocket Server Settings. See the README for the separate Rust entry, its qualification lane and current limits.",
   "icon": "icon.png",
   "author": {
     "name": "Thomas Main",
