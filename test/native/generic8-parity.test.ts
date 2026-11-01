@@ -1,0 +1,90 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FakeOBSServer, FakeOBSRequestError } from '../support/fake-obs-server.js';
+import { serveProduction } from '../support/production-fixture.js';
+const root=fileURLToPath(new URL('../../',import.meta.url));const binary=process.env.NATIVE_TEST_BINARY??join(root,'native/target/debug/obs-mcp-native');const sdk=process.env.NATIVE_TEST_COMPAT_ENTRY??join(root,'build/index.js');let seq=0;
+const cases=[
+ ['obs-set-media-input-cursor','SetMediaInputCursor',{inputName:'Application',mediaCursor:125.5}],
+ ['obs-offset-media-input-cursor','OffsetMediaInputCursor',{inputName:'Application',mediaCursorOffset:-125.5}],
+ ['obs-trigger-media-input-action','TriggerMediaInputAction',{inputName:'Application',mediaAction:'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'}],
+ ['obs-set-input-audio-tracks','SetInputAudioTracks',{inputUuid:'application-source-uuid',inputAudioTracks:{1:true,2:false,3:true,4:false,5:true,6:false}}],
+ ['obs-toggle-input-mute','ToggleInputMute',{inputName:'Application'}],
+ ['obs-set-input-volume','SetInputVolume',{inputName:'Application',inputVolumeMul:0.5,inputVolumeDb:-6}],
+ ['obs-send-stream-caption','SendStreamCaption',{captionText:'日本語 caption\nline'}],
+ ['obs-save-replay-buffer','SaveReplayBuffer',{}],
+] as const;
+type Session={client:Client;transport:StdioClientTransport;fake:FakeOBSServer;directory:string;state:ReturnType<typeof serveProduction>;recording:()=>boolean};const sessions:Session[]=[];
+async function start(native:boolean,legacy:boolean,recording=false,unadvertised=false,extra:Record<string,string>={}):Promise<Session>{
+ const fake=await FakeOBSServer.start({platform:'macos',supportedImageFormats:['png'],autoGetVersion:!unadvertised});const state=serveProduction(fake);state.preview='Main';const directory=join(root,'native/target',`generic8-public-${process.pid}-${seq++}`);mkdirSync(directory,{mode:0o700});const recordingRoot=join(directory,'recordings');mkdirSync(recordingRoot,{mode:0o700});let active=false;
+ for(const[,request]of cases)fake.respondWith(request,()=>({sceneItemId:42,extension:{preserved:true,values:[null,1,false]}}));
+ const path=join(recordingRoot,'clip.mkv');fake.respondWith('GetProfileParameter',data=>({parameterValue:({'Output/Mode':'Simple','SimpleOutput/RecQuality':'Small','SimpleOutput/RecEncoder':'apple_h264','SimpleOutput/RecTracks':'1','SimpleOutput/RecFormat2':'mkv'} as Record<string,string>)[`${data.parameterCategory}/${data.parameterName}`]??null}));fake.respondWith('GetRecordDirectory',()=>{throw new FakeOBSRequestError(604,'fixture directory unavailable');});fake.respondWith('GetStats',()=>({availableDiskSpace:50000,renderSkippedFrames:0,renderTotalFrames:0}));fake.respondWith('GetRecordStatus',()=>({outputActive:active,outputPaused:false,outputBytes:1048576}));fake.respondWith('StartRecord',()=>{active=true;fake.sendEvent('RecordStateChanged',{outputActive:true,outputState:'OBS_WEBSOCKET_OUTPUT_STARTED',outputPath:path});return {};});fake.respondWith('StopRecord',()=>{active=false;fake.sendEvent('RecordStateChanged',{outputActive:false,outputState:'OBS_WEBSOCKET_OUTPUT_STOPPED',outputPath:path});return {outputPath:path};});fake.respondWith('CreateRecordChapter',()=>({}));
+ if(unadvertised)fake.respondWith('GetVersion',()=>({obsVersion:'32.2.2',obsWebSocketVersion:'5.7.0',rpcVersion:1,platform:'macos',availableRequests:['GetVersion'],supportedImageFormats:['png']}));
+ const client=new Client({name:'generic8',version:'1'},{versionNegotiation:{mode:legacy?'legacy':{pin:'2026-07-28'}}});const transport=new StdioClientTransport({command:native?binary:process.execPath,args:native?[]:[sdk],cwd:root,env:{...getDefaultEnvironment(),OBS_WEBSOCKET_URL:fake.url,OBS_MCP_STATE_DIR:directory,OBS_MCP_NATIVE_STATEFUL:native?'1':'0',OBS_MCP_NATIVE_RECORDING_ROOT:recording?recordingRoot:'',OBS_MCP_COMPAT_NODE:join(directory,'missing-node'),OBS_MCP_COMPAT_ENTRY:join(directory,'missing-sdk.js'),OBS_MCP_TOOLSETS:'all',OBS_MCP_TOOLS:'',OBS_MCP_READ_ONLY:'false',OBS_MCP_DYNAMIC_TOOLSETS:'false',OBS_MCP_CONFIRM_LIVE:'false',OBS_MCP_READ_OBS_CONFIG:'false',...extra},stderr:'pipe'});transport.stderr?.on('data',()=>undefined);const session={client,transport,fake,state,directory,recording:()=>active};sessions.push(session);await client.connect(transport);if(unadvertised&&!native){const version=await client.callTool({name:'obs-get-version',arguments:{}});expect(version.structuredContent).toMatchObject({availableRequests:['GetVersion']});}return session;
+}
+function normalized(value:unknown):unknown{if(Array.isArray(value))return value.map(normalized);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,value])=>[key,normalized(value)]));if(typeof value==='string'){try{const parsed=JSON.parse(value);if(parsed&&typeof parsed==='object')return {jsonValue:normalized(parsed)};}catch{}}return value;}
+async function same(a:Session,b:Session,name:string,args:Record<string,unknown>={}){const expected=await a.client.callTool({name,arguments:args});const actual=await b.client.callTool({name,arguments:args});expect(normalized(actual)).toEqual(normalized(expected));return actual;}
+function trace(session:Pick<Session,'fake'>,request:string){return session.fake.history().filter(item=>item.frame.op===6&&item.frame.d.requestType===request).map(item=>item.frame.d.requestData);}
+function receipts(session:Pick<Session,'directory'>):Record<string,unknown>[] {try{return readdirSync(join(session.directory,'operation-receipts')).filter(name=>name.endsWith('.json')).map(name=>JSON.parse(readFileSync(join(session.directory,'operation-receipts',name),'utf8')) as Record<string,unknown>);}catch{return [];}}
+function children(session:{transport:{pid:number|null|undefined}}){const pid=session.transport.pid;return execFileSync('ps',['-axo','pid=,ppid='],{encoding:'utf8'}).trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number)).filter(([,parent])=>parent===pid).map(([id])=>id);}
+afterEach(async()=>{for(const session of sessions.splice(0)){try{await session.client.close();await session.transport.close();await vi.waitFor(()=>expect(session.fake.openConnectionCount).toBe(0));}finally{await session.fake.close();rmSync(session.directory,{recursive:true,force:true});}}});
+for(const legacy of[false,true])describe(`generic8 actual public SDK parity (legacy=${legacy})`,()=>{
+ it('preserves eight full contracts, annotations, callbacks and one-request effects',async()=>{
+  const oracle=await start(false,legacy);const native=await start(true,legacy);const expected=(await oracle.client.listTools()).tools;const actual=(await native.client.listTools()).tools;
+  for(const[name,request,args]of cases){expect(actual.find(tool=>tool.name===name)).toEqual(expected.find(tool=>tool.name===name));await same(oracle,native,name,{...args,discarded:'Source strips this'});expect(trace(native,request)).toEqual(trace(oracle,request));}
+  expect(actual.find(tool=>tool.name==='obs-send-stream-caption')?.annotations).toMatchObject({openWorldHint:true,idempotentHint:false});expect(trace(native,'SaveReplayBuffer')).toEqual([undefined]);expect(receipts(native)).toHaveLength(8);for(const receipt of receipts(native))expect(receipt).toMatchObject({version:2,kind:'request',phase:'accepted',requestAccepted:true,postconditionObserved:false});expect(native.fake.connectionCount).toBe(1);expect(children(native)).toEqual([]);
+ });
+ it('preserves all eight explicit rejection messages and permits later explicit commands',async()=>{
+  const oracle=await start(false,legacy);const native=await start(true,legacy);for(const[name,request,args]of cases){for(const session of[oracle,native])session.fake.respondWith(request,()=>{throw new FakeOBSRequestError(500,'PRIVATE explicit callback detail');});expect((await same(oracle,native,name,args)).isError).toBe(true);}expect(receipts(native)).toHaveLength(8);expect(receipts(native).every(receipt=>receipt.phase==='rejected'&&receipt.postconditionObserved===false)).toBe(true);
+ });
+ it('keeps volume business errors distinct from schema errors, forwards both values and keeps exact ranges',async()=>{
+  const oracle=await start(false,legacy);const native=await start(true,legacy);
+  expect((await same(oracle,native,'obs-set-input-volume',{inputName:'Application'})).isError).toBe(true);expect(native.fake.connectionCount).toBe(0);expect(receipts(native)).toEqual([]);expect(trace(native,'SetInputVolume')).toEqual([]);
+  for(const args of[{inputName:'Application',inputVolumeMul:0},{inputName:'Application',inputVolumeDb:-100},{inputName:'Application',inputVolumeMul:20,inputVolumeDb:26}])await same(oracle,native,'obs-set-input-volume',args);
+  expect(trace(native,'SetInputVolume')).toEqual(trace(oracle,'SetInputVolume'));expect(receipts(native)).toHaveLength(3);
+ });
+ it('returns pure volume business refusal when OBS is unavailable without native connection or journal admission',async()=>{
+  const endpoint={OBS_WEBSOCKET_URL:'ws://127.0.0.1:9'};const oracle=await start(false,legacy,false,false,endpoint);const native=await start(true,legacy,false,false,endpoint);
+  const result=await same(oracle,native,'obs-set-input-volume',{inputName:'Offline'});expect(result).toMatchObject({isError:true,content:[{type:'text',text:'Error setting input volume: Either inputVolumeMul or inputVolumeDb must be provided'}]});expect(native.fake.connectionCount).toBe(0);expect(receipts(native)).toEqual([]);expect(children(native)).toEqual([]);
+ });
+ it('uses actual toggle truthiness and preserves all six media actions without replay',async()=>{
+  const oracle=await start(false,legacy);const native=await start(true,legacy);
+  for(const value of[undefined,null,false,true,0,1,'','false',[],{}]){for(const session of[oracle,native])session.fake.respondWith('ToggleInputMute',()=>value===undefined?{}:{inputMuted:value});await same(oracle,native,'obs-toggle-input-mute',{inputName:'Application'});}
+  for(const action of['PLAY','PAUSE','STOP','RESTART','NEXT','PREVIOUS'])await same(oracle,native,'obs-trigger-media-input-action',{inputName:'Application',mediaAction:`OBS_WEBSOCKET_MEDIA_INPUT_ACTION_${action}`});
+  expect(trace(native,'ToggleInputMute')).toHaveLength(10);expect(trace(native,'TriggerMediaInputAction')).toHaveLength(6);expect(receipts(native).every(receipt=>receipt.phase==='accepted'&&receipt.postconditionObserved===false)).toBe(true);
+ });
+ it('projects exhaustive record and scalar input errors from the actual original arguments with zero native OBS admission',async()=>{
+  const oracle=await start(false,legacy);const native=await start(true,legacy);
+  const badMaps=[undefined,null,[],{}, {1:true},{1:'wrong',2:false,3:true,4:false,6:false,z:true},JSON.parse('{"1":true,"2":false,"3":true,"4":false,"5":true,"6":false,"z":true,"7":false,"a":true,"01":false,"4294967295":true,"9":true}'),JSON.parse('{"1":true,"2":false,"3":true,"4":false,"5":true,"6":false,"constructor":true,"__proto__":true,"日本語":false,"quote\\"key":true}')];
+  for(const map of badMaps)expect((await same(oracle,native,'obs-set-input-audio-tracks',map===undefined?{}:{inputAudioTracks:map})).isError).toBe(true);
+  for(const[name,args]of[['obs-set-media-input-cursor',{inputName:'App',mediaCursor:-1}],['obs-offset-media-input-cursor',{inputName:'App',mediaCursorOffset:null}],['obs-trigger-media-input-action',{inputName:'App',mediaAction:'PLAY'}],['obs-set-input-volume',{inputName:'App',inputVolumeMul:null}],['obs-set-input-volume',{inputName:'App',inputVolumeDb:26.01}],['obs-set-input-audio-tracks',{inputName:null,inputAudioTracks:{1:true,2:false,3:true,4:false,5:true,6:false}}],['obs-send-stream-caption',{captionText:3}]] as const)expect((await same(oracle,native,name,args)).isError).toBe(true);
+  expect(native.fake.connectionCount).toBe(0);expect(receipts(native)).toEqual([]);
+ });
+ it('returns volume business refusal before unsupported capability while other callbacks retain Source capability errors',async()=>{
+  const oracle=await start(false,legacy,false,true);const native=await start(true,legacy,false,true);
+  expect((await same(oracle,native,'obs-set-input-volume',{inputName:'App'})).isError).toBe(true);
+  for(const[name,,args]of cases)expect((await same(oracle,native,name,args)).isError).toBe(true);
+  expect(receipts(native)).toEqual([]);for(const[,request]of cases)expect(trace(native,request)).toHaveLength(0);expect(native.fake.connectionCount).toBe(1);
+ });
+});
+function meta(name:string){return {'io.modelcontextprotocol/protocolVersion':'2026-07-28','io.modelcontextprotocol/clientInfo':{name,version:'1'},'io.modelcontextprotocol/clientCapabilities':{}};}
+async function raw(session:Session,id:number,name:string,args:Record<string,unknown>,caller:string){const prior=session.transport.onmessage;let answer:Record<string,unknown>|undefined;session.transport.onmessage=message=>{const value=message as unknown as Record<string,unknown>;if(value.id===id)answer=value;prior?.(message);};try{await session.transport.send({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:args,_meta:meta(caller)}} as Parameters<StdioClientTransport['send']>[0]);await vi.waitFor(()=>expect(answer).toBeDefined(),{timeout:10_000});return answer!;}finally{session.transport.onmessage=prior;}}
+it('preserves foreign lease refusal before missing-volume business validation and unsupported capability',async()=>{
+ const oracle=await start(false,false,false,true);const native=await start(true,false,false,true);for(const session of[oracle,native])expect((await raw(session,8801,'obs-claim-control',{minutes:1,reason:'business guard'},'other-client')).result).toMatchObject({structuredContent:{holder:'other-client'}});
+ const expected=await oracle.client.callTool({name:'obs-set-input-volume',arguments:{inputName:'App'}});const actual=await native.client.callTool({name:'obs-set-input-volume',arguments:{inputName:'App'}});const clockOnly=(value:unknown):unknown=>JSON.parse(JSON.stringify(value).replace(/until \d\d:\d\d UTC/g,'until TIME UTC'));expect(clockOnly(actual)).toEqual(clockOnly(expected));expect(native.fake.connectionCount).toBe(0);expect(receipts(native)).toEqual([]);
+});
+it('retains one frontend-cancelled toggle acceptance while the active take independently stops exactly once',async()=>{
+ const oracle=await start(false,false,true);const native=await start(true,false,true);for(const session of[oracle,native]){expect((await session.client.callTool({name:'obs-take-start',arguments:{expectSilent:true,maxDurationSeconds:1}})).isError).not.toBe(true);expect(session.recording()).toBe(true);}
+ expect(oracle.recording()).toBe(true);expect(native.recording()).toBe(true);await oracle.client.callTool({name:'obs-toggle-input-mute',arguments:{inputName:'Application'}});native.fake.queueSuccess('ToggleInputMute',{inputMuted:true},60_000);const cancel=new AbortController();const call=native.client.callTool({name:'obs-toggle-input-mute',arguments:{inputName:'Application'}},{signal:cancel.signal}).catch(reason=>({cancelled:String(reason)}));const held=await native.fake.waitForRequest('ToggleInputMute',{timeoutMs:10_000});cancel.abort();expect(await call).toHaveProperty('cancelled');native.fake.sendRaw({op:7,d:{requestType:'ToggleInputMute',requestId:held.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{inputMuted:true}}},held.connectionId);await vi.waitFor(()=>expect(receipts(native).some(receipt=>receipt.requestType==='ToggleInputMute'&&receipt.phase==='accepted'&&receipt.postconditionObserved===false)).toBe(true));for(const session of[oracle,native])await vi.waitFor(()=>expect(trace(session,'StopRecord')).toHaveLength(1),{timeout:4000});expect(native.recording()).toBe(false);expect(trace(native,'ToggleInputMute')).toHaveLength(1);expect(native.fake.connectionCount).toBe(1);expect(children(native)).toEqual([]);
+});
+it('never replays a lost non-idempotent media offset and refuses later new work',async()=>{
+ const native=await start(true,false);native.fake.queueDisconnect('OffsetMediaInputCursor','lost offset reply');expect((await native.client.callTool({name:'obs-offset-media-input-cursor',arguments:{inputName:'Application',mediaCursorOffset:100}})).isError).toBe(true);expect(receipts(native)[0]).toMatchObject({requestType:'OffsetMediaInputCursor',phase:'unknown',requestAccepted:null,postconditionObserved:false});expect((await native.client.callTool({name:'obs-offset-media-input-cursor',arguments:{inputName:'Application',mediaCursorOffset:100}})).isError).toBe(true);expect(trace(native,'OffsetMediaInputCursor')).toHaveLength(1);expect(native.fake.connectionCount).toBe(1);expect(children(native)).toEqual([]);
+});
+it('exposes precisely declared native tools with approved host adapters and preserves complete Source registry contracts',async()=>{
+ const oracle=await start(false,false,true);const native=await start(true,false,true);const expected=(await oracle.client.listTools()).tools;const actual=(await native.client.listTools()).tools;const catalog=JSON.parse(readFileSync(join(root,'native/assets/tools.json'),'utf8')) as {requests:Record<string,unknown>;locals:Record<string,unknown>;service:{handlers:Record<string,unknown>}};expect(actual.map(tool=>tool.name).sort()).toEqual([...new Set([...Object.keys(catalog.requests),...Object.keys(catalog.locals),...Object.keys(catalog.service.handlers)])].sort());for(const tool of actual)expect(tool).toEqual(expected.find(entry=>entry.name===tool.name));expect(native.fake.connectionCount).toBe(0);expect(children(native)).toEqual([]);for(const name of['obs-pause-record','obs-split-record-file','obs-stop-stream','obs-call-request'])expect(actual.map(tool=>tool.name)).not.toContain(name);
+});

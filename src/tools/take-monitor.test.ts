@@ -11,7 +11,7 @@ import { EventSubscription, OBSWebSocketClient } from "../client.js";
 import { FakeOBSServer } from "../../test/support/fake-obs-server.js";
 import { healthyObsState, servePreflightState, type FakeObsState } from "../../test/support/fake-obs-state.js";
 import { encodePpm } from "./frame-sample.js";
-import { activeTake, takeLogPath, TakeMonitor, writeTakeLog, type TakeMonitorOptions } from "./take-monitor.js";
+import { activeTake, describeTake, takeLogPath, TakeMonitor, writeTakeLog, type TakeMonitorOptions } from "./take-monitor.js";
 
 const SAMPLE_MS = 20;
 
@@ -81,6 +81,55 @@ afterEach(async () => {
 });
 
 describe("TakeMonitor", () => {
+  it("keeps short A/B warmup unqualified in live and stopped summaries without losing picture checks", async () => {
+    const start = Date.now();
+    let now = start;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const take = await startMonitor({ sampleIntervalMs: 50_000, statsIntervalMs: 50_000, stillAfterSeconds: 3 });
+    const sampler = take as unknown as { samplePicture(): Promise<void> };
+    for (const [index, value] of [20, 20, 200, 200].entries()) {
+      now = start + 1050 + index * 1000;
+      picture = () => encodePpm(3, 1, () => [value, value, value]);
+      await sampler.samplePicture();
+    }
+    now = start + 4990;
+    for (const summary of [take.summary(), await take.stop()]) {
+      expect(summary).toMatchObject({ framesSampled: 4, pictureChecks: "on", stills: [], warnings: [] });
+      expect(describeTake(summary).join("\n")).toContain("no qualified unchanged stretch reported");
+      expect(describeTake(summary).join("\n")).not.toContain("0s unchanged");
+    }
+  });
+
+  it("discards an in-flight picture when pause or program switch retires its history", async () => {
+    for (const boundary of ["RecordStateChanged", "CurrentProgramSceneChanged"]) {
+      const take = await startMonitor({ sampleIntervalMs: 50_000, statsIntervalMs: 50_000 });
+      let release!: () => void;
+      let entered!: () => void;
+      const ready = new Promise<void>((resolve) => { entered = resolve; });
+      const barrier = new Promise<void>((resolve) => { release = resolve; });
+      const send = client.sendRequest.bind(client);
+      const delayed = vi.spyOn(client, "sendRequest").mockImplementation(async <T>(type: string, data?: unknown, timeout?: number): Promise<T> => {
+        if (type === "GetSourceScreenshot") {
+          entered();
+          await barrier;
+        }
+        return send<T>(type, data, timeout);
+      });
+      const work = (take as unknown as { samplePicture(): Promise<void> }).samplePicture();
+      await ready;
+      const seen = new Promise<void>((resolve) => { client.once(boundary, () => resolve()); });
+      fakeObs.sendEvent(boundary, boundary === "RecordStateChanged"
+        ? { outputState: "OBS_WEBSOCKET_OUTPUT_PAUSED" }
+        : { sceneName: "Other" });
+      await seen;
+      release();
+      await work;
+      delayed.mockRestore();
+      expect(take.summary()).toMatchObject({ framesSampled: 0, pictureChecks: "on", stills: [] });
+      await take.stop();
+    }
+  });
+
   it("subscribes to volume meters only while it runs, and is the active take", async () => {
     const take = await startMonitor();
 

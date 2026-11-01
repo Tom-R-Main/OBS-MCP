@@ -205,16 +205,18 @@ describe("obs-record-clip", () => {
 });
 
 describe("obs-capture-window", () => {
-  let inputs: { inputName: string; inputKind: string }[];
+  let inputs: { inputName: string; inputKind: string; inputUuid?: string }[];
 
   async function startCaptureHarness(platform = "macos"): Promise<void> {
     await startHarness(platform);
-    inputs = [];
+    inputs = [{ inputName: "Window inventory", inputUuid: "inventory-source", inputKind: platform === "macos" ? "screen_capture" : "xcomposite_input" }];
     const { fakeObs } = harness;
     fakeObs.respondWith("GetInputList", () => ({ inputs }));
+    fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: state.sceneItems.map((item) => ({ ...item, sourceUuid: inputs.find(({ inputName }) => inputName === item.sourceName)?.inputUuid, sceneItemTransform: { sourceWidth: item.sourceWidth, sourceHeight: item.sourceHeight } })) }));
+    fakeObs.respondWith("GetSceneList", () => ({ scenes: [{ sceneName: "Demo", sceneUuid: "scene-demo" }] }));
     fakeObs.respondWith("CreateInput", (data) => {
-      inputs.push({ inputName: String(data.inputName), inputKind: String(data.inputKind) });
-      return { sceneItemId: 2 };
+      inputs.push({ inputName: String(data.inputName), inputKind: String(data.inputKind), inputUuid: "created-source" });
+      return { sceneItemId: 2, inputUuid: "created-source" };
     });
     fakeObs.respondWith("GetInputPropertiesListPropertyItems", ({ propertyName }) => ({
       propertyItems: propertyName === "display_uuid"
@@ -231,10 +233,154 @@ describe("obs-capture-window", () => {
     }
     fakeObs.respondWith("GetVideoSettings", () => ({ baseWidth: 1920, baseHeight: 1080 }));
     fakeObs.respondWith("GetSceneItemId", () => ({ sceneItemId: 2 }));
-    fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "screen_capture", inputSettings: { type: 1, window: 31875 } }));
+    fakeObs.respondWith("GetInputVolume", () => ({ inputVolumeMul: 1 }));
+    fakeObs.respondWith("GetInputSettings", ({ inputName }) => ({
+      inputKind: inputs.find((input) => input.inputName === inputName)?.inputKind,
+      inputSettings: platform === "macos" ? { type: 1, window: 31875 } : { capture_window: "42\r\nEditor\r\nCode" },
+    }));
   }
 
-  it("creates the capture, selects a display before listing windows, silences it, and fits it", async () => {
+  async function expectNoCaptureWrites(): Promise<void> {
+    expect(requestTypes().filter((type) => /^(Create|Set)/.test(String(type)))).toEqual([]);
+    expect((await harness.call("obs-snapshot", { list: true })).structuredContent).toMatchObject({ snapshots: [] });
+  }
+
+  it.each([["inventory", undefined], ["inventory", ""], ["inventory", " "], ["existing", undefined], ["existing", ""], ["existing", " "]] as const)("refuses a capture %s without a nonempty UUID (%s) before saving or changing anything", async (source, inputUuid) => {
+    await startCaptureHarness();
+    if (source === "inventory") inputs[0]!.inputUuid = inputUuid;
+    else inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402", fit: false });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/UUID/i);
+    await expectNoCaptureWrites();
+  });
+
+  it("stops after creation if OBS omits the new source UUID, without further writes", async () => {
+    await startCaptureHarness();
+    harness.fakeObs.respondWith("CreateInput", () => ({ sceneItemId: 2 }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/created.*UUID.*inspect OBS/i);
+    expect(requestTypes().filter((type) => /^(Create|Set)/.test(String(type)))).toEqual(["CreateInput"]);
+    expect((await harness.call("obs-snapshot", { list: true })).structuredContent).toMatchObject({ snapshots: [] });
+  });
+
+  it.each([undefined, "another-source"])("refuses target-scene membership with source UUID %s", async (sourceUuid) => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [{ sceneItemId: 2, sourceName: "Chrome", ...(sourceUuid ? { sourceUuid } : {}) }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402", fit: false });
+    expect(result.isError).toBe(true);
+    await expectNoCaptureWrites();
+  });
+
+  it.each(["missing", "duplicate", "missing-uuid", "disappearing", "replaced"])("refuses a %s target scene before capture writes or snapshots", async (defect) => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+    let reads = 0;
+    harness.fakeObs.respondWith("GetSceneList", () => {
+      reads += 1;
+      if (defect === "missing" || (defect === "disappearing" && reads > 1)) return { scenes: [] };
+      if (defect === "duplicate") return { scenes: [{ sceneName: "Demo", sceneUuid: "one" }, { sceneName: "Demo", sceneUuid: "two" }] };
+      if (defect === "missing-uuid") return { scenes: [{ sceneName: "Demo" }] };
+      return { scenes: [{ sceneName: "Demo", sceneUuid: defect === "replaced" && reads > 1 ? "replacement" : "scene-demo" }] };
+    });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402", fit: false });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/scene/i);
+    await expectNoCaptureWrites();
+  });
+
+  it.each(["absent", "disappearing"])("refuses an existing input with %s target-scene membership", async (defect) => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+    let reads = 0;
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: defect === "absent" || ++reads > 1 ? [] : [{ sceneItemId: 2, sourceName: "Chrome", sourceUuid: "chrome-source" }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402", fit: false });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/scene|membership/i);
+    await expectNoCaptureWrites();
+  });
+
+  it.each([true, false])("refuses absent safe inventory without creating a discovery placeholder (apply=%s)", async (apply) => {
+    await startCaptureHarness();
+    inputs = [];
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "New capture", window: "chatgpt", apply });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/configure.*OBS|inventory/i);
+    await expectNoCaptureWrites();
+  });
+
+  it.each([["missing", true], ["missing", false], ["ambiguous", true], ["ambiguous", false]] as const)("does not save or change an existing capture on %s discovery (apply=%s)", async (selection, apply) => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: selection === "missing" ? "not running" : "google chrome", apply });
+    expect(result.isError).toBe(true);
+    await expectNoCaptureWrites();
+  });
+
+  it("returns a read-only capture plan with explicit source and selected window", async () => {
+    await startCaptureHarness();
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "chatgpt", apply: false, includeScreenshot: true });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({ applied: false, rendered: "unverified", scene: { sceneName: "Demo", sceneUuid: "scene-demo" }, existing: null, inventory: { inputName: "Window inventory", inputUuid: "inventory-source", inputKind: "screen_capture" }, selected: { itemName: "[Google Chrome] ChatGPT", itemValue: 31875 } });
+    await expectNoCaptureWrites();
+    expect(requestTypes()).not.toContain("GetSourceScreenshot");
+  });
+
+  it("plans an existing capture without saving its snapshot or retargeting it", async () => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "owned-source" });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402", apply: false });
+    expect(result.structuredContent).toMatchObject({ applied: false, rendered: "unverified", existing: { inputUuid: "owned-source" }, inventory: { inputUuid: "owned-source" }, selected: { itemValue: 402 } });
+    await expectNoCaptureWrites();
+  });
+
+  it.each(["new-target", "replaced-inventory", "settings"])("refuses %s changes between discovery and apply", async (change) => {
+    await startCaptureHarness();
+    inputs[0]!.inputUuid = "initial";
+    let inventories = 0;
+    harness.fakeObs.respondWith("GetInputList", () => {
+      if (++inventories === 2) {
+        if (change === "new-target") inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+        if (change === "replaced-inventory") inputs[0]!.inputUuid = "replacement";
+      }
+      return { inputs };
+    });
+    if (change === "settings") {
+      let reads = 0;
+      harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "screen_capture", inputSettings: { type: 1, window: ++reads === 1 ? 31875 : 402 } }));
+    }
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "chatgpt" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("changed during discovery");
+    await expectNoCaptureWrites();
+  });
+
+  it("refuses a changed selection during readback before saving or mutating", async () => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+    let reads = 0;
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Owned", itemValue: ++reads === 1 ? 88 : 89 }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "Owned" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/changed|stable/i);
+    await expectNoCaptureWrites();
+  });
+
+  it("refuses null XComposite selection without seeding a discovery value", async () => {
+    await startCaptureHarness("linux");
+    inputs.push({ inputName: "Editor", inputKind: "xcomposite_input", inputUuid: "editor-source" });
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [{ sceneItemId: 2, sourceName: "Editor", sourceUuid: "editor-source" }] }));
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["xcomposite_input"] }));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "xcomposite_input", inputSettings: { capture_window: null } }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor", window: "Editor" });
+    expect(result.isError).toBe(true);
+    expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
+    await expectNoCaptureWrites();
+  });
+
+  it("creates the capture, lists only integer windows, silences it, and fits it", async () => {
     await startCaptureHarness();
 
     const result = await harness.call("obs-capture-window", {
@@ -245,15 +391,15 @@ describe("obs-capture-window", () => {
 
     expect(result.isError).toBeFalsy();
     expect(resultText(result)).toContain("Capturing window [Google Chrome] ChatGPT");
-    expect(requestData("SetInputSettings")).toEqual([
-      { inputName: "Chrome", inputSettings: { type: 1, display_uuid: "37D8832A" } },
-      { inputName: "Chrome", inputSettings: { window: 31875 } },
-    ]);
+    expect(requestData("CreateInput")).toEqual([{ sceneName: "Demo", sceneUuid: "scene-demo", inputName: "Chrome", inputKind: "screen_capture", inputSettings: { type: 1, window: 31875, show_cursor: true } }]);
+    expect(requestData("SetInputSettings")).toEqual([]);
     const order = requestTypes();
-    expect(order.indexOf("SetInputSettings")).toBeLessThan(
-      order.lastIndexOf("GetInputPropertiesListPropertyItems"),
-    );
-    expect(requestData("SetInputMute")).toEqual([{ inputName: "Chrome", inputMuted: true }]);
+    expect(requestData("GetInputPropertiesListPropertyItems")).toEqual([
+      { inputName: "Window inventory", inputUuid: "inventory-source", propertyName: "window" }, { inputName: "Window inventory", inputUuid: "inventory-source", propertyName: "window" },
+    ]);
+    expect(order.indexOf("CreateInput")).toBeGreaterThan(order.lastIndexOf("GetInputPropertiesListPropertyItems"));
+    expect(requestData("SetInputMute")).toEqual([{ inputName: "Chrome", inputUuid: "created-source", inputMuted: true }]);
+    expect(requestData("SetInputAudioTracks")[0]?.inputUuid).toBe("created-source");
     expect(requestData("SetInputAudioTracks")[0]?.inputAudioTracks).toEqual({
       1: false, 2: false, 3: false, 4: false, 5: false, 6: false,
     });
@@ -262,6 +408,7 @@ describe("obs-capture-window", () => {
       boundsWidth: 1920,
       boundsHeight: 1080,
     });
+    expect(requestData("SetSceneItemTransform")[0]).toMatchObject({ sceneName: "Demo", sceneUuid: "scene-demo" });
     expect(result.structuredContent).toMatchObject({ appearances: [{ sourceWidth: 1512 }], warnings: [] });
   });
 
@@ -277,10 +424,10 @@ describe("obs-capture-window", () => {
     expect(result.isError).toBe(true);
     expect(resultText(result)).toContain("More than one window");
     expect(resultText(result)).toContain("[Google Chrome] YouTube");
-    expect(requestTypes()).not.toContain("SetInputMute");
+    await expectNoCaptureWrites();
   });
 
-  it("uses a given display without listing displays, and leaves audio alone when asked", async () => {
+  it("ignores legacy displayUuid for window capture and leaves audio alone when asked", async () => {
     await startCaptureHarness();
 
     await harness.call("obs-capture-window", {
@@ -292,34 +439,124 @@ describe("obs-capture-window", () => {
       fit: false,
     });
 
-    expect(requestData("GetInputPropertiesListPropertyItems").map(({ propertyName }) => propertyName)).toEqual(["window"]);
-    expect(requestData("SetInputSettings")[1]).toEqual({ inputName: "Terminal", inputSettings: { window: 402 } });
+    expect(requestData("GetInputPropertiesListPropertyItems").map(({ propertyName }) => propertyName)).toEqual(["window", "window"]);
+    expect(requestData("CreateInput")[0]?.inputSettings).toEqual({ type: 1, window: 402, show_cursor: true });
+    expect(requestData("SetInputSettings")).toEqual([]);
     expect(requestTypes()).not.toContain("SetInputMute");
     expect(requestTypes()).not.toContain("SetSceneItemTransform");
   });
 
+  it.each([undefined, "explicit-display"])("refuses Mac application auto-discovery before any mutation (display=%s)", async (displayUuid) => {
+    await startCaptureHarness();
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "App", application: "com.example.App", ...(displayUuid ? { displayUuid } : {}) });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/application.*discovery|application.*selection/i);
+    expect(requestTypes().filter((type) => /^(Create|Set)/.test(String(type)))).toEqual([]);
+    expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
+  });
+
+  it("does not enumerate unsafe strings even if native string-property serialization fails", async () => {
+    await startCaptureHarness();
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", ({ propertyName }) => {
+      if (propertyName !== "window") throw new FakeOBSRequestError(500, "UNSAFE_STRING_PROPERTY");
+      return { propertyItems: [{ itemName: "Owned window", itemValue: 88, itemEnabled: true }] };
+    });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Fixture", window: "Owned window", silent: false, fit: false });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(requestData("GetInputPropertiesListPropertyItems").map(({ propertyName }) => propertyName)).toEqual(["window", "window"]);
+    expect(requestData("CreateInput")[0]?.inputSettings).toEqual({ type: 1, window: 88, show_cursor: true });
+    expect(requestData("SetInputSettings")).toEqual([]);
+  });
+
+  it("refuses a nonpositive Mac window binding instead of selecting no window", async () => {
+    await startCaptureHarness();
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "None", itemValue: 0, itemEnabled: true }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Fixture", window: "None", silent: false, fit: false });
+    expect(result.isError).toBe(true);
+    expect(requestData("SetInputSettings")).toEqual([]);
+  });
+
   it("saves a snapshot before changing an existing capture", async () => {
     await startCaptureHarness();
-    inputs.push({ inputName: "Chrome", inputKind: "screen_capture" });
-    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [] }));
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
     harness.fakeObs.respondWith("GetInputMute", () => ({ inputMuted: false }));
     harness.fakeObs.respondWith("GetInputVolume", () => ({ inputVolumeMul: 1 }));
     harness.fakeObs.respondWith("GetInputAudioTracks", () => ({ inputAudioTracks: { 1: true } }));
 
-    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "chatgpt" });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402" });
 
     expect(resultText(result)).toMatch(/Saved the previous state as snapshot \w+; obs-restore undoes this change/);
+    expect(requestData("SetInputSettings")).toEqual([{ inputName: "Chrome", inputUuid: "chrome-source", inputSettings: { type: 1, window: 402 } }]);
+    expect(requestData("GetInputSettings").filter(({ inputName }) => inputName === "Chrome").some(({ inputUuid }) => inputUuid === "chrome-source")).toBe(true);
     const order = requestTypes();
     expect(order.indexOf("GetInputSettings")).toBeLessThan(order.indexOf("SetInputSettings"));
   });
 
   it("refuses an existing input of another kind", async () => {
     await startCaptureHarness();
-    inputs.push({ inputName: "Chrome", inputKind: "browser_source" });
+    inputs.push({ inputName: "Chrome", inputKind: "browser_source", inputUuid: "browser-source" });
 
     const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "chatgpt" });
 
     expect(resultText(result)).toContain("is a browser_source, not a screen_capture");
+  });
+
+  it.each(["window", "application"])("selects an X11 %s using OBS's encoded property value, without audio mutations", async (selector) => {
+    await startCaptureHarness("ubuntu");
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["xcomposite_input"] }));
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Editor", itemValue: "42\r\nEditor\r\nCode", itemEnabled: true }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor capture", [selector]: selector === "application" ? "Code" : "Editor" });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(requestData("CreateInput")[0]).toMatchObject({ inputKind: "xcomposite_input", inputSettings: { capture_window: "42\r\nEditor\r\nCode", show_cursor: true } });
+    expect(requestData("SetInputSettings")).toEqual([]);
+    expect(requestTypes()).not.toContain("SetInputMute");
+    expect(requestTypes()).not.toContain("SetInputAudioTracks");
+    expect(requestData("SetSceneItemTransform")).toHaveLength(1);
+  });
+
+  it.each([null, "0", "-1", "42bad", "42\r\nmissing-class", "4294967296\r\nEditor\r\nCode"])("refuses invalid X11 identity %s without any change", async (itemValue) => {
+    await startCaptureHarness("linux");
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["xcomposite_input"] }));
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Editor", itemValue }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor capture", window: "Editor" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("positive XID");
+    await expectNoCaptureWrites();
+  });
+
+  it("uses an existing nonnull XComposite no-selection inventory without changing its sentinel", async () => {
+    await startCaptureHarness("linux");
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["xcomposite_input"] }));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "xcomposite_input", inputSettings: { capture_window: "0" } }));
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Editor", itemValue: "42\r\nEditor\r\nCode" }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor capture", window: "Editor", fit: false });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(requestData("CreateInput")[0]?.inputSettings).toMatchObject({ capture_window: "42\r\nEditor\r\nCode" });
+    expect(requestData("SetInputSettings")).toEqual([]);
+  });
+  it("explains unavailable Wayland selection before making any mutation", async () => {
+    await startCaptureHarness("linux");
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["pipewire-screen-capture-source"] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor", window: "Editor" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("desktop portal picker");
+    expect(requestTypes().filter((type) => /^(Set|Create)/.test(String(type)))).toEqual([]);
+  });
+  it.each([true, false])("reuses an existing Wayland selection without retargeting it (apply=%s)", async (apply) => {
+    await startCaptureHarness("linux");
+    inputs.push({ inputName: "Editor", inputKind: "pipewire-screen-capture-source", inputUuid: "editor-source" });
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [{ sceneItemId: 2, sourceName: "Editor", sourceUuid: "editor-source", sceneItemEnabled: true, sceneItemTransform: { sourceWidth: 1512, sourceHeight: 949 } }] }));
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["pipewire-screen-capture-source"] }));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "pipewire-screen-capture-source", inputSettings: { RestoreToken: "granted" } }));
+    harness.fakeObs.respondWith("GetInputVolume", () => ({ inputVolumeMul: 1 }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor", backend: "portal", apply });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(requestTypes().filter((type) => /^(Create|SetInput)/.test(String(type)))).toEqual([]);
+    expect(requestData("SetSceneItemTransform")).toHaveLength(apply ? 1 : 0);
+    if (!apply) {
+      expect(result.structuredContent).toMatchObject({ applied: false, rendered: "unverified", selected: { kind: "existing-portal-selection", persistedSelection: true } });
+      await expectNoCaptureWrites();
+    }
   });
 
   it("refuses when OBS is not on macOS", async () => {

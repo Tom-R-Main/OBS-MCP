@@ -1,0 +1,760 @@
+{
+  "schemaVersion": 1,
+  "scope": "Default Rust protocol/read-only discovery lane with exclusive TypeScript compatibility handoff; opt-in persistent Rust service with 142 possible tools, a single-writer scoped receipt broker and fifty-seven closed mutation tools. The remaining 36 static tool routes and richer interfaces have no promoted opt-in owner. Default full cutover and Zig kernels are not claimed.",
+  "policy": {
+    "sourceFiles": "Every src/**/*.ts file is explicitly classified below. Production and tests are hashed separately by role; tests do not establish native runtime ownership.",
+    "nativeFiles": "Every project-owned native/src/**/*.rs, native/tests/**/*.rs and optional native/build.rs plus Cargo.toml, Cargo.lock and rust-toolchain.toml is hash-bound at seal. Dependency .cargo-home caches and target output are excluded. Inline cfg(test) modules are hashed but excluded from the narrow production placeholder check.",
+    "routing": "Each manifest tool is explicitly native-readonly, native-local, native-readonly-workflow or compat. Requests and closed implemented-handler maps define admission; adopting route changes requires --update --adopt-manifest-routes after review. TS remains compatibility authority even where native read-only request execution duplicates a narrow slice.",
+    "evidence": "A seal detects drift and inventory omissions; it does not prove semantic parity, absence of all stubs, performance, delivered packaging, or native OBS behavior. Required differential and package checks remain separate.",
+    "manualSnapshots": "Opt-in LIST/CAPTURE only; obs-restore is not native-owned. The sole snapshot history owner is retained through actual publication. Snapshots are ordered observations, not an atomic OBS transaction or Stage receipt. Missing/replaced established history, corrupt JSON, unproven locks, unsafe paths, byte capacity and publication uncertainty refuse explicitly. Native never renames corrupt history away or steals an old lock based on age; these are conservative differences from the predecessor. Source read-only classification permits capture during a take; snapshot file publication borrows no recording receipt writer. The default owner caps history at 8 MiB and concrete capture at 4096 requests per batch, with the Service absolute deadline. Blocking filesystem calls are joined; a deadline does not prove a hard kernel-I/O latency bound.",
+    "propertyEnumeration": "Dedicated guarded adapter only; absent from RawReadRequest. Reported source kind governs the exact predecessor guard; ScreenCaptureKit display_uuid/application always refuse and XComposite capture_window requires a nonempty string, while integer window properties skip the unsafe settings probe. Native additionally refuses changed canonical evidence at actual dispatch/result publication, without retry. Optional nullable arrays of record items preserve every valid response field; malformed shapes reproduce Source SDK output-validation messages within a 32 KiB diagnostic limit, above which native refuses explicitly."
+  },
+  "contractManifest": {
+    "path": "native/assets/tools.json",
+    "sha256": "8cb4b07c6b2ad0917494ad8e6f25bfdda19858f69dd048bc4f87734fa2a2280f"
+  },
+  "protocolRoutes": {
+    "server/discover": "native-readonly",
+    "initialize": "native-readonly",
+    "tools/list": "native-readonly",
+    "prompts/list": "native-local",
+    "prompts/get": "native-local-qualified-arguments",
+    "resources/templates/list": "native-local",
+    "other-methods": "compat-exclusive-handoff",
+    "resources/list": "native-readonly-qualified-inventory"
+  },
+  "sourceOwnership": {
+    "src/client.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/client.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/http.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/index.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/logger.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/logger.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/obs-config.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/obs-config.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/obs-protocol.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/obs-protocol.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/server.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/state-dir.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/after-change.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/after-change.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/apply-scene.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/apply-scene.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/audio-only.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/audio-only.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/batch.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/capture-backend.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/config.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/confirm.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/confirm.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/demo.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/demo.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/filters.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/frame-sample.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/frame-sample.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/general.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/guards.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/index.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/inputs.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/lease.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/lease.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/media-inputs.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/media-verification.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/observation.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/observe.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/operation-receipts.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/operation-receipts.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/output-schema.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/output-schema.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/output-start.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/output-start.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/outputs.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/preflight.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/preflight.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/production.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/prompts.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/protocol-extensions.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/protocol.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/record.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/request-tool.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/resources.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/resources.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/results.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/results.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/scene-audit.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/scene-audit.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/scene-identity.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/scene-items.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/scene-template.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/scenes.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/screenshot.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/snapshots.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/snapshots.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/sources.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/stage.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/streaming.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/take-monitor.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/take-monitor.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/takes.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/takes.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/tool-inventory.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/tools.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/toolset-tools.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/toolset-tools.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/toolsets.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/toolsets.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/transitions.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/trim.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/trim.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/ui.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/workflows.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    },
+    "src/tools/workflows.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/version.ts": {
+      "role": "production",
+      "owner": "compat"
+    },
+    "src/tools/media-verification.test.ts": {
+      "role": "test",
+      "owner": "compat"
+    }
+  },
+  "toolRoutes": {
+    "obs-apply-scene": "compat",
+    "obs-audit-scene": "native-readonly-workflow",
+    "obs-batch": "compat",
+    "obs-broadcast-custom-event": "compat",
+    "obs-call-request": "compat",
+    "obs-call-vendor-request": "compat",
+    "obs-capture-window": "compat",
+    "obs-claim-control": "compat",
+    "obs-contact-sheet": "compat",
+    "obs-control-status": "compat",
+    "obs-create-input": "compat",
+    "obs-create-profile": "compat",
+    "obs-create-record-chapter": "compat",
+    "obs-create-scene": "compat",
+    "obs-create-scene-collection": "compat",
+    "obs-create-scene-item": "compat",
+    "obs-create-source-filter": "compat",
+    "obs-describe-request": "native-local",
+    "obs-duplicate-scene-item": "compat",
+    "obs-get-canvas-list": "native-readonly",
+    "obs-get-current-scene": "native-readonly",
+    "obs-get-current-transition": "native-readonly",
+    "obs-get-filter-default-settings": "native-readonly",
+    "obs-get-filter-kind-list": "native-readonly",
+    "obs-get-group-list": "native-readonly",
+    "obs-get-group-scene-items": "native-readonly",
+    "obs-get-hotkey-list": "native-readonly",
+    "obs-get-input-audio-balance": "native-readonly",
+    "obs-get-input-audio-monitor-type": "native-readonly",
+    "obs-get-input-audio-sync-offset": "native-readonly",
+    "obs-get-input-audio-tracks": "native-readonly",
+    "obs-get-input-default-settings": "native-readonly",
+    "obs-get-input-deinterlace-field-order": "native-readonly",
+    "obs-get-input-deinterlace-mode": "native-readonly",
+    "obs-get-input-kind-list": "compat",
+    "obs-get-input-list": "compat",
+    "obs-get-input-mute": "native-readonly",
+    "obs-get-input-property-list-items": "compat",
+    "obs-get-input-settings": "native-readonly",
+    "obs-get-input-volume": "native-readonly",
+    "obs-get-last-replay-buffer-replay": "native-readonly",
+    "obs-get-media-input-status": "native-readonly",
+    "obs-get-monitor-list": "native-readonly",
+    "obs-get-output-list": "native-readonly",
+    "obs-get-output-settings": "native-readonly",
+    "obs-get-output-status": "native-readonly",
+    "obs-get-persistent-data": "native-readonly",
+    "obs-get-preview-scene": "native-readonly",
+    "obs-get-profile-list": "native-readonly",
+    "obs-get-profile-parameter": "native-readonly",
+    "obs-get-record-directory": "native-readonly",
+    "obs-get-record-status": "native-readonly",
+    "obs-get-replay-buffer-status": "native-readonly",
+    "obs-get-scene-collection-list": "native-readonly",
+    "obs-get-scene-item-blend-mode": "native-readonly",
+    "obs-get-scene-item-enabled": "native-readonly",
+    "obs-get-scene-item-id": "native-readonly",
+    "obs-get-scene-item-index": "native-readonly",
+    "obs-get-scene-item-locked": "native-readonly",
+    "obs-get-scene-item-source": "native-readonly",
+    "obs-get-scene-item-transform": "native-readonly",
+    "obs-get-scene-items": "native-readonly",
+    "obs-get-scene-list": "native-readonly",
+    "obs-get-scene-transition-override": "native-readonly",
+    "obs-get-source-active": "native-readonly",
+    "obs-get-source-filter": "native-readonly",
+    "obs-get-source-filter-list": "native-readonly",
+    "obs-get-source-screenshot": "compat",
+    "obs-get-special-inputs": "native-readonly",
+    "obs-get-stats": "native-readonly",
+    "obs-get-status": "compat",
+    "obs-get-stream-service-settings": "native-readonly",
+    "obs-get-stream-status": "native-readonly",
+    "obs-get-studio-mode": "native-readonly",
+    "obs-get-transition-cursor": "native-readonly",
+    "obs-get-transition-duration": "native-readonly",
+    "obs-get-transition-kind": "native-readonly",
+    "obs-get-transition-kind-list": "native-readonly",
+    "obs-get-transition-list": "native-readonly",
+    "obs-get-transition-settings": "native-readonly",
+    "obs-get-version": "native-readonly",
+    "obs-get-video-settings": "native-readonly",
+    "obs-get-virtual-cam-status": "native-readonly",
+    "obs-observe": "compat",
+    "obs-offset-media-input-cursor": "compat",
+    "obs-open-input-filters": "compat",
+    "obs-open-input-interact": "compat",
+    "obs-open-input-properties": "compat",
+    "obs-open-source-projector": "compat",
+    "obs-open-video-mix-projector": "compat",
+    "obs-pause-record": "compat",
+    "obs-plan-scene-template": "native-readonly-workflow",
+    "obs-preflight": "compat",
+    "obs-prepare-demo": "compat",
+    "obs-press-input-property-button": "compat",
+    "obs-record-clip": "compat",
+    "obs-recover-demo": "compat",
+    "obs-release-control": "compat",
+    "obs-remove-input": "compat",
+    "obs-remove-profile": "compat",
+    "obs-remove-scene": "compat",
+    "obs-remove-scene-item": "compat",
+    "obs-remove-source-filter": "compat",
+    "obs-restore": "compat",
+    "obs-resume-record": "compat",
+    "obs-save-replay-buffer": "compat",
+    "obs-save-source-screenshot": "compat",
+    "obs-send-stream-caption": "compat",
+    "obs-set-current-profile": "compat",
+    "obs-set-current-scene": "compat",
+    "obs-set-current-scene-collection": "compat",
+    "obs-set-current-transition": "compat",
+    "obs-set-input-audio-balance": "compat",
+    "obs-set-input-audio-monitor-type": "compat",
+    "obs-set-input-audio-sync-offset": "compat",
+    "obs-set-input-audio-tracks": "compat",
+    "obs-set-input-deinterlace-field-order": "compat",
+    "obs-set-input-deinterlace-mode": "compat",
+    "obs-set-input-mute": "compat",
+    "obs-set-input-name": "compat",
+    "obs-set-input-settings": "compat",
+    "obs-set-input-volume": "compat",
+    "obs-set-media-input-cursor": "compat",
+    "obs-set-output-settings": "compat",
+    "obs-set-persistent-data": "compat",
+    "obs-set-preview-scene": "compat",
+    "obs-set-profile-parameter": "compat",
+    "obs-set-record-directory": "compat",
+    "obs-set-scene-item-blend-mode": "compat",
+    "obs-set-scene-item-enabled": "compat",
+    "obs-set-scene-item-index": "compat",
+    "obs-set-scene-item-locked": "compat",
+    "obs-set-scene-item-transform": "compat",
+    "obs-set-scene-name": "compat",
+    "obs-set-scene-transition-override": "compat",
+    "obs-set-source-filter-enabled": "compat",
+    "obs-set-source-filter-index": "compat",
+    "obs-set-source-filter-name": "compat",
+    "obs-set-source-filter-settings": "compat",
+    "obs-set-stream-service-settings": "compat",
+    "obs-set-studio-mode": "compat",
+    "obs-set-tbar-position": "compat",
+    "obs-set-transition-duration": "compat",
+    "obs-set-transition-settings": "compat",
+    "obs-set-video-settings": "compat",
+    "obs-sleep": "compat",
+    "obs-snapshot": "compat",
+    "obs-split-record-file": "compat",
+    "obs-stage-scene": "compat",
+    "obs-start-output": "compat",
+    "obs-start-record": "compat",
+    "obs-start-replay-buffer": "compat",
+    "obs-start-stream": "compat",
+    "obs-start-virtual-cam": "compat",
+    "obs-stop-output": "compat",
+    "obs-stop-record": "compat",
+    "obs-stop-replay-buffer": "compat",
+    "obs-stop-stream": "compat",
+    "obs-stop-virtual-cam": "compat",
+    "obs-take-mark": "compat",
+    "obs-take-scene": "compat",
+    "obs-take-start": "compat",
+    "obs-take-status": "compat",
+    "obs-take-stop": "compat",
+    "obs-test-connection": "compat",
+    "obs-toggle-input-mute": "compat",
+    "obs-toggle-output": "compat",
+    "obs-toggle-record": "compat",
+    "obs-toggle-record-pause": "compat",
+    "obs-toggle-replay-buffer": "compat",
+    "obs-toggle-stream": "compat",
+    "obs-toggle-virtual-cam": "compat",
+    "obs-trigger-hotkey-by-key-sequence": "compat",
+    "obs-trigger-hotkey-by-name": "compat",
+    "obs-trigger-media-input-action": "compat",
+    "obs-trigger-studio-transition": "compat",
+    "obs-trigger-transition": "compat",
+    "obs-trim-take": "compat"
+  },
+  "sealed": {
+    "at": "2026-11-01T09:17:05.913Z",
+    "sourceRevision": "addbf9c389f1fc9e3402c2633b6351cce0bf0a44",
+    "sourceHashes": {
+      "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
+      "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
+      "src/http.ts": "63d484c73194b3b17001df3838f34c497e23bad5d53d20235a6f7ff7ecab2e6b",
+      "src/index.ts": "d1a31ab6fa3abeac77d65c71feb7af97d855b1ca08a938281255ca91dcee20cc",
+      "src/logger.test.ts": "2b9b6925008cec5fe14ad7e79d14cf10dc15664c622d5a683eeb42a4b36c9b27",
+      "src/logger.ts": "1dd613cda9fec592ded78fe4ccaaa9f737105fec3dc7fb3071aa459799739768",
+      "src/obs-config.test.ts": "073c323c1e893ded2ff72ccd6636a8949fe22c9c5472b4719dde6c82211200e1",
+      "src/obs-config.ts": "80ef26709e86bcd85801f9878e18be7191f1eab1d73a95270e06ccba24cdce04",
+      "src/obs-protocol.test.ts": "636471427cfaf7234df44606017d324dba284f43404ad4169d61b52af9ceea13",
+      "src/obs-protocol.ts": "bf7ad3df24f5c950c0ee15409227300463355f7074de28b12fb30db119e9c8e7",
+      "src/server.ts": "bdecfde3a0aa4862e4384011518d6ef3efeeee8d967e9781068294fbcb419afc",
+      "src/state-dir.ts": "5ea6822fc2ae3f4aeb4476ee743d97e1fc4408344bef796ddc364854372bb62e",
+      "src/tools/after-change.test.ts": "2992c0d1e80bfb2e8362dfccfd96627461d08efbe7f6cb1182f1f72f698f0d16",
+      "src/tools/after-change.ts": "e48f95d62ee31a7a77f050b4f25da085a37c73aa794674066932148892fa0e58",
+      "src/tools/apply-scene.test.ts": "92b543515e64a2369e7723a23e92972110d785cde20890e96e66083381f48ff8",
+      "src/tools/apply-scene.ts": "b30b87144a9c3594a93981d0b933b379872effc116f2dc455e5212e5c0bca1c4",
+      "src/tools/audio-only.test.ts": "0055069c32d93d3e638ecd2ec5036c0531b1753efec61e40b4f48670988cc45d",
+      "src/tools/audio-only.ts": "9e48909632eeb515f7e87e37b935672a563c7b828116d00273d7f9ec203698f8",
+      "src/tools/batch.test.ts": "750a25fbc67063fa0df3efa349c9e478978fb494f07b8698e92b2ed89b11e481",
+      "src/tools/capture-backend.ts": "f2cdb0f31b3b72ce0c766efd6d89685ce88d834d83f9b36377a585e042f87c23",
+      "src/tools/config.ts": "2a95c8cb509c7f31e0716ece1021721fccbcc67126ffee9483e40d65a6349e0d",
+      "src/tools/confirm.test.ts": "c6bee0b5ecc68dcaf67823607ff1b6c12a14d2b838906f2c2be23cd53e81123f",
+      "src/tools/confirm.ts": "b6bc1cdccc196dadbef59d254c5a07aa63050f55fcdb8cd9627a87db5227cc13",
+      "src/tools/demo.test.ts": "b6132b1e37b7f8910f33496e0d183f0ed1a08b66bf920fdf1b1c5e3f6019bd17",
+      "src/tools/demo.ts": "14e8b70b7b70cbf1aa4cd0c3a06cacdc6c0476d132cac51ef8cf8cd89e830380",
+      "src/tools/filters.ts": "49e9e167c55616619f4831adf7b12f155220394a2aa7d1d6f563046aeac9aa4a",
+      "src/tools/frame-sample.test.ts": "834bcde37fbe4b662c98fa10854311627989e5b46dbe20942e2e4701750cf132",
+      "src/tools/frame-sample.ts": "cfeadd0be5862ad9fbf5181e1e80f61e6c5c561c113076723b6bfbe368ffb051",
+      "src/tools/general.ts": "2f86fba793803346caa048ad75b09a80dc7ae7caac6266839acc2a5bd6c8270e",
+      "src/tools/guards.test.ts": "2597569da645dc1f43dcebc963b21d6d8bac7b33bdc0d3c58b26e663ffc780f7",
+      "src/tools/index.ts": "307b3279adb2c13e29bf9f1b3dd137efed1a198c11512c02a43a8a8cb5187271",
+      "src/tools/inputs.ts": "49e06f1d53e1b80dc56ae89cc123a824fe2097f2494f730356c24109d96938ea",
+      "src/tools/lease.test.ts": "611cf91c7c53334b0d5e59db1200bbe132eca2decb5ce303298184dacd9d7c7e",
+      "src/tools/lease.ts": "cf00499b8cf60fc3a89767101c000d518b347517f92ade3e3e9adba898df3378",
+      "src/tools/media-inputs.ts": "235d245332de718f02b40b7394146f9d09ce3bb98aa5de6c804ef85d00fdb3f1",
+      "src/tools/media-verification.test.ts": "025b4ddad1c24568cf418589c3c658c365203726c78ccebb3119661035399c89",
+      "src/tools/media-verification.ts": "1ef402cb920b4e550a67fde2d70f027b3f47aec49fed7ce0939d018b35aaaf32",
+      "src/tools/observation.ts": "49a9e6931ff4ed939027de0e8fa79e664cbab48a1f6820aef4cefee37c34980c",
+      "src/tools/observe.ts": "266ef7a60b7096a3faf9178346769939a6b904c36acc104e67170ad6c70af107",
+      "src/tools/operation-receipts.test.ts": "de274ae8e5612a12417428e37cea8895fd7c7aa3e12b48d529ee7a4925a7784c",
+      "src/tools/operation-receipts.ts": "279765b6370bd3ea040f5e1d71eb1c1a151f798a71a5abbba077468953da0551",
+      "src/tools/output-schema.test.ts": "9cd5aa6dc048452c42da45933e01d4660837afe337365d6556ac1d085a6db954",
+      "src/tools/output-schema.ts": "6b2543cea39fd14259d500d257841767e5e7cfc49b1f7955e13c577e3cdabb39",
+      "src/tools/output-start.test.ts": "bc5df4880222ec39f4e5f8273bff3654af643d0da53ab77c422d99fdbc90b803",
+      "src/tools/output-start.ts": "da3d6815ffcd999486abbb240ffbf7b0b1b391e055ee2c653bf82cc612970a50",
+      "src/tools/outputs.ts": "c64bc1c2281e22993aa5353ab4470c2d7b29dabed78cdb5d16b37fa1d3c3f887",
+      "src/tools/preflight.test.ts": "e5df310f276183118d6a4122afb8f80576000c4b215bf25f71013fa6a0ed2eb1",
+      "src/tools/preflight.ts": "a8b0685f976646d92bf487ca1729a1f5c0262a4bb781491e27fd629a240b8b8a",
+      "src/tools/production.test.ts": "116abc80ad13411c5831cb965a4a29b81fc40bb3841ce0871b061af3ae2d86cb",
+      "src/tools/prompts.ts": "036955451123cd894891b2e08302b94c280299ec1acbff8e38b2e3c927484801",
+      "src/tools/protocol-extensions.ts": "47e425525b8070383d7cca70c0cf4c9728ca5381b20b74c82722c071b33e0c6f",
+      "src/tools/protocol.ts": "ddba8c7051827b4792f102886d64b17b5984edcbdcb6a932df81d00062124bd6",
+      "src/tools/record.ts": "ad1b2123bc83d2e3753295ee11649891d024e01d33ddd092d8761bef1a6e5c4a",
+      "src/tools/request-tool.ts": "9ea79e8befc40ec347ecab2b1a280c46033076b5d6ccbc5f3efb76cf6c7afcc0",
+      "src/tools/resources.test.ts": "7838a58a3bd38e2f823d0c8b43bb4b110b6278241ea720ba1083b46d1e03388c",
+      "src/tools/resources.ts": "337ff26f5dedbc589471e686ec351744c7a56ca35bdcabad6fded780c769833d",
+      "src/tools/results.test.ts": "d7884b3887dba75e0857c1ce724eb530ca5be07f6382c92961de77570d2c486d",
+      "src/tools/results.ts": "f64fac8889de31d78971a20d3bad2ac7bea524d3901ad98d8ee7854900172b38",
+      "src/tools/scene-audit.test.ts": "5573b1ef11046e52c595a3ff1f7630e3e0284a95baac457f6961b444ed413ac3",
+      "src/tools/scene-audit.ts": "9a583d65952780ce1fd791c14e9c4580c3b7db6f447cf3a0bb734d448bbc73d7",
+      "src/tools/scene-identity.ts": "5ab5d71944e8b879d39ab2e80f10ebea2e5b732ddc81d613b8c6a98d4289967d",
+      "src/tools/scene-items.ts": "d21b4e9ddaa251fdd255d21fcd07a9a2e67e8b77631c0b71427a04e3ae31c9a3",
+      "src/tools/scene-template.ts": "e7b3acb494a66efa71f7e0c0e7e75d90cbb186e126e31af8b621e680bbc577b0",
+      "src/tools/scenes.ts": "dcb6a20961b0d95d0206f2ca635e18836344af518eb2523035acae2f927ce344",
+      "src/tools/screenshot.ts": "2f1a8abcc485e36bbcac39c4361a16384fe14069d37fbdf783fd675d1da2d53c",
+      "src/tools/snapshots.test.ts": "2eb2e5cf1dabfe072c3cf073fba37f1b2ee2de4307cea3eab97f321dc6dc94dd",
+      "src/tools/snapshots.ts": "cead64647e4e72fdf8f9092d94fad6075a3ef46f1f7c6ba4baf8880034269872",
+      "src/tools/sources.ts": "3c2f405079a8994543154177f1136531d8324bf3a0285217a5b448f7adae7dca",
+      "src/tools/stage.ts": "e07db1992240d1b5b3ff437d1892f0951672c6c571a8d1c0c0257f63363a18a3",
+      "src/tools/streaming.ts": "c667b025fff4e8205b868dbb20a982b690668934320cc4eec392ef3d36d046cf",
+      "src/tools/take-monitor.test.ts": "0629c5e394dade626a11309ee61bae9465847e1b5f79668232f1b8c020a74ee2",
+      "src/tools/take-monitor.ts": "1a2a4ef40c0eacbeb09d8e81cb7e6765cefbf0cafb2e48b19a3b286948fa0b87",
+      "src/tools/takes.test.ts": "7c49a3cf6ba3aa99f0d484b79c2e30c93c7aa99ccb9bc276d352fba9a7ce702b",
+      "src/tools/takes.ts": "e5716a0cf56996716ad1a3555248a8199f78b5ad4fdc7e59357c1b5b78b210cf",
+      "src/tools/tool-inventory.test.ts": "237ebfd4c2628f48abb9a99057eebd79b93a2f019b63760a9ea4655276682c44",
+      "src/tools/tools.test.ts": "e3f1e0b3cc32cfb73f49c88d3fc15d414ac39604c055faf9992def6ffe046317",
+      "src/tools/toolset-tools.test.ts": "2b05d6d1c8d9988dde9d90cc3270815b846f53f1fe6696269f7063a66ab2ef75",
+      "src/tools/toolset-tools.ts": "f82328757e4894e889bbaec2384dbd6539e8b3074754d68c85cbb211e52906f2",
+      "src/tools/toolsets.test.ts": "f1af10634244d8da5c2a3ad014aaad4e7616522b50ef67194922977e0a64c46e",
+      "src/tools/toolsets.ts": "597390c523f1599f1a36f0667df4f9d7b2c595f9498cd9cda39e91d63cbf3945",
+      "src/tools/transitions.ts": "abcba3eb2a40a2c0fe4ceec2c12711c9b77867aa2e8ab80488bb75752cd45f1d",
+      "src/tools/trim.test.ts": "fbe5eec87a7dc68156c3a1876b0cd7a0caaef6fed1880639d7380fb753ead7b3",
+      "src/tools/trim.ts": "ca33c614604d23294908c34badd8f181743e51d1e37458d7ac0e13cc86155e58",
+      "src/tools/ui.ts": "5fe9fe66338f2699be27ffbceacd52d1711f98effb5114cff56ded1d7339b8f3",
+      "src/tools/workflows.test.ts": "3e78c7514bdaee78f7b5cd0857d41ce3c774374a24ff2537acb8596a14df38ee",
+      "src/tools/workflows.ts": "02c92131a23bdec043c60f5f9b257ee2377a901756ed88466de7774882e0a12c",
+      "src/version.ts": "bbef8732b48ecc26610a319093df0a3c6d12f59d1f1c89f0f636c5918d0a53b3"
+    },
+    "nativeHashes": {
+      "native/src/capture_backend.rs": "6cb5f7338576f37e5323e21df34492e0dff8e0b47ac5058fd2096c2ad4728e66",
+      "native/src/clock.rs": "49ab4018f32597bf4236ee311285459aec0414c14c19b72b242b196d2cabc2f9",
+      "native/src/compat.rs": "a362d5cdcafe355c15f7b20f372f5db2d4fca4b5547630767a0f22320e599229",
+      "native/src/config.rs": "63e6eac77da7c5e1f586e5f6d9987081294d8bdf5475024cca69a1a9596ed0b3",
+      "native/src/control.rs": "19453537c47d0f8ee390ececb9eb3456ac5d919e621f5ee93344dd6dca4d6677",
+      "native/src/custody.rs": "9ebb1004005940e6f6a1b5e036eff08b36611cdd06d7ddcb2f01e781f865daf6",
+      "native/src/custom_mutations.rs": "145c74ace1ef344ed6fc997eb6e7db64400eba3875835329971b3e57b3a0e7aa",
+      "native/src/demo.rs": "bf3f3fee4cabe0232a17c79c1c66a893e33012787f114f63fcff268ea0100e78",
+      "native/src/demo_transport.rs": "9ad2ddcb35480e50afab6f889c0e7432d6674bb020181ddb6ad38cc79ddde4a9",
+      "native/src/generic_requests.rs": "883796bae3903fd7fd8731280a91d0a95d993f199304798fa695130dceefea3e",
+      "native/src/identity.rs": "c1ae69be0c0542cc93d80f3e8f6989d830fb0cfffb926c84a0b75d9aabe84028",
+      "native/src/js_json.rs": "df66ecb286720f06ec24c217cddb704e439c2b8bd0072ce66d964d5340770c48",
+      "native/src/lib.rs": "6b7def2bf092f27f8a8a92347503d1d61fccb893642016b0d2eb5233c31796d6",
+      "native/src/main.rs": "e0dd928df80b0f6afb8ab3518473e71ece1ab0ccf3983d4d6b3d5f489bdd5621",
+      "native/src/media_backend.rs": "91130d9658f0e0337ba9fa51c2fcf387c18da2de42226ebf98d3c9a20775394e",
+      "native/src/media_tools.rs": "20ea87a19e994068dae24921cbb912475495d3d747efbc9788fd40b847f30087",
+      "native/src/media_verification.rs": "b31e31a5afc4841ee08fe1a7d9b083c47728f1ddf61c473c09e7ed72fdaf04c6",
+      "native/src/native_service.rs": "6600d510425e89bdd594eb616b0281dae46ea70458133b0f71c05272f43ae343",
+      "native/src/obs.rs": "80f0bf6ddcbc01eb99abf1f0048afaf731fd4916e39b465d4246a31f12759ad0",
+      "native/src/observation.rs": "e7708101677c1f682623c863850436e05efc31f1e98175ffc0d10ea02e905058",
+      "native/src/operation_store.rs": "73da46aeff44284e57ef8b2fe49ff1b5b216c27ea2e727ed105902b96fdc0e3f",
+      "native/src/ordered_transform.rs": "8188985106b0f4c313b4863c1338290c0f811dcc5dd8b41135f4697bf02c481a",
+      "native/src/output_start.rs": "c094ea38816770145fc88f07d7fa8acd271b57863e087d829cb172e840b7d5c1",
+      "native/src/preflight.rs": "007eaeb2bf358a1380bc154a01e04861e4924266c2fc535e4fd4bc8720917342",
+      "native/src/preparation_journal.rs": "5124bd642bd8e279c94b0d649f6eef4f98b78860237194559d4b21df8c4c7dc8",
+      "native/src/production_observation.rs": "0a1ca3d95a25b80deb7f90fd2ec39956a50cd7301ace402be36fe1f22a7405e8",
+      "native/src/prompt_catalog.rs": "c16a9f1f294882d0e01c2a4dfd6e1b32ee0bb28beeef86689a4731d0294ab3af",
+      "native/src/property_list.rs": "76857f023ab0d2659c9018dedd32fc35aa015efe46751b000b8559172d1dc8c1",
+      "native/src/protocol.rs": "dbda6051b725164601ccb28555f6704ed37312187cb9c38bdcb61dd00b91b550",
+      "native/src/protocol_catalog.rs": "d1327959ff44345614abc95c413da81a7aba99b0235c0f7949dfbbcbcc3cd52d",
+      "native/src/read_workflow.rs": "2fc3a72b0b73255bef8e56aad5212449952a0597d46a903eae222b906eaa193e",
+      "native/src/receipt_broker.rs": "9a5b19c612df4108d91acb3a3f9599e9d2cc8a71d55e61b095c03cae7f859043",
+      "native/src/resource_catalog.rs": "dc1493741f67582d09bb3169c2d8fd3220a3c9e86cc57e13292a94455b2669fc",
+      "native/src/runtime_identity.rs": "7ff71fbd99ec5c5c089e37259641eec3b722fa7815882d0284572a65a211e2e5",
+      "native/src/scene_audit.rs": "bcb5a8b23b26b7d6921b6248d40c8b5588dc703e21361f914134c77a2c125b70",
+      "native/src/scene_item_transform_mutation.rs": "002545c8e73f56bbd29e7366a819b6c098e51087cd9a7a93f2316aebdb0346ec",
+      "native/src/scene_plan.rs": "cc990bbc8203bd8f640c3cf9d25e810030ebdb6d1ed2564f640d750040f7f4b9",
+      "native/src/schema.rs": "5f63b1d0c343d1626bae48f0f84c304e713cfb4ea0f4447189e41010953c4286",
+      "native/src/service.rs": "f636683701080126b5c3779eabecc5986028894204ce64d14fab13b538944848",
+      "native/src/service_events.rs": "93a3788f90dca0cbcf7f98c9c169ed5e04558dc30189667ac73aa94164249d01",
+      "native/src/service_read_tools.rs": "8c9af46e55d4dc8be66e53b058f48b9ce5c51f92c45bd86e163e61f31e783ec0",
+      "native/src/service_read_workflows.rs": "7198354957d3e6c75c6143353892b62e1f1de4ea4433782aeed3a47e65baaeba",
+      "native/src/session.rs": "f08a2207d2cc2a8efdee609328517ee503eb4d88d040142c25ce1853d26257d3",
+      "native/src/session_observation.rs": "35a484318de4aa298ee9626c43cd4929f88bb024e1785821d15b28106df5971b",
+      "native/src/snapshot_tools.rs": "b0cd643915fcab0781be4c5fd9dc993d8850f44d14b78b3e9b13d52a7504376b",
+      "native/src/snapshots.rs": "23f033d021d7d994ea5b59a8960b07cbdc347ff910847a320929b06459e2f987",
+      "native/src/stage.rs": "1a3e2ec7628f286790fe56e356cd3641ffa1b208460b08d23c657d7eca784045",
+      "native/src/stage_transport.rs": "b72ade1b2516c8b3d3e64393f404d8cac886f569879d58acc35f2b5094c92f65",
+      "native/src/take_monitor.rs": "913fb0fab061b5c02ccd92175ebf8631af99ef44e48086f14c5525d67d4ee442",
+      "native/src/take_transport.rs": "2071ef5a853908f636e575201d100e1299fc101d3eb80e70a38afb2afbac60e1",
+      "native/src/takes.rs": "f033879f7238fb1c7cc522dbeeb2471d47c3b8deaa0e9d0797d7dfdaaecd016e",
+      "native/src/tool_filter.rs": "fc3d1d0221e9bf13e137170871026ddadcaf5c3da7e23f146a676d9012b5eb81",
+      "native/src/tool_validation.rs": "c69d1d2b65be5b73a3b33a7f9b9917d4b44efe40f1a99af5a64c1932530c2c5d",
+      "native/src/trim.rs": "ae9d327c9ba3656e02db0b5748694f643e24ca488599a6c16cd4e86170ccfd8e",
+      "native/tests/cancellation_contract.rs": "bf2a1ad16dc685f91ab3fc901044d0ac4110202adbd401c57f0e10f7cff8bd9e",
+      "native/tests/clock_contract.rs": "8703ab675f242b44769c4f4d61e163ec40cabd341f063dc845a8a3cfa4470742",
+      "native/tests/config_contract.rs": "fb04cd405dc0ffa5c3c648b747cd2bd7904ff1fb787965cb6cf5c203fc48a1a8",
+      "native/tests/control_contract.rs": "79b796a1caa629a2de4d1079cda6e45b84eca77466320131bb5f9f2922f6964d",
+      "native/tests/control_sdk_contract.rs": "0b665849e3e290d2912f755571397c8c53447f837beb2c4296e1b1d7bf4ae821",
+      "native/tests/custody_contract.rs": "5dff0fadee98d6ee256252569b44fe4d70de70ddc7dcc9651a0e36d338e57b90",
+      "native/tests/custom_input_contract.rs": "2efefe437bd668676185e203b53c2dfb0e4cf9e557000843917a1c8cb1f73b86",
+      "native/tests/demo_contract.rs": "0f6a7c558233c4a90cbd5ede5dffa89a81991153c1a2961ccd3374f79410a6ef",
+      "native/tests/demo_transport_contract.rs": "0c2f932b90b6ce0f6f9f8c87858d8847f3807bc27ce1842961b937f1bcdf3f74",
+      "native/tests/error_projection_contract.rs": "ba4cd63f2bb04cff7835618eca5ebb7791649b3a9847c40d8bb001be82e782fc",
+      "native/tests/generic11_contract.rs": "e3e4ec7fa085a0018f37742cbdc1c4fcdd618ccc1db0899dea9f7c330d7b329d",
+      "native/tests/generic20_contract.rs": "2f77c2c79060315df742fd45a0f3cb7121d8a4b67d8da226a23d2869f95a1181",
+      "native/tests/generic6_contract.rs": "4c605a41ed118fb7e0345c2f8f073f9be95abd57095211a68140e2192d8c34f0",
+      "native/tests/generic8_contract.rs": "a3c5efe445094d9931e5b66ccb28f3494a61c96525165a6830251f84673f8ea3",
+      "native/tests/input_receipt_contract.rs": "1de4021797877d6fe5bbaa094725ec08511d43c154e1e0873318f358e66410f9",
+      "native/tests/json_number_wire_contract.rs": "6728b7df662712b194f47a5261dd44c8119659ef7d5918553b6ac40350e2cb54",
+      "native/tests/media_backend_contract.rs": "dba58f3895ce7cad09eb1b1f104ae9ffb103264526e57821138d053140654949",
+      "native/tests/media_capture_contract.rs": "ceb4f8343d49e5fdd599a4efe72c96ce3aa5330d637d5c92d8bf2a2a4afef6f2",
+      "native/tests/media_tools_contract.rs": "db2f146bee7e1d7473b6f9e52d42a8a9df6ccee14f5ee1b7fcba59768f40d52a",
+      "native/tests/media_verification_contract.rs": "409b0b4549c5876582e7bf594bd507b105a3f0331bfd064e59aa4c7a2705cba1",
+      "native/tests/operation_store_contract.rs": "feb74857385ec4b796ad60a4800bc29891832249748cc6de05728bcce8b64cf5",
+      "native/tests/operation_view_contract.rs": "8d46543eb70096aaa6df2b185b23654b1d2fecbf9becbd9b50dc27d5ca46a176",
+      "native/tests/ordered_transform_contract.rs": "9bb8b212cca09772cf46b093cca64c07dc895a855213fb86291bc12c9c804c52",
+      "native/tests/output_start_contract.rs": "017efd1cf85c7d1efa224030e66c5f1b66ee243ada175ec8ea4adddce3d359e5",
+      "native/tests/preflight_contract.rs": "d85c2deca15af608847fab8d0014e5f216c589b8385560b2e99ddc49c86389c6",
+      "native/tests/preparation_journal_contract.rs": "ac78d6de8645277d9684c8511194d61e3c00e12066ef0ee8395a2a1d0c298ab1",
+      "native/tests/production_observation_contract.rs": "9c15caf73b4694379033a0a44d5f3a434503365d82cb6b0df3d4ce4450885b95",
+      "native/tests/property_list_contract.rs": "fe0e575106f4283bbd94ccd670a43c8b8cd8ddddb1b70cdf19d5ec3078deff5b",
+      "native/tests/read_request_contract.rs": "a80b9047abfbd7533acdb43d4ebd31cb8f42fc9407e6990c78fd3c7cdd870de7",
+      "native/tests/receipt_broker_adversarial_contract.rs": "b5b34fd3e49374d6d56c00ce1de84e69e84f9a0b8e791880b2c9ff5af4f33d81",
+      "native/tests/reserved_stop_contract.rs": "a481cd1996cc330cd197256522592789db0e989f0a249cfbd159f5f9ac0c030b",
+      "native/tests/runtime_state_contract.rs": "daa894eaf2433db7016b545e91bc645f8ed635365d5ef115bacefda3c2ad7679",
+      "native/tests/scene_audit_contract.rs": "e6f36f0aebfb4b390824fdd668cdedf95baa4ee8e7bdcbb687114a616e47fae4",
+      "native/tests/scene_item_transform_mutation_contract.rs": "a7b5230b0ef01b33dd857c41c9c5e497bf4e33e3dbbbf6ed82ff3aa331d4673a",
+      "native/tests/scene_plan_contract.rs": "ca6d72804c38204c81259090063a495b394c4d4cbfc5ae6cae4d7e6dbef498d4",
+      "native/tests/service_contract.rs": "30008b7a7f7cfb172872eae2f7156972f1ae6bdd0da8b672d9191a098869de7d",
+      "native/tests/service_read_tools_contract.rs": "8201004d01a30f6e0d61e88db7370a4ddeef0ba787558b07bc551adee438e5e0",
+      "native/tests/service_read_workflows_contract.rs": "62e039b36de270a2f8e9efcdd054b32cbd92819c98407e9c71f110a61fef2a9f",
+      "native/tests/session_batch_contract.rs": "736325f39833253b12ad2aad75094d37acef3462bc924b628b4f7e6c723a05c6",
+      "native/tests/session_contract.rs": "fa591aa454475c05ab4907cab183f4a287ebfef1e27ae038299e91c280e711d3",
+      "native/tests/session_observation_contract.rs": "e629470b795322cb9e099cf471089aa0a80c3dc7b02819ec0b400d5bf406fa44",
+      "native/tests/snapshot_contract.rs": "e3a6176d0f10993e29e89170e4e96116aba2a67f49cf9f888987887a256511b9",
+      "native/tests/snapshot_tools_contract.rs": "f8c59d146538305e66b2861589d33a28aecf9b858c2419fc7c70ce97d36887e9",
+      "native/tests/stage_contract.rs": "a9024e362074169ee8b7663209381b9d93de84c5fcf6169b654d7f7e76f2f01c",
+      "native/tests/stage_transport_contract.rs": "049ab7b7f63759c167be809963888b2b405250b5c3febd25bd0b0a6089abe42d",
+      "native/tests/take_monitor_contract.rs": "49d35deecd18f7099f95d4272f5cb45fbe5855823c976ca3e3930cc11d909614",
+      "native/tests/take_transport_contract.rs": "b2ea3a4c65484b6db1df08bcde33e5058331676737c5d648a3fc0b3cde2fa516",
+      "native/tests/takes_contract.rs": "b6246862905b3190b1fe9e15ff6c54f312f5c2dfa42581fc78b33cbeacdcf73a",
+      "native/tests/tool_validation_contract.rs": "e183d350192ac3411764a17def6df2dcd16131c103b56357957570ae34d7c4bc",
+      "native/tests/trim_contract.rs": "adc6829b64b2a0791ec24d17a58856d0810ec87ba5ba54e15eca1c773039443a",
+      "native/Cargo.toml": "d4f75d3c8e0b01589a6e65700b841fa32db911194cf7d6bce4e232b9a1040ee9",
+      "native/Cargo.lock": "6f862fa6e98e50dd86605062acc7dcec3e59a2b61258be02a0fa18416c773fae",
+      "native/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
+      "docs/protocol.json": "042e8c42da2dfd6d78fa0f695b2b59495d8254d5fe718b0f20d0e2e6f58a6993",
+      "native/assets/prompts.json": "8e75374c641fce8ef09bd460b02be92ed55034de4faa89155f11eb18d4e580f3"
+    }
+  }
+}
