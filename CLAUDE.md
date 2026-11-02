@@ -2,7 +2,10 @@
 
 ## Build and Development Commands
 - Build: `npm run build` - Compiles TypeScript and sets executable permissions
-- Start: `npm run start` - Runs the MCP server for OBS Studio
+- Native build: `npm run native:build` - Builds the Rust entry and TypeScript compatibility payload offline
+- Start: `npm run start` - Runs the built Rust MCP entry
+- Compatibility start: `npm run start:compat` - Runs the existing TypeScript MCP server
+- Native verification: `npm run native:check` - Checks Rust, the frozen contract, and cross-runtime parity
 
 ## Code Style Guidelines
 ### TypeScript

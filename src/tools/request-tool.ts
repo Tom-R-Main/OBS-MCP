@@ -104,12 +104,18 @@ async function executeRequest(
   }
 }
 
+/** Build-time native migration inventory. Registration remains the contract owner. */
+export const nativeRequestDefinitions = new Map<string, { requestType: string; eligible: boolean }>();
+
 export function registerObsRequestTool(
   server: McpServer,
   client: OBSWebSocketClient,
   definition: RequestToolDefinition,
 ): void {
   const { name, title, description, inputSchema, annotations } = definition;
+  nativeRequestDefinitions.set(name, { requestType: definition.requestType,
+    eligible: definition.annotations.readOnlyHint === true && !definition.guard && !returnsMessage(definition)
+      && definition.requestType.startsWith("Get") && definition.requestType !== "GetInputPropertiesListPropertyItems" });
   const outputSchema = returnsMessage(definition)
     ? MESSAGE_OUTPUT_SCHEMA
     : responseOutputSchema(definition.requestType);

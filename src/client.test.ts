@@ -53,6 +53,29 @@ afterEach(async () => {
 });
 
 describe("OBSWebSocketClient connection", () => {
+  it("never reconnects or dispatches a generation-bound effect on another session", async () => {
+    const server = await createServer({ availableRequests: ["TriggerStudioModeTransition"] });
+    server.respondWith("TriggerStudioModeTransition", () => ({}));
+    const client = createClient(server);
+    await client.connect();
+    await client.disconnect();
+    await expect(client.sendRequestForGeneration(1, "TriggerStudioModeTransition")).rejects.toThrow("connection changed");
+    expect(server.connectionCount).toBe(1);
+    await client.connect();
+    await expect(client.sendRequestForGeneration(1, "TriggerStudioModeTransition")).rejects.toThrow("connection changed");
+    expect(server.history().some(({ frame }) => frame.d.requestType === "TriggerStudioModeTransition")).toBe(false);
+    await expect(client.sendRequestForGeneration(2, "TriggerStudioModeTransition")).resolves.toEqual({});
+  });
+  it("accepts the OBS 28–30 Hello contract without obsStudioVersion and discovers it with GetVersion", async () => {
+    const server = await createServer({ omitHelloStudioVersion: true, obsStudioVersion: "30.2.3", platform: "ubuntu" });
+    const client = createClient(server);
+    await client.connect();
+    expect(client.getConnectionStatus()).toMatchObject({ generation: 1, versionInfo: { obsVersion: "30.2.3", platform: "ubuntu" } });
+    const release = client.subscribeHighVolume(EventSubscription.InputVolumeMeters);
+    await server.waitForFrame(({ frame }) => frame.op === OBS_OP.Reidentify);
+    expect(client.getConnectionStatus().generation).toBe(1);
+    release();
+  });
   it("shares one in-flight connection and resolves after canonical capability discovery", async () => {
     const server = await createServer({ availableRequests: ["GetStats"] });
     const client = createClient(server);

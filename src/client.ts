@@ -79,7 +79,7 @@ type JsonObject = Record<string, unknown>;
 type BaseMessage = { op: number; d: JsonObject };
 
 type HelloData = {
-  obsStudioVersion: string;
+  obsStudioVersion?: string;
   obsWebSocketVersion: string;
   rpcVersion: number;
   authentication?: { challenge: string; salt: string };
@@ -127,7 +127,7 @@ function parseBaseMessage(value: unknown): BaseMessage | null {
 
 function parseHello(data: JsonObject): HelloData | null {
   if (
-    typeof data.obsStudioVersion !== "string"
+    (data.obsStudioVersion !== undefined && typeof data.obsStudioVersion !== "string")
     || typeof data.obsWebSocketVersion !== "string"
     || typeof data.rpcVersion !== "number"
   ) return null;
@@ -146,7 +146,7 @@ function parseHello(data: JsonObject): HelloData | null {
   }
 
   return {
-    obsStudioVersion: data.obsStudioVersion,
+    ...(typeof data.obsStudioVersion === "string" ? { obsStudioVersion: data.obsStudioVersion } : {}),
     obsWebSocketVersion: data.obsWebSocketVersion,
     rpcVersion: data.rpcVersion,
     ...(authentication ? { authentication } : {}),
@@ -235,12 +235,23 @@ function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+export class OBSRequestError extends Error {
+  constructor(readonly requestType: string, readonly code: number, comment?: string) {
+    super(`OBS request ${requestType} failed with code ${code}${comment ? `: ${comment}` : ""}`);
+  }
+}
+
+export class OBSConnectionChangedError extends Error {
+  constructor() { super("OBS connection changed before dispatch; observe the production again"); }
+}
+
 export class OBSWebSocketClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private readonly url: string;
   private readonly password: string | null;
   private connected = false;
   private identified = false;
+  private connectionGeneration = 0;
   // OBS reads output settings only when it rebuilds its outputs (restart,
   // Settings dialog, or profile switch). A new connection usually means OBS
   // restarted, so the flag resets on identify.
@@ -275,6 +286,7 @@ export class OBSWebSocketClient extends EventEmitter {
   }
 
   public getConnectionStatus(): {
+    generation: number;
     connected: boolean;
     identified: boolean;
     url: string;
@@ -283,6 +295,7 @@ export class OBSWebSocketClient extends EventEmitter {
     versionInfo: VersionResponse | null;
   } {
     return {
+      generation: this.connectionGeneration,
       connected: this.connected,
       identified: this.identified,
       url: this.url,
@@ -377,6 +390,21 @@ export class OBSWebSocketClient extends EventEmitter {
         requestId,
         ...(requestData === undefined ? {} : { requestData }),
       },
+    }));
+  }
+
+  /** Dispatch a guarded effect on this exact session, without implicit reconnect.
+   * Synchronous socket selection closes the gap between a workflow's final
+   * observation and sendRequest's normal auto-connect behavior. */
+  public sendRequestForGeneration<T = any>(generation: number, requestType: string, requestData?: unknown, timeout = 10_000): Promise<T> {
+    const socket = this.ws;
+    if (!this.isConnected() || this.connectionGeneration !== generation || !socket || socket.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new OBSConnectionChangedError());
+    }
+    this.assertAdvertised(requestType);
+    return this.sendTracked<T>(socket, requestType, timeout, (requestId) => ({
+      op: OpCode.Request,
+      d: { requestType, requestId, ...(requestData === undefined ? {} : { requestData }) },
     }));
   }
 
@@ -599,6 +627,7 @@ export class OBSWebSocketClient extends EventEmitter {
         // OBS answers Reidentify with Identified too; only a new session means
         // OBS may have restarted and rebuilt its outputs.
         if (!this.identified) {
+          this.connectionGeneration++;
           this.outputSettingsPending = false;
           this.identified = true;
           // A subscription added while Identify was in flight is not in what OBS was sent.
@@ -640,10 +669,7 @@ export class OBSWebSocketClient extends EventEmitter {
       return;
     }
 
-    const comment = response.requestStatus.comment ? `: ${response.requestStatus.comment}` : "";
-    pending.reject(new Error(
-      `OBS request ${response.requestType} failed with code ${response.requestStatus.code}${comment}`,
-    ));
+    pending.reject(new OBSRequestError(response.requestType, response.requestStatus.code, response.requestStatus.comment));
   }
 
   private handleBatchResponse(socket: WebSocket, batch: { requestId: string; results: RawBatchResult[] }): void {
@@ -665,7 +691,7 @@ export class OBSWebSocketClient extends EventEmitter {
     }
 
     logger.log(
-      `Received hello from OBS WebSocket v${hello.obsWebSocketVersion} (OBS v${hello.obsStudioVersion})`,
+      `Received hello from OBS WebSocket v${hello.obsWebSocketVersion} (OBS v${hello.obsStudioVersion ?? "unknown; use GetVersion"})`,
     );
 
     let authentication: string | undefined;

@@ -314,16 +314,34 @@ export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, ap
     }
   }
   const second = planScene(spec, await readCurrent(client, spec));
-  const changes = second.actions.filter((action) => action.request);
+  // A fresh plan may see a removed/replaced object or an acknowledged creation
+  // that is not visible yet. Do not turn that observation into a creation retry.
+  const planningErrors = [
+    ...second.errors,
+    ...second.actions.filter(({ phase }) => phase === "create")
+      .map(({ target, change }) => `${target}: ${change} is still needed; it was not retried`),
+  ];
+  if (planningErrors.length > 0) {
+    return errorResult([
+      "Stopped before applying changes:",
+      ...planningErrors.map((error) => `- ${error}`),
+      ...(creations.length > 0 ? ["Created before stopping:", ...describe(creations)] : []),
+      ...(snapshot ? [`Snapshot ${snapshot.id} holds the previous state of existing sources`] : []),
+    ].join("\n"));
+  }
+  const changes = second.actions.filter((action) => action.phase === "change" && action.request);
   if (changes.length > 0) problems.push(...failures(changes, await client.sendBatch(changes.map(({ request }) => request!))));
 
-  const remaining = planScene(spec, await readCurrent(client, spec)).actions;
+  const final = planScene(spec, await readCurrent(client, spec));
+  const remaining = final.actions;
+  const verificationErrors = final.errors;
   const blank = await blankItems(client, spec.sceneName, spec.sources.map(({ name }) => name)).catch(() => [] as string[]);
   const lines = [
     `Applied ${creations.length + changes.length - problems.length} change(s) to ${spec.sceneName}:`,
     ...describe([...creations, ...changes]),
     ...problems.map((problem) => `Failed: ${problem}`),
-    ...(remaining.length > 0 ? ["Still different afterwards:", ...describe(remaining)] : ["OBS now matches the spec"]),
+    ...(verificationErrors.length > 0 ? ["Could not verify afterwards:", ...verificationErrors.map((error) => `- ${error}`)] : []),
+    ...(remaining.length > 0 ? ["Still different afterwards:", ...describe(remaining)] : verificationErrors.length === 0 ? ["OBS now matches the spec"] : []),
     ...blank.map((name) => `Warning: ${name} renders at 0×0; a capture may need a window, display, or permission`),
     ...(snapshot ? [`Saved the previous state as snapshot ${snapshot.id}; obs-restore undoes changes to existing sources`] : []),
     ...(snapshotNote ? [snapshotNote] : []),
@@ -334,12 +352,13 @@ export async function applyScene(client: OBSWebSocketClient, spec: SceneSpec, ap
       actions: [...creations, ...changes].map(({ target, change }) => ({ target, change })),
       applied: true,
       failures: problems,
-      converged: remaining.length === 0,
+      converged: remaining.length === 0 && verificationErrors.length === 0,
       remaining: remaining.map(({ target, change }) => ({ target, change })),
       blank,
+      ...(verificationErrors.length > 0 ? { verificationErrors } : {}),
       ...(snapshot ? { snapshotId: snapshot.id } : {}),
     },
-    ...(problems.length > 0 || remaining.length > 0 ? { isError: true } : {}),
+    ...(problems.length > 0 || remaining.length > 0 || verificationErrors.length > 0 ? { isError: true } : {}),
   };
 }
 

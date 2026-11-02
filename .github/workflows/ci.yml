@@ -14,12 +14,13 @@ concurrency:
 
 jobs:
   test:
-    name: Node ${{ matrix.node }}
-    runs-on: ubuntu-latest
+    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         node: [20.19.0, 22.x, 24.x]
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -32,8 +33,12 @@ jobs:
       - run: npm run check
 
   package:
-    name: MCPB package
-    runs-on: ubuntu-latest
+    name: MCPB package on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -44,3 +49,46 @@ jobs:
       - run: npm run check:dependencies
       - run: npm ci --ignore-scripts --no-audit
       - run: npm run test:package
+
+  native:
+    name: Rust native boundary on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      # Match the qualified local lane; high-concurrency parser stress is separate.
+      RUST_TEST_THREADS: "4"
+      RUSTUP_AUTO_INSTALL: "0"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit
+      - run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt,clippy
+      - run: cargo fetch --locked --manifest-path native/Cargo.toml
+      - name: Install media qualification tools on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install media qualification tools on macOS
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install ffmpeg
+      - name: Report media qualification tool versions
+        run: |
+          ffmpeg -version
+          ffprobe -version
+      - run: npm run native:check
+      - name: Stress parser worker lifetime at high concurrency
+        working-directory: native
+        run: cargo test --locked --offline --lib -- --test-threads=64
+      - run: npm run pack:native

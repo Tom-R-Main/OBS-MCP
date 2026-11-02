@@ -138,6 +138,52 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
     expect(mismatches).toEqual([]);
   }, 60_000);
 
+  it("observes production with explicit missing evidence and no mutations", async () => {
+    const report = await call("obs-observe");
+    expect(["observed", "incomplete"]).toContain(report.status);
+    expect(report.program).toEqual(expect.objectContaining({ sceneUuid: expect.any(String) }));
+    expect(report.generation).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!mutationsEnabled)("resolves a layout, stages and verifies a deliberate take in the disposable collection", async () => {
+    const collection = await call("obs-get-scene-collection-list");
+    expect(collection.currentSceneCollectionName).toBe(process.env.OBS_MCP_LIVE_SCENE_COLLECTION);
+    expect((await call("obs-get-stream-status")).outputActive).toBe(false);
+    expect((await call("obs-get-record-status")).outputActive).toBe(false);
+    const original = await call("obs-get-current-scene");
+    const studio = await call("obs-get-studio-mode");
+    const preview = studio.studioModeEnabled ? await call("obs-get-preview-scene") : undefined;
+    const sceneName = `__obs_mcp_production_${process.pid}_${Date.now()}`;
+    let created = false;
+    try {
+      await call("obs-create-scene", { sceneName }); created = true;
+      await call("obs-create-input", { sceneName, inputName: sceneName + " color", inputKind: "color_source_v3", inputSettings: { color: 0xff3377cc, width: 1280, height: 720 }, sceneItemEnabled: true });
+      const items = await call("obs-get-scene-items", { sceneName });
+      const inputs = await call("obs-get-input-list");
+      const scenes = await call("obs-get-scene-list");
+      const item = (items.sceneItems as JsonObject[])[0]!;
+      const scene = (scenes.scenes as JsonObject[]).find((s) => s.sceneName === sceneName)!;
+      const input = (inputs.inputs as JsonObject[]).find((s) => s.inputName === sceneName + " color")!;
+      const video = await call("obs-get-video-settings");
+      const target = { sceneCollection: String(collection.currentSceneCollectionName), sceneName };
+      const planned = await call("obs-plan-scene-template", { ...target,
+        template: { version: 1, name: "Live layout", canvas: { width: video.baseWidth, height: video.baseHeight }, roles: [{ role: "picture", inputKinds: ["color_source_v3"], transform: { positionX: 0 }, enabled: true, locked: false, index: 0 }] },
+        bindings: [{ role: "picture", sourceName: input.inputName, sourceUuid: input.inputUuid, containerUuid: scene.sceneUuid, sceneItemId: item.sceneItemId }],
+      });
+      expect(planned.status, JSON.stringify(planned)).toBe("resolved");
+      await call("obs-set-studio-mode", { studioModeEnabled: true });
+      const staged = await call("obs-stage-scene", target);
+      expect(staged.status).toBe("staged");
+      const taken = await call("obs-take-scene", { stageId: staged.stageId });
+      expect(taken).toMatchObject({ status: "verified", requestAccepted: true, intendedSceneObservedOnProgram: true, renderedComposition: "unverified" });
+    } finally {
+      await call("obs-set-current-scene", { sceneName: original.currentProgramSceneName });
+      if (preview) await call("obs-set-preview-scene", { sceneName: preview.currentPreviewSceneName });
+      await call("obs-set-studio-mode", { studioModeEnabled: studio.studioModeEnabled });
+      if (created) await call("obs-remove-scene", { sceneName });
+    }
+  });
+
   it("runs read-only request batches, including Sleep, against real OBS", async () => {
     const batch = async (args: JsonObject) => await client!.callTool({ name: "obs-batch", arguments: args }) as CallToolResult;
 
@@ -229,9 +275,11 @@ describe.skipIf(!enabled)("live OBS through compiled MCP stdio", () => {
       if (created) await call("obs-remove-scene", { sceneName });
     }
 
-    const afterRemove = await call("obs-get-scene-list");
-    const remainingScenes = Array.isArray(afterRemove.scenes) ? afterRemove.scenes : [];
-    expect(remainingScenes).not.toContainEqual(expect.objectContaining({ sceneName }));
+    await vi.waitFor(async () => {
+      const afterRemove = await call("obs-get-scene-list");
+      const remainingScenes = Array.isArray(afterRemove.scenes) ? afterRemove.scenes : [];
+      expect(remainingScenes).not.toContainEqual(expect.objectContaining({ sceneName }));
+    }, { timeout: 3000 });
   });
 
   it.skipIf(!recordingEnabled)("records a short clip only after OBS confirms the output", async () => {

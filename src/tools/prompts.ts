@@ -25,7 +25,7 @@ function userMessage(text: string) {
 export function initialize(server: McpServer): void {
   server.registerPrompt("software-demo", {
     title: "Record a bounded software demo",
-    description: "Prepare an existing local macOS capture, record a bounded silent take, and inspect the final file",
+    description: "Prepare an existing local macOS or Linux window capture, record a bounded silent take, and inspect the final file",
     argsSchema: z.object({
       sceneCollection: z.string(), sceneName: z.string(), inputName: z.string(),
       maxDurationSeconds: z.string().default(String(demoRecipe.defaultMaxDurationSeconds)),
@@ -48,7 +48,7 @@ export function initialize(server: McpServer): void {
     "record-demo",
     {
       title: "Record a silent app demo",
-      description: "Set up a silent, window-only capture on macOS, preflight it, and record a take",
+      description: "Set up a silent window capture on macOS or Linux, preflight it, and record a take",
       argsSchema: z.object({
         window: z.string().describe("Part of the window title or app name to capture, e.g. \"ChatGPT\""),
         scene: z.string().default("Demo").describe("Scene to record from"),

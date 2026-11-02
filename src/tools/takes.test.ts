@@ -3,7 +3,7 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,7 @@ import { healthyObsState, servePreflightState, serveRecordOutput, type FakeObsSt
 import { resultText, startMcpHarness, type HarnessOptions, type McpHarness } from "../../test/support/mcp-harness.js";
 import { TakeMonitor } from "./take-monitor.js";
 import { currentTake, stopTake } from "./takes.js";
+import { operationSummary } from "./operation-receipts.js";
 
 let harness: McpHarness;
 let recordDirectory: string;
@@ -54,6 +55,91 @@ afterEach(async () => {
 });
 
 describe("recording takes", () => {
+  it("persists recording intent before dispatch and keeps a lost start outcome inspectable", async () => {
+    await startHarness();
+    let before: unknown;
+    harness.fakeObs.respondWith("StartRecord", () => {
+      before = operationSummary(harness.obsClient);
+      throw new FakeOBSRequestError(500, "Lost or rejected start");
+    });
+    const result = await harness.call("obs-take-start");
+    expect(result.isError).toBe(true);
+    expect(before).toMatchObject({ operations: [expect.objectContaining({ kind: "record-start", phase: "dispatching" })] });
+    expect(operationSummary(harness.obsClient)).toMatchObject({ operations: [expect.objectContaining({ kind: "record-start", status: "unknown" })] });
+    expect(result.structuredContent).toHaveProperty("operationId");
+    expect(sent("StartRecord")).toBe(1);
+  });
+
+  it("does not dispatch a recording start without durable intent", async () => {
+    await startHarness();
+    const original = process.env.OBS_MCP_STATE_DIR;
+    const blocked = join(recordDirectory, "state-is-a-file");
+    writeFileSync(blocked, "fixture");
+    process.env.OBS_MCP_STATE_DIR = blocked;
+    try {
+      const result = await harness.call("obs-take-start");
+      expect(result.isError).toBe(true);
+      expect(sent("StartRecord")).toBe(0);
+    } finally { process.env.OBS_MCP_STATE_DIR = original; }
+  });
+
+  it("keeps stop custody when a receipt update fails after the recording was accepted", async () => {
+    await startHarness();
+    const receipts = join(process.env.OBS_MCP_STATE_DIR!, "operation-receipts");
+    const backup = `${receipts}.retained`;
+    harness.fakeObs.respondWith("StartRecord", () => {
+      renameSync(receipts, backup);
+      writeFileSync(receipts, "blocked fixture");
+      setTimeout(() => {
+        state.recording = true;
+        harness.fakeObs.sendEvent("RecordStateChanged", { outputActive: true, outputState: "OBS_WEBSOCKET_OUTPUT_STARTED", outputPath: clipPath });
+      }, 5);
+      return {};
+    });
+    let started;
+    try { started = await harness.call("obs-take-start", { maxDurationSeconds: 2 }); }
+    finally { rmSync(receipts, { force: true }); renameSync(backup, receipts); }
+    expect(started.isError).not.toBe(true);
+    expect(started.structuredContent).toMatchObject({ receiptStatus: "unknown" });
+    expect(currentTake(harness.obsClient)).toBeDefined();
+    expect((await harness.call("obs-take-stop")).structuredContent).toMatchObject({ stopConfirmed: true });
+    expect(sent("StopRecord")).toBe(1);
+  });
+
+  it("never replays an uncertain transport stop while reconciling the owned recording", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    const original = harness.obsClient.sendRequest.bind(harness.obsClient);
+    let stops = 0;
+    const spy = vi.spyOn(harness.obsClient, "sendRequest").mockImplementation(async (type, data, timeout) => {
+      if (type === "StopRecord") { stops++; throw new Error("Lost transport reply"); }
+      return original(type, data, timeout);
+    });
+    expect((await harness.call("obs-take-stop")).structuredContent).toMatchObject({ stopConfirmed: false });
+    expect((await harness.call("obs-take-stop")).structuredContent).toMatchObject({ stopConfirmed: false });
+    expect(stops).toBe(1);
+    expect(operationSummary(harness.obsClient)).toMatchObject({ operations: expect.arrayContaining([expect.objectContaining({ kind: "record-stop", status: "unknown", requestAccepted: null })]) });
+    spy.mockRestore();
+    // Reconcile a later terminal observation without sending the uncertain request again.
+    state.recording = false;
+    harness.fakeObs.sendEvent("RecordStateChanged", { outputActive: false, outputState: "OBS_WEBSOCKET_OUTPUT_STOPPED", outputPath: clipPath });
+    await vi.waitFor(() => expect(currentTake(harness.obsClient)?.stoppedObserved).toBe(true));
+    expect((await harness.call("obs-take-stop")).structuredContent).toMatchObject({ stopConfirmed: true });
+    expect(sent("StopRecord")).toBe(0);
+  });
+
+  it("retains separate observed start and finalized stop receipt identities", async () => {
+    await startHarness();
+    const started = await harness.call("obs-take-start");
+    const stopped = await harness.call("obs-take-stop");
+    expect(started.structuredContent).toHaveProperty("operationId");
+    expect(stopped.structuredContent).toHaveProperty("operationId");
+    expect(operationSummary(harness.obsClient)).toMatchObject({ operations: expect.arrayContaining([
+      expect.objectContaining({ kind: "record-start", phase: "observed", postconditionObserved: true }),
+      expect.objectContaining({ kind: "record-stop", phase: "observed", postconditionObserved: true }),
+    ]) });
+  });
+
   it.each(["status-read", "stop-request", "overlapping-deadline"])("keeps the deadline after an early uncertain %s", async (failure) => {
     await startHarness();
     await harness.call("obs-take-start", { maxDurationSeconds: 1 });
@@ -180,15 +266,62 @@ describe("recording takes", () => {
     harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: state.recording }));
   });
 
-  it("does not claim a completed stop when OBS still reports active", async () => {
+  it("waits for inactive status when it briefly lags the completed stop event", async () => {
     await startHarness();
     await harness.call("obs-take-start");
-    harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: true }));
+    harness.fakeObs.queueSuccess("GetRecordStatus", { outputActive: true });
+    harness.fakeObs.queueSuccess("GetRecordStatus", { outputActive: true });
+    const result = await harness.call("obs-take-stop");
+    expect(result.structuredContent).toMatchObject({ stopConfirmed: true });
+    expect(currentTake(harness.obsClient)).toBeUndefined();
+    expect(sent("StopRecord")).toBe(1);
+  });
+
+  it("preserves unknown custody when ownership is lost during stop reconciliation", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    let reads = 0;
+    harness.fakeObs.respondWith("GetRecordStatus", () => {
+      reads += 1;
+      if (reads === 2) harness.obsClient.emit("disconnected");
+      return { outputActive: reads === 1 };
+    });
+    const result = await harness.call("obs-take-stop");
+    expect(result.structuredContent).toMatchObject({ stopConfirmed: false, ownership: "unavailable" });
+    expect(operationSummary(harness.obsClient)).toMatchObject({ operations: expect.arrayContaining([expect.objectContaining({ kind: "record-stop", status: "unknown" })]) });
+    expect(resultText(result)).not.toContain("File checks pass");
+    expect(sent("StopRecord")).toBe(1);
+  });
+
+  it.each(["failed", "malformed"])("keeps a %s post-stop status unconfirmed without another stop request", async (failure) => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    harness.fakeObs.queueSuccess("GetRecordStatus", { outputActive: true });
+    if (failure === "failed") harness.fakeObs.queueError("GetRecordStatus", 500, "Status unavailable");
+    else harness.fakeObs.queueSuccess("GetRecordStatus", {});
+    const result = await harness.call("obs-take-stop");
+    expect(result.structuredContent).toMatchObject({ stopConfirmed: false });
+    expect(currentTake(harness.obsClient)).toBeDefined();
+    expect(sent("StopRecord")).toBe(1);
+  });
+
+  it("does not claim a completed stop when OBS still reports active after the bounded wait", async () => {
+    await startHarness();
+    await harness.call("obs-take-start");
+    // Advance the observation clock without slowing the WebSocket integration test.
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    harness.fakeObs.respondWith("GetRecordStatus", () => {
+      now += 3000;
+      return { outputActive: true };
+    });
     const result = await harness.call("obs-take-stop");
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({ stopConfirmed: false });
     expect(resultText(result)).not.toContain("File checks pass");
     expect(sent("StopRecord")).toBe(1);
+    expect(currentTake(harness.obsClient)).toBeDefined();
+    expect(sent("GetRecordStatus")).toBeLessThan(20);
     harness.fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: state.recording }));
   });
 

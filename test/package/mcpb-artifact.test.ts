@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { listTools } from "../../scripts/list-tools.mjs";
 import { FakeOBSServer } from "../support/fake-obs-server.js";
 import { TOOL_COUNT } from "../support/tool-count.js";
+import { serveProduction } from "../support/production-fixture.js";
 import { serveDemoFixture } from "../support/demo-fixture.js";
 import { SCENE_AUDIT_READS, serveSceneAuditFixture } from "../support/scene-audit-fixture.js";
 
@@ -86,6 +87,7 @@ describe("MCPB artifact", () => {
       "scripts",
       "tsconfig.json",
       "docs/protocol.json",
+      "docs/production-assistant.md",
       "docs/recipes/software-demo.v1.json",
       ".agents/skills/obs-demo/SKILL.md",
       "scripts/verify-demo.mjs",
@@ -102,6 +104,7 @@ describe("MCPB artifact", () => {
     }
 
     const fake = await FakeOBSServer.start();
+    serveProduction(fake);
     const demoState = serveDemoFixture(fake);
     const originalDemo = structuredClone(demoState);
     fakeServers.push(fake);
@@ -116,6 +119,7 @@ describe("MCPB artifact", () => {
       env: {
         ...getDefaultEnvironment(),
         OBS_WEBSOCKET_URL: fake.url,
+        OBS_MCP_STATE_DIR: path.join(extractionRoot, "state"),
       },
       stderr: "pipe",
     });
@@ -137,6 +141,14 @@ describe("MCPB artifact", () => {
     const recovered = await client.callTool({ name: "obs-recover-demo", arguments: { operationId: (prepared.structuredContent as Record<string, unknown>).operationId, apply: true } });
     expect(recovered.isError).toBeFalsy();
     expect(demoState).toEqual(originalDemo);
+
+    serveProduction(fake);
+    const observed = await client.callTool({ name: "obs-observe", arguments: {} });
+    expect(observed.structuredContent).toMatchObject({ status: "observed", program: { sceneName: "Main" } });
+    const staged = await client.callTool({ name: "obs-stage-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review" } });
+    expect(staged.structuredContent).toMatchObject({ status: "staged" });
+    const taken = await client.callTool({ name: "obs-take-scene", arguments: { stageId: (staged.structuredContent as Record<string, unknown>).stageId } });
+    expect(taken.structuredContent).toMatchObject({ status: "verified", intendedSceneObservedOnProgram: true });
 
     // Exercise the new tool from the extracted executable in read-only mode.
     const auditFake = await FakeOBSServer.start();
@@ -160,6 +172,8 @@ describe("MCPB artifact", () => {
     const auditTools = (await auditClient.listTools()).tools;
     expect(auditTools.find(({ name }) => name === "obs-audit-scene")?.annotations?.readOnlyHint).toBe(true);
     expect(auditTools.some(({ name }) => name === "obs-set-current-scene")).toBe(false);
+    expect(auditTools.some(({ name }) => name === "obs-stage-scene")).toBe(false);
+    expect(auditTools.find(({ name }) => name === "obs-plan-scene-template")?.annotations?.readOnlyHint).toBe(true);
     const audit = await auditClient.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", canvasUuid: "secondary-canvas", requiredItems: [{ sourceName: "Application" }], includeScreenshot: true } });
     expect(audit.isError).toBeFalsy();
     expect(audit.structuredContent).toMatchObject({ version: 1, scope: "structural", status: "pass", renderedContent: "unverified", target: { canvasUuid: "secondary-canvas", sceneUuid: auditState.sceneUuid } });

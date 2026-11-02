@@ -52,6 +52,7 @@ export type FakeOBSOptions = {
   autoGetVersion?: boolean;
   availableRequests?: readonly string[];
   obsStudioVersion?: string;
+  omitHelloStudioVersion?: boolean;
   obsWebSocketVersion?: string;
   platform?: string;
   supportedImageFormats?: readonly string[];
@@ -131,6 +132,7 @@ export class FakeOBSServer {
   private readonly availableRequests: string[];
   private readonly autoGetVersion: boolean;
   private readonly obsStudioVersion: string;
+  private readonly omitHelloStudioVersion: boolean;
   private readonly obsWebSocketVersion: string;
   private readonly platform: string;
   private readonly supportedImageFormats: readonly string[];
@@ -143,6 +145,7 @@ export class FakeOBSServer {
     this.password = options.password;
     this.autoGetVersion = options.autoGetVersion ?? true;
     this.obsStudioVersion = options.obsStudioVersion ?? "32.2.2";
+    this.omitHelloStudioVersion = options.omitHelloStudioVersion ?? false;
     this.obsWebSocketVersion = options.obsWebSocketVersion ?? "5.7.0";
     this.platform = options.platform ?? "macos";
     this.supportedImageFormats = options.supportedImageFormats ?? ["png", "jpeg", "webp"];
@@ -315,7 +318,7 @@ export class FakeOBSServer {
     socket.send(JSON.stringify({
       op: OBS_OP.Hello,
       d: {
-        obsStudioVersion: this.obsStudioVersion,
+        ...(this.omitHelloStudioVersion ? {} : { obsStudioVersion: this.obsStudioVersion }),
         obsWebSocketVersion: this.obsWebSocketVersion,
         rpcVersion: 1,
         ...(authentication ? { authentication } : {}),

@@ -37,7 +37,7 @@ export type TakeSummary = {
   chapters: { atSeconds: number; name: string }[];
   audio: InputLevel[];
   frames: { renderSkipped: number; renderTotal: number; outputSkipped: number; outputTotal: number };
-  /** Stretches where the program output did not change, for trimming dead time. */
+  /** Qualified unchanged stretches; an empty list is not proof of motion during sample warmup. */
   stills: TakeSpan[];
   /** Stretches where the program output was black. */
   blanks: TakeSpan[];
@@ -118,6 +118,7 @@ export class TakeMonitor {
   private readonly stills: TakeSpan[] = [];
   private readonly blanks: TakeSpan[] = [];
   private stillTracker: StillTracker;
+  private pictureHistory: object = {};
   private blankSince: number | null = null;
   private blankRun = 0;
   private framesSampled = 0;
@@ -172,6 +173,7 @@ export class TakeMonitor {
     this.listen("RecordStateChanged", (data) => {
       if (typeof data.outputPath === "string" && data.outputPath) this.recordingPath = data.outputPath;
       if (data.outputState === "OBS_WEBSOCKET_OUTPUT_PAUSED" && this.pausedSince === null) {
+        this.closeStill(this.now());
         this.pausedSince = Date.now();
       } else if (data.outputState === "OBS_WEBSOCKET_OUTPUT_RESUMED" && this.pausedSince !== null) {
         this.pausedMs += Date.now() - this.pausedSince;
@@ -397,12 +399,13 @@ export class TakeMonitor {
 
   private async samplePicture(): Promise<void> {
     if (!this.programScene || this.isPaused()) return;
+    const history = this.pictureHistory;
     const response = await this.client.sendRequest("GetSourceScreenshot", {
       sourceName: this.programScene,
       imageFormat: "ppm",
       imageWidth: SAMPLE_WIDTH,
     }) as JsonObject;
-    if (typeof response.imageData !== "string" || this.stoppedAtMs !== null) return;
+    if (typeof response.imageData !== "string" || this.stoppedAtMs !== null || this.isPaused() || history !== this.pictureHistory) return;
     const sample = decodePpm(response.imageData);
     const at = this.now();
     this.framesSampled += 1;
@@ -429,6 +432,7 @@ export class TakeMonitor {
 
   /** Ends the current still stretch, e.g. on a scene switch, and starts tracking afresh. */
   private closeStill(at: number): void {
+    this.pictureHistory = {};
     for (const { start, end } of this.stillTracker.finish(at)) this.stills.push({ startSeconds: round(start), endSeconds: round(end) });
     this.stillTracker = this.newStillTracker();
   }
@@ -474,7 +478,7 @@ export function describeTake(summary: TakeSummary): string[] {
   if (summary.pictureChecks === "on") {
     const still = summary.stills.reduce((total, span) => total + span.endSeconds - span.startSeconds, 0);
     lines.push(`Monitor: ${summary.framesSampled} picture sample(s), ${summary.blanks.length} black stretch(es), `
-      + `${round(still)}s unchanged`);
+      + (summary.stills.length === 0 ? "no qualified unchanged stretch reported" : `${round(still)}s unchanged`));
   }
   for (const warning of summary.warnings) lines.push(`Warning at ${warning.atSeconds}s: ${warning.message}`);
   return lines;

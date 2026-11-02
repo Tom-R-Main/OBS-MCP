@@ -24,50 +24,66 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("obs-get-input-property-list-items", () => {
-  it("refuses to list applications on a screen capture with no display", async () => {
-    harness.fakeObs.respondWith("GetInputSettings", () => ({
-      inputKind: "screen_capture",
-      inputSettings: { type: 2 },
-    }));
+const PROPERTY_ROUTES = ["obs-get-input-property-list-items", "obs-call-request", "obs-batch"] as const;
+function propertyArgs(tool: string, propertyName: string) {
+  const requestData = { inputName: "Capture", propertyName };
+  return tool === "obs-call-request" ? { requestType: "GetInputPropertiesListPropertyItems", requestData }
+    : tool === "obs-batch" ? { requests: [{ requestType: "GetInputPropertiesListPropertyItems", requestData }] } : requestData;
+}
 
-    const result = await harness.call("obs-get-input-property-list-items", {
-      inputName: "Chrome",
-      propertyName: "application",
+describe("ScreenCaptureKit property serialization crash guard", () => {
+  it.each(PROPERTY_ROUTES.flatMap((tool) => ["display_uuid", "application"].flatMap((propertyName) => [false, true].map((configured) => ({ tool, propertyName, configured })))))
+    ("withholds $propertyName through $tool even with configured display=$configured", async ({ tool, propertyName, configured }) => {
+      harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "screen_capture", inputSettings: { type: 2, ...(configured ? { display_uuid: "37D8832A" } : {}) } }));
+      harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [] }));
+      const result = await harness.call(tool, propertyArgs(tool, propertyName));
+      expect(result.isError).toBe(true);
+      expect(resultText(result)).toMatch(/crash|safely|separately/);
+      expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
     });
 
+  it.each(PROPERTY_ROUTES.slice(0, 2))("allows the same string list on an unrelated source through %s", async (tool) => {
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "other_source", inputSettings: {} }));
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Valid", itemValue: "valid", itemEnabled: true }] }));
+    const result = await harness.call(tool, propertyArgs(tool, "application"));
+    expect(result.isError).toBeFalsy();
+    expect(requestTypes()).toContain("GetInputPropertiesListPropertyItems");
+  });
+
+  it.each(PROPERTY_ROUTES)("allows safe integer window lists through %s", async (tool) => {
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Window", itemValue: 17, itemEnabled: true }] }));
+    const result = await harness.call(tool, propertyArgs(tool, "window"));
+    expect(result.isError).toBeFalsy();
+    expect(requestTypes()).toContain("GetInputPropertiesListPropertyItems");
+    expect(requestTypes()).not.toContain("GetInputSettings");
+  });
+
+  it.each(PROPERTY_ROUTES.slice(0, 2))("withholds string discovery if source kind cannot be established through %s", async (tool) => {
+    harness.fakeObs.respondWith("GetInputSettings", () => ({}));
+    const result = await harness.call(tool, propertyArgs(tool, "display_uuid"));
     expect(result.isError).toBe(true);
-    expect(resultText(result)).toContain("display_uuid");
     expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
   });
 
-  it("lists applications once a display is selected", async () => {
-    harness.fakeObs.respondWith("GetInputSettings", () => ({
-      inputKind: "screen_capture",
-      inputSettings: { type: 2, display_uuid: "37D8832A" },
-    }));
-    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({
-      propertyItems: [{ itemName: "Google Chrome", itemValue: "com.google.Chrome", itemEnabled: true }],
-    }));
-
-    const result = await harness.call("obs-get-input-property-list-items", {
-      inputName: "Chrome",
-      propertyName: "application",
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(resultText(result)).toContain("com.google.Chrome");
+  it("refuses an unsafe batch before an earlier source mutation can run", async () => {
+    const result = await harness.call("obs-batch", { requests: [
+      { requestType: "SetInputSettings", requestData: { inputName: "Capture", inputSettings: { display_uuid: "chosen" } } },
+      { requestType: "GetInputPropertiesListPropertyItems", requestData: { inputName: "Capture", propertyName: "display_uuid" } },
+    ] });
+    expect(result.isError).toBe(true);
+    expect(requestTypes()).not.toContain("SetInputSettings");
+    expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
   });
+});
 
-  it("does not inspect settings for other list properties", async () => {
-    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [] }));
-
-    const result = await harness.call("obs-get-input-property-list-items", {
-      inputName: "Mic",
-      propertyName: "device_id",
-    });
-
-    expect(result.isError).toBeFalsy();
-    expect(requestTypes()).not.toContain("GetInputSettings");
+describe("XComposite enumeration crash guard", () => {
+  it.each(["obs-get-input-property-list-items", "obs-call-request", "obs-batch"])("blocks unconfigured window enumeration through %s", async (tool) => {
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "xcomposite_input", inputSettings: { capture_window: "" } }));
+    const data = { inputName: "Window", propertyName: "capture_window" };
+    const args = tool === "obs-call-request" ? { requestType: "GetInputPropertiesListPropertyItems", requestData: data }
+      : tool === "obs-batch" ? { requests: [{ requestType: "GetInputPropertiesListPropertyItems", requestData: data }] } : data;
+    const result = await harness.call(tool, args);
+    expect(result.isError).toBe(true);
+    expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
   });
 });

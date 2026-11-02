@@ -42,6 +42,30 @@ describe.skipIf(!hasMedia)("final recording artifact verification (synthetic med
   it("checks final file identity, duration, reference frame, and sidecar chapter", () => {
     const result = verifyDemo({ file: video, reference, seconds: 1, chapters: ["Intro"], checkpoints: [{ at: 0.75, reference: stepTwo }] });
     expect(result.status).toBe("pass"); expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.checks).toEqual({ metadata: "pass", strictDecode: "pass", sampledContent: "pass" });
+    expect(result).toMatchObject({ contentVerification: "requires-review", format: { codec: "mpeg4", pixelFormat: "yuv420p", colorFidelity: "unverified" } });
+  });
+  it("rejects a damaged middle region despite readable metadata and a matching sample", () => {
+    const healthy = join(dir, "decode-control.mp4"), damaged = join(dir, "decode-damaged.mp4");
+    execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=160x90:r=10:d=3", "-c:v", "mpeg4", "-g", "1", healthy]);
+    const packets = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_packets", "-of", "json", healthy], { encoding: "utf8" })) as { packets: { pos: string; size: string }[] };
+    const packet = packets.packets[Math.floor(packets.packets.length / 2)]!;
+    const bytes = readFileSync(healthy);
+    bytes.fill(0, Number(packet.pos), Number(packet.pos) + Number(packet.size));
+    writeFileSync(damaged, bytes);
+    const control = verifyDemo({ file: healthy, reference: healthy, seconds: 3 });
+    expect(control.status).toBe("pass");
+    const result = verifyDemo({ file: damaged, reference: healthy, seconds: 3 });
+    expect(result.status).toBe("fail");
+    expect(result.checks).toEqual({ metadata: "pass", strictDecode: "fail", sampledContent: "pass" });
+    expect(result.problems).toContain("Strict full decode failed");
+  });
+  it("reports a decode deadline as unavailable without upgrading the sampled content claim", () => {
+    const result = verifyDemo({ file: video, reference, seconds: 1, decodeTimeoutMs: 1 });
+    expect(result.status).toBe("unavailable");
+    expect(result.checks).toEqual({ metadata: "pass", strictDecode: "unavailable", sampledContent: "pass" });
+    expect(result.unavailable.some((reason) => reason.startsWith("Strict decode unavailable"))).toBe(true);
+    expect(result.contentVerification).toBe("requires-review");
   });
   it("runs the public verifier CLI and writes a new report without overwriting artifacts", () => {
     const report = join(dir, "verification.json");

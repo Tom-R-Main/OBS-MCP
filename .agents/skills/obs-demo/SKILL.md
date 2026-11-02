@@ -1,11 +1,11 @@
 ---
 name: obs-demo
-description: Prepare and record a bounded silent software demo using OBS-MCP's existing macOS window capture, then inspect the delivered recording.
+description: Prepare and record a bounded silent software demo using OBS-MCP's existing macOS or Linux window capture, then inspect the delivered recording.
 ---
 
 # Record a software demo
 
-Use the [version 1 recipe](../../../docs/recipes/software-demo.v1.json). Require a local macOS OBS instance, a dedicated collection, and an already configured window capture in the current scene. Ask for the exact collection, scene, input, expected visible content, steps, and maximum duration when these are missing. This skill grants no permission to record, change OBS, or publish.
+Use the [version 1 recipe](../../../docs/recipes/software-demo.v1.json). Require a local OBS instance on macOS or Linux, a dedicated collection, and an already configured window capture in the current scene. Ask for the exact collection, scene, input, expected visible content, steps, and maximum duration when these are missing. This skill grants no permission to record, change OBS, or publish.
 
 Discover the recipe's tools through MCP before acting. If tools are filtered, enable the record, scenes, and sources groups through the available discovery tools. Missing tools block this recipe. A read-only server cannot prepare or record.
 
@@ -19,3 +19,5 @@ Discover the recipe's tools through MCP before acting. If tools are filtered, en
 8. Offer recovery through `obs-recover-demo` using the retained `operationId`: inspect its default plan before applying. A conflict requires operator review; do not fall back to unconditional `obs-restore`. Recovery only covers this preparation's changed fields. The general legacy restore tool remains a manual operation.
 
 The deadline runs while the server is alive. Process death, machine sleep, and competing OBS controllers can prevent timely cleanup; this recipe does not promise unattended crash recovery. Collection and value checks detect conflicts but do not lock OBS's UI. Go-live actions are outside this recipe.
+
+Linux captures use XComposite on X11 or an existing user-authorized PipeWire window capture on Wayland. Portal selection and permission belong to the desktop session. A persisted portal selection and nonzero dimensions do not prove the intended window is visible; inspect the picture. Video-only capture inputs have no audio fields to change; silence still requires preflight of the full output routing.

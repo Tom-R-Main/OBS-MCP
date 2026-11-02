@@ -250,3 +250,28 @@ describe("restricted demo preparation and recovery over MCP", () => {
     expect((await harness.call("obs-prepare-demo", { ...selection, apply: true })).structuredContent).toMatchObject({ status: "partial" });
   });
 });
+
+
+describe("Linux restricted demo parity", () => {
+  it.each(["xcomposite_input", "pipewire-window-capture-source", "pipewire-screen-capture-source"])("prepares and recovers %s without audio mutations", async (kind) => {
+    state.inputs.Chrome!.kind = kind;
+    state.inputs.Chrome!.settings = kind === "xcomposite_input" ? { capture_window: "42\r\nEditor\r\nCode" } : { RestoreToken: "user-authorized-token" };
+    harness.fakeObs.respondWith("GetVersion", () => ({ platform: "ubuntu" }));
+    const before = structuredClone(state.inputs.Chrome!.settings);
+    const transform = structuredClone(state.scenes.Demo![1]!.transform);
+    const operation = await prepare();
+    const result = await harness.call("obs-recover-demo", { operationId: operation.operationId, apply: true });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(state.inputs.Chrome!.settings).toEqual(before);
+    for (const field of fields) expect(state.scenes.Demo![1]!.transform[field]).toEqual(transform[field]);
+    expect(mutations().map(({ frame }) => frame.d.requestType)).not.toContain("SetInputMute");
+    expect(mutations().map(({ frame }) => frame.d.requestType)).not.toContain("SetInputAudioTracks");
+  });
+  it("requires an existing portal grant and never requests a picker or broadens to screen capture", async () => {
+    state.inputs.Chrome!.kind = "pipewire-screen-capture-source";
+    state.inputs.Chrome!.settings = {};
+    const result = await harness.call("obs-prepare-demo", { ...selection, apply: true });
+    expect(result.isError).toBe(true);
+    expect(mutations()).toEqual([]);
+  });
+});

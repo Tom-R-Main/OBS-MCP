@@ -15,6 +15,7 @@ import { z, type ZodObject } from "zod";
 
 /** Tools that start/end a broadcast or end a take, with the question to ask. */
 export const LIVE_ACTIONS: Readonly<Record<string, string>> = {
+  "obs-take-scene": "Transition the staged preview scene to program?",
   "obs-start-stream": "Start the live stream?",
   "obs-stop-stream": "Stop the live stream?",
   "obs-toggle-stream": "Toggle the live stream? If it is live, this ends the broadcast.",

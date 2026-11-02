@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { normalizeSceneItem } from "./scene-identity.js";
 import crypto from "node:crypto";
 import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { OBSWebSocketClient } from "../client.js";
+import { OBSRequestError, type OBSWebSocketClient } from "../client.js";
+import { configuredWindow, VIDEO_ONLY_CAPTURE_KINDS, WINDOW_CAPTURE_KINDS } from "./capture-backend.js";
 import { stateDirectory } from "../state-dir.js";
 import { readInputs, same, sameTransformValue, takeSnapshot } from "./snapshots.js";
 
@@ -65,15 +67,35 @@ function pending(client: OBSWebSocketClient, selection: Selection): Journal | un
   }
 }
 
+/** Metadata only: never expose source settings or passwords in production status. */
+export function recoverySummary(client: OBSWebSocketClient): Obj {
+  try {
+    let names: string[];
+    try { names = readdirSync(journalDirectory()); } catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return { status: "observed", operations: [] }; throw e; }
+    if (names.length > 1024) return { status: "unknown", reason: "Recovery inventory exceeds limit" };
+    const operations = names.filter((name) => name.endsWith(".json")).map((name) => readJournal(name.slice(0, -5)))
+      .filter((journal) => !journal.recovered && journal.obsUrl === client.getConnectionStatus().url)
+      .map((journal) => ({ operationId: journal.operationId, sceneCollection: journal.state.sceneCollection, sceneName: journal.state.sceneName, inputName: journal.state.inputName, attempted: journal.attempted }));
+    return { status: "observed", operations };
+  } catch { return { status: "unknown", reason: "Recovery journals could not be inspected; inspect obs-recover-demo" }; }
+}
+
 /** Refuse unsupported or ambiguous selections rather than broaden the restricted recipe. */
 async function readState(client: OBSWebSocketClient, selection: Selection): Promise<{ state: State; desired: Obj }> {
   const url = new URL(client.getConnectionStatus().url);
   if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) throw new Error("V1 requires local OBS on loopback");
   const request = async (type: string, data?: Obj) => obj(await client.sendRequest(type, data));
-  if ((await request("GetVersion")).platform !== "macos") throw new Error("V1 requires macOS OBS");
+
   if ((await request("GetSceneCollectionList")).currentSceneCollectionName !== selection.sceneCollection) throw new Error("Selected scene collection is not current");
   for (const type of ["GetStreamStatus", "GetRecordStatus", "GetVirtualCamStatus", "GetReplayBufferStatus"]) {
-    const status = await request(type);
+    let status: Obj;
+    try { status = await request(type); }
+    catch (error) {
+      // OBS explicitly reports an unconfigured/unavailable feature with 604.
+      // This is distinct from a failed or malformed status on an existing output.
+      if (["GetVirtualCamStatus", "GetReplayBufferStatus"].includes(type) && error instanceof OBSRequestError && error.code === 604) continue;
+      throw error;
+    }
     if (status.outputActive !== false || status.outputReconnecting === true) throw new Error(`Preparation and recovery require inactive outputs: ${type} was active or unavailable`);
   }
   // GetOutputList's pinned contract leaves entry fields opaque. Never infer
@@ -92,13 +114,14 @@ async function readState(client: OBSWebSocketClient, selection: Selection): Prom
   const sceneUuid = string(selectedScene[0]!.sceneUuid);
   const inputs = list((await request("GetInputList")).inputs);
   const selectedInputs = inputs.filter((input) => input.inputName === selection.inputName);
-  if (selectedInputs.length !== 1 || selectedInputs[0]!.inputKind !== "screen_capture") throw new Error("Select one existing screen_capture input");
+  if (selectedInputs.length !== 1 || !WINDOW_CAPTURE_KINDS.has(String(selectedInputs[0]!.inputKind))) throw new Error("Select one existing macOS, XComposite or PipeWire window capture input");
+  const videoOnly = VIDEO_ONLY_CAPTURE_KINDS.has(String(selectedInputs[0]!.inputKind));
   const inputUuid = string(selectedInputs[0]!.inputUuid);
   let selected: Obj | undefined;
   let occurrences = 0;
   const sceneNames = new Set(sceneList.map((s) => string(s.sceneName)));
   for (const scene of sceneList) {
-    for (const item of list((await request("GetSceneItemList", { sceneName: scene.sceneName })).sceneItems)) {
+    for (const item of list((await request("GetSceneItemList", { sceneName: scene.sceneName })).sceneItems).map(normalizeSceneItem)) {
       if (typeof item.isGroup !== "boolean" || typeof item.sourceName !== "string") throw new Error("Incomplete scene membership; source exclusivity unavailable");
       if (item.isGroup === true || sceneNames.has(String(item.sourceName))) throw new Error("V1 requires a collection without nested scenes or groups to prove source exclusivity");
       if (item.sourceName === selection.inputName || item.sourceUuid === inputUuid) {
@@ -114,8 +137,9 @@ async function readState(client: OBSWebSocketClient, selection: Selection): Prom
   for (const key of FIT) if (!(key in transform) || (key !== "boundsType" && (typeof transform[key] !== "number" || !Number.isFinite(transform[key])))) throw new Error(`Incomplete snapshot: transform ${key} unavailable`);
   if (typeof transform.boundsType !== "string" || !transform.boundsType.startsWith("OBS_BOUNDS_")) throw new Error("Incomplete snapshot: transform boundsType unavailable");
   if (typeof transform.sourceWidth !== "number" || transform.sourceWidth <= 0 || typeof transform.sourceHeight !== "number" || transform.sourceHeight <= 0) throw new Error("Capture has no reported source dimensions");
-  const input = (await readInputs(client, [selection.inputName], ["inputSettings", "muted", "audioTracks"]))[0]!;
-  if (input.inputKind !== "screen_capture" || input.inputSettings.type !== 1 || typeof input.inputSettings.window !== "number" || input.inputSettings.window <= 0) throw new Error("Select a preconfigured window capture; V1 never retargets it");
+  const input = (await readInputs(client, [selection.inputName], videoOnly ? ["inputSettings"] : ["inputSettings", "muted", "audioTracks"]))[0]!;
+  if (input.inputKind !== selectedInputs[0]!.inputKind || !configuredWindow(input.inputKind, input.inputSettings)) throw new Error("Select a preconfigured window capture; V1 never retargets it");
+  if (videoOnly) { input.muted = true; input.audioTracks = Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [n, false])); }
   if (!input.audioTracks || Object.keys(input.audioTracks).length !== 6 || [1, 2, 3, 4, 5, 6].some((n) => typeof input.audioTracks![String(n)] !== "boolean")) throw new Error("Incomplete snapshot: all six audio tracks are required");
   const video = await request("GetVideoSettings");
   if (typeof video.baseWidth !== "number" || video.baseWidth <= 0 || typeof video.baseHeight !== "number" || video.baseHeight <= 0) throw new Error("Canvas dimensions unavailable");
@@ -167,10 +191,11 @@ async function prepare(client: OBSWebSocketClient, selection: Selection, apply: 
     }
     const changes = changesFor(state, desired);
     if (!apply || changes.length === 0) return result(changes.length ? "planned" : "already-prepared", { applied: false, changes });
-    const snapshot = await takeSnapshot(client, { scenes: [selection.sceneName], inputs: [selection.inputName], auto: true, label: "before restricted demo", sceneCollection: selection.sceneCollection, requiredInputFields: ["inputSettings", "muted", "audioTracks"] });
+    const videoOnly = VIDEO_ONLY_CAPTURE_KINDS.has(String((await client.sendRequest("GetInputSettings", { inputName: selection.inputName })).inputKind));
+    const snapshot = await takeSnapshot(client, { scenes: [selection.sceneName], inputs: [selection.inputName], auto: true, label: "before restricted demo", sceneCollection: selection.sceneCollection, requiredInputFields: videoOnly ? ["inputSettings"] : ["inputSettings", "muted", "audioTracks"] });
     const savedInput = snapshot.inputs[0];
     const savedItem = snapshot.items.find((item) => item.sceneItemId === state.sceneItemId && item.sourceName === state.inputName);
-    if (!savedInput || !savedItem || !same(savedInput.inputSettings, state.settings) || savedInput.muted !== state.muted || !same(savedInput.audioTracks, state.tracks)
+    if (!savedInput || !savedItem || !same(savedInput.inputSettings, state.settings) || (!videoOnly && (savedInput.muted !== state.muted || !same(savedInput.audioTracks, state.tracks)))
       || FIT.some((key) => !sameTransformValue(key, savedItem.transform[key], state.transform[key]))) throw new Error("State changed during snapshot; nothing changed");
     journal = { version: 1, operationId: crypto.randomUUID(), obsUrl: client.getConnectionStatus().url, snapshotId: snapshot.id, state, changes, attempted: 0 };
     persist(journal); // Durable before the first OBS mutation, including a crash/uncertain response.
@@ -232,7 +257,7 @@ async function exclusive(client: OBSWebSocketClient, run: () => Promise<CallTool
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   server.registerTool("obs-prepare-demo", {
     title: "Prepare Existing Demo Capture",
-    description: "Plan by default. Fit and silence one existing macOS window capture in the exact current collection/program scene. Refuses live output, shared sources, groups, missing identity/state, and unpersisted recovery. Does not retarget or create anything. No UI exclusion guarantee.",
+    description: "Plan by default. Fit and silence one existing macOS, Linux X11 or authorized PipeWire window capture in the exact current collection/program scene. Refuses live output, shared sources, groups, missing identity/state, and unpersisted recovery. Does not retarget or create anything. No UI exclusion guarantee.",
     inputSchema: z.object({ sceneCollection: z.string().min(1), sceneName: z.string().min(1), inputName: z.string().min(1), apply: z.boolean().default(false) }),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   }, ({ sceneCollection, sceneName, inputName, apply }) => exclusive(client, () => prepare(client, { sceneCollection, sceneName, inputName }, apply)));

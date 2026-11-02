@@ -8,6 +8,7 @@ import { z } from "zod";
 import { RequestBatchExecutionType, type OBSWebSocketClient } from "../client.js";
 import { getObsProtocolRequest, OBS_PROTOCOL_REQUESTS } from "../obs-protocol.js";
 import { READ_ONLY_TOOL } from "./request-tool.js";
+import { GUARDED_CAPTURE_PROPERTIES, guardCapturePropertyList } from "./protocol-extensions.js";
 
 const UNRESTRICTED_REQUEST_TOOL = {
   readOnlyHint: false,
@@ -87,6 +88,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       }
 
       try {
+        if (requestType === "GetInputPropertiesListPropertyItems") {
+          const blocker = await guardCapturePropertyList(client, requestData ?? {});
+          if (blocker) return { content: [{ type: "text", text: blocker }], isError: true };
+        }
         const response = await client.sendRequest(requestType, requestData);
         return {
           content: [{ type: "text", text: JSON.stringify(response, null, 2) }],
@@ -131,6 +136,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         };
       }
       try {
+        if (requests.some((request) => request.requestType === "GetInputPropertiesListPropertyItems" && GUARDED_CAPTURE_PROPERTIES.has(String(request.requestData?.propertyName)))) {
+          return { content: [{ type: "text", text: "Capture property enumeration must run separately through obs-get-input-property-list-items so its crash guard can inspect current state after any changes." }], isError: true };
+        }
         const batch = await client.sendBatch(requests, { executionType: EXECUTION_TYPES[executionType], haltOnFailure });
         const results = batch.map((result, index) => ({ index, ...result }));
         const failed = results.filter(({ ok }) => !ok);

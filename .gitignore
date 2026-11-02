@@ -29,3 +29,7 @@ yarn-error.log*
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Native migration build and project-scoped Cargo cache
+native/target/
+native/.cargo-home/

@@ -61,15 +61,18 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Listing macOS ScreenCaptureKit applications on a screen_capture input with no
- * display selected crashed OBS 32.2.2 during live testing, so refuse it.
- */
-async function guardScreenCaptureApplicationList(
+/** Property lists requiring source-aware admission. Batches cannot establish
+ * that admission across earlier mutations, so they must query these separately. */
+export const GUARDED_CAPTURE_PROPERTIES = new Set(["display_uuid", "application", "capture_window"]);
+
+/** ScreenCaptureKit deliberately retains null no-selection placeholders in its
+ * display/application string lists. The affected native serializer can crash
+ * before JSON reaches us; selecting a display does not remove the placeholder. */
+export async function guardCapturePropertyList(
   client: OBSWebSocketClient,
   args: Record<string, unknown>,
 ): Promise<string | undefined> {
-  if (args.propertyName !== "application") return undefined;
+  if (!GUARDED_CAPTURE_PROPERTIES.has(String(args.propertyName))) return undefined;
   let settings: unknown;
   try {
     settings = await client.sendRequest("GetInputSettings", {
@@ -77,13 +80,19 @@ async function guardScreenCaptureApplicationList(
       ...(typeof args.inputUuid === "string" ? { inputUuid: args.inputUuid } : {}),
     });
   } catch {
-    return undefined;
+    return "Capture properties could not be checked safely; read obs-get-input-settings before listing them.";
   }
-  if (!isObject(settings) || settings.inputKind !== "screen_capture") return undefined;
+  if (!isObject(settings) || typeof settings.inputKind !== "string" || !settings.inputKind) {
+    return "Capture properties could not be checked safely; inspect obs-get-input-settings for the source kind.";
+  }
   const inputSettings = isObject(settings.inputSettings) ? settings.inputSettings : {};
-  if (typeof inputSettings.display_uuid === "string" && inputSettings.display_uuid) return undefined;
-  return "listing applications on a screen_capture input with no display selected can crash OBS. "
-    + "Set the input's display_uuid with obs-set-input-settings first.";
+  if (args.propertyName === "capture_window") {
+    if (settings.inputKind !== "xcomposite_input" || (typeof inputSettings.capture_window === "string" && inputSettings.capture_window.length > 0)) return undefined;
+    return "Listing windows on an unconfigured XComposite input can crash OBS. Select a window in OBS first, then inspect or plan its binding; discovery never seeds this property.";
+  }
+  if (settings.inputKind !== "screen_capture") return undefined;
+  return "Listing ScreenCaptureKit display_uuid or application string properties can crash OBS even after a display is selected. "
+    + "Use the integer window list for window capture, or configure the intended application capture in OBS and bind that existing source.";
 }
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
@@ -174,7 +183,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       propertyName: z.string().describe("Name of the list property"),
     }),
     annotations: READ_ONLY_TOOL,
-    guard: guardScreenCaptureApplicationList,
+    guard: guardCapturePropertyList,
   });
 
   registerObsRequestTool(server, client, {

@@ -1,0 +1,157 @@
+{
+  "formatVersion": 1,
+  "listing": {
+    "prompts": [
+      {
+        "name": "software-demo",
+        "title": "Record a bounded software demo",
+        "description": "Prepare an existing local macOS or Linux window capture, record a bounded silent take, and inspect the final file",
+        "arguments": [
+          {
+            "name": "sceneCollection",
+            "required": true
+          },
+          {
+            "name": "sceneName",
+            "required": true
+          },
+          {
+            "name": "inputName",
+            "required": true
+          },
+          {
+            "name": "maxDurationSeconds",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "record-demo",
+        "title": "Record a silent app demo",
+        "description": "Set up a silent window capture on macOS or Linux, preflight it, and record a take",
+        "arguments": [
+          {
+            "name": "window",
+            "description": "Part of the window title or app name to capture, e.g. \"ChatGPT\"",
+            "required": true
+          },
+          {
+            "name": "scene",
+            "description": "Scene to record from",
+            "required": false
+          },
+          {
+            "name": "seconds",
+            "description": "Length of a hands-off take in seconds; ignored when steps are given",
+            "required": false
+          },
+          {
+            "name": "steps",
+            "description": "Steps to perform on screen, one per line; each becomes a chapter",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "pre-stream-check",
+        "title": "Pre-stream check",
+        "description": "Check OBS is ready to go live without changing anything"
+      }
+    ]
+  },
+  "resourceTemplates": {
+    "resourceTemplates": [
+      {
+        "name": "scene-items",
+        "title": "Scene items",
+        "uriTemplate": "obs://scene/{sceneName}/items",
+        "description": "Items in a scene with their transforms; updates when items are added, removed, shown, or hidden",
+        "mimeType": "application/json"
+      },
+      {
+        "name": "scene-screenshot",
+        "title": "Scene screenshot",
+        "uriTemplate": "obs://scene/{sceneName}/screenshot",
+        "description": "A 960px-wide JPEG of a scene as OBS renders it",
+        "mimeType": "image/jpeg"
+      }
+    ]
+  },
+  "resourceListing": {
+    "resources": [
+      {
+        "name": "status",
+        "title": "OBS status",
+        "uri": "obs://status",
+        "description": "Bounded production observation, identical to obs-observe; explicit unknowns and consistency checks",
+        "mimeType": "application/json"
+      },
+      {
+        "name": "take",
+        "title": "Current take",
+        "uri": "obs://take/current",
+        "description": "While obs-record-clip or a recording session runs: audio levels on recorded tracks, skipped frames, black or unchanging picture, chapters, and warnings; updates when a warning is raised",
+        "mimeType": "application/json"
+      },
+      {
+        "name": "scenes",
+        "title": "OBS scenes",
+        "uri": "obs://scenes",
+        "description": "Scene list with the program and preview scenes; updates when scenes change",
+        "mimeType": "application/json"
+      }
+    ]
+  },
+  "sceneItemResource": {
+    "name": "__OBS_NATIVE_SCENE_70ba__ items",
+    "title": "Scene items",
+    "uri": "obs://scene/__OBS_NATIVE_SCENE_70ba__/items",
+    "description": "Items in a scene with their transforms; updates when items are added, removed, shown, or hidden",
+    "mimeType": "application/json"
+  },
+  "recipe": {
+    "id": "software-demo",
+    "version": 1,
+    "defaultMaxDurationSeconds": 120,
+    "maxDurationSeconds": 3600,
+    "requiredPreflightChecks": [
+      "connection",
+      "record-idle",
+      "record-directory",
+      "disk-space",
+      "encoder",
+      "audio",
+      "scene-items"
+    ]
+  },
+  "templates": {
+    "software": "Follow software-demo/v1 for {\"sceneCollection\":\"__OBS_NATIVE_COLLECTION_70ba__\",\"sceneName\":\"__OBS_NATIVE_SCENE_70ba__\",\"inputName\":\"__OBS_NATIVE_INPUT_70ba__\"}.\n\nUse the packaged .agents/skills/obs-demo/SKILL.md and docs/recipes/software-demo.v1.json when file access is available. These instructions grant no permission to record or change OBS.\n\nPlan with obs-prepare-demo for that exact target. After user authorization, apply the same request with apply:true and retain operationId. Refuse creation, retargeting, shared capture, active outputs, and unsupported targets; do not substitute the legacy record-demo workflow.\n\nInspect obs-get-source-screenshot of the program scene for the expected window and framing. Nonblack is insufficient. Stop if content cannot be checked.\n\nRun obs-preflight expectSilent:true. Require pass for connection, record-idle, record-directory, disk-space, encoder, audio, scene-items and no failed checks. Required unknown/missing evidence blocks recording.\n\nStart with obs-take-start expectSilent:true, lock:true, requireVerifiedPreflight:true, maxDurationSeconds:739. Mark steps with obs-take-mark and inspect obs-take-status. Stop your own take with obs-take-stop after steps or failure. Reconcile an uncertain stop with obs-get-record-status before another action.\n\nInspect the final file, verification status, chapter sidecar, and obs-contact-sheet. Optional obs-trim-take exports a copy; recheck that copy. Use scripts/verify-demo.mjs with an expected reference, duration, chapter names, and visual checkpoints when local file tooling is available. Missing required evidence means unverified, even if recording succeeded.\n\nPlan obs-recover-demo using operationId; apply only when requested. Conflicts need operator review; never replace guarded recovery with unconditional obs-restore. The deadline requires a running server; process death and competing controllers remain outside the guarantee.",
+    "record": "Record a silent demo of the \"__OBS_NATIVE_WINDOW_70ba__\" window in the OBS scene \"__OBS_NATIVE_SCENE_70ba__\".\n\n1. If the scene \"__OBS_NATIVE_SCENE_70ba__\" does not exist, create it with obs-create-scene and switch to it.\n2. Call obs-capture-window with sceneName \"__OBS_NATIVE_SCENE_70ba__\", inputName \"Demo Capture\", window \"__OBS_NATIVE_WINDOW_70ba__\", silent true, fit true, includeScreenshot true. If it lists several matches, ask me which one.\n3. Look at the screenshot and the reported size. If the capture renders at 0×0 or shows the wrong window, stop and tell me.\n4. Call obs-preflight with expectSilent true. Fix every failure, or explain it to me if you cannot.\n5. Call obs-record-clip with durationSeconds __OBS_NATIVE_SECONDS_70ba__ and expectSilent true, then report the file path and the verification result.\nDo not change output settings with obs-set-profile-parameter without asking: OBS needs a restart to apply them.",
+    "steps": "Record a silent demo of the \"__OBS_NATIVE_WINDOW_70ba__\" window in the OBS scene \"__OBS_NATIVE_SCENE_70ba__\".\n\n1. If the scene \"__OBS_NATIVE_SCENE_70ba__\" does not exist, create it with obs-create-scene and switch to it.\n2. Call obs-capture-window with sceneName \"__OBS_NATIVE_SCENE_70ba__\", inputName \"Demo Capture\", window \"__OBS_NATIVE_WINDOW_70ba__\", silent true, fit true, includeScreenshot true. If it lists several matches, ask me which one.\n3. Look at the screenshot and the reported size. If the capture renders at 0×0 or shows the wrong window, stop and tell me.\n4. Call obs-preflight with expectSilent true. Fix every failure, or explain it to me if you cannot.\n5. Call obs-take-start with expectSilent true. For each step below, call obs-take-mark with the step's name, then perform it. If obs-take-status or a tool result reports a warning, tell me. Call obs-take-stop after the last step, then report the file path, the chapters, and the verification result.\n   - __OBS_NATIVE_STEPS_70ba__\nDo not change output settings with obs-set-profile-parameter without asking: OBS needs a restart to apply them.",
+    "preStream": {
+      "messages": [
+        {
+          "role": "user",
+          "content": {
+            "type": "text",
+            "text": "Check whether OBS is ready to go live. Use only read-only tools and change nothing.\n\n1. obs-get-status and obs-get-stats: connection, dropped or skipped frames, CPU, and free disk space.\n2. obs-get-stream-status and obs-get-stream-service-settings: the stream is not already live and a service is configured. Never repeat the stream key back.\n3. obs-get-current-scene and obs-get-scene-items: the program scene has visible, correctly sized sources. Take one obs-get-source-screenshot of the program scene and describe it.\n4. obs-get-input-list with obs-get-input-mute and obs-get-input-volume for audio inputs: say which are live, muted, or silent.\n5. obs-preflight: report any failures that also apply to streaming (encoder, output settings).\nFinish with a short go / no-go summary and the specific fixes you recommend."
+          }
+        }
+      ]
+    }
+  },
+  "replacements": {
+    "software": {
+      "collection": "\"__OBS_NATIVE_COLLECTION_70ba__\"",
+      "scene": "\"__OBS_NATIVE_SCENE_70ba__\"",
+      "input": "\"__OBS_NATIVE_INPUT_70ba__\"",
+      "duration": "maxDurationSeconds:739"
+    },
+    "record": {
+      "window": "__OBS_NATIVE_WINDOW_70ba__",
+      "scene": "__OBS_NATIVE_SCENE_70ba__",
+      "seconds": "__OBS_NATIVE_SECONDS_70ba__",
+      "steps": "   - __OBS_NATIVE_STEPS_70ba__\n"
+    }
+  }
+}

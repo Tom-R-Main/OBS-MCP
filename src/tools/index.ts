@@ -34,12 +34,16 @@ import * as resources from "./resources.js";
 import * as prompts from "./prompts.js";
 import * as demo from "./demo.js";
 import * as sceneAudit from "./scene-audit.js";
+import * as observe from "./observe.js";
+import * as sceneTemplate from "./scene-template.js";
+import * as stage from "./stage.js";
 import { withStructuredToolResults } from "./results.js";
 import { liveConfirmationEnabled, withLiveConfirmation } from "./confirm.js";
 import { ALL_TOOLS, scopedServer, type RegisteredTool, type ToolFilter, type ToolGroup } from "./toolsets.js";
 
 const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client: OBSWebSocketClient): void }]> = [
   ["general", general],
+  ["general", observe],
   ["general", lease],
   ["scenes", scenes],
   ["sources", sources],
@@ -63,6 +67,8 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["scene-items", snapshots],
   ["scenes", applyScene],
   ["scenes", sceneAudit],
+  ["scenes", sceneTemplate],
+  ["scenes", stage],
 ];
 
 /**

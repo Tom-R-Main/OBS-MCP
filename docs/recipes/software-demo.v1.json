@@ -1,7 +1,7 @@
 {
   "id": "software-demo",
   "version": 1,
-  "platform": "macos",
+  "platforms": ["macos", "linux-x11", "linux-wayland-portal"],
   "scope": "Local OBS; existing current scene and configured window capture; one server process",
   "prepareTool": "obs-prepare-demo",
   "recoverTool": "obs-recover-demo",

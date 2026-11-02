@@ -71,6 +71,7 @@ function errorResult(text: string): CallToolResult {
 export async function startOutputAndConfirm(
   client: OBSWebSocketClient,
   definition: OutputStartDefinition,
+  onAccepted?: () => void,
 ): Promise<CallToolResult> {
   const { label, requestType, statusRequest, stateEvent, timeoutMs } = definition;
 
@@ -96,6 +97,7 @@ export async function startOutputAndConfirm(
   try {
     try {
       await client.sendRequest(requestType);
+      onAccepted?.();
     } catch (error) {
       return errorResult(
         `${label} failed to start: ${error instanceof Error ? error.message : String(error)}`,

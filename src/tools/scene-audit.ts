@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { normalizeSceneItem } from "./scene-identity.js";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
@@ -119,7 +120,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
     const walk = async (uuid: string, group: boolean, path: Identity[], ancestors: Set<string>, ancestorEnabled: boolean | null): Promise<void> => {
       if (path.length > LIMITS.maxDepth || ancestors.has(uuid)) { complete = false; add("membership", "unknown", "Nested scene cycle or depth limit reached"); return; }
       const type = group ? "GetGroupSceneItemList" : "GetSceneItemList";
-      const members = objects((await request(type, { ...canvas, sceneUuid: uuid })).sceneItems);
+      const members = objects((await request(type, { ...canvas, sceneUuid: uuid })).sceneItems).map(normalizeSceneItem);
       if (members.length > LIMITS.maxItems || new Set(members.map((item) => item.sceneItemId)).size !== members.length) throw new Error("Scene item inventory is ambiguous or exceeds the item limit");
       containers.push({ uuid, group, before: signature(membership(members)) });
       for (const member of members) {
@@ -192,7 +193,7 @@ async function audit(client: OBSWebSocketClient, options: Options): Promise<Call
     }
     // Recheck observed values, identities, and membership; no atomic snapshot is claimed.
     for (const container of containers) {
-      const members = objects((await request(container.group ? "GetGroupSceneItemList" : "GetSceneItemList", { ...canvas, sceneUuid: container.uuid })).sceneItems);
+      const members = objects((await request(container.group ? "GetGroupSceneItemList" : "GetSceneItemList", { ...canvas, sceneUuid: container.uuid })).sceneItems).map(normalizeSceneItem);
       if (signature(membership(members)) !== container.before) invalidate();
     }
     for (const { item, before } of transforms) {
