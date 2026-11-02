@@ -72,6 +72,65 @@ struct Stats {
     drivers: AtomicUsize,
     bridge_opens: AtomicUsize,
     refused: AtomicUsize,
+    #[cfg(test)]
+    next_driver: AtomicUsize,
+    #[cfg(test)]
+    driver_states: std::sync::Mutex<std::collections::BTreeMap<usize, (u16, bool)>>,
+}
+// Diagnostics are never an admission capability. This guard has the exact
+// driver future's lifetime, including the Hyper response and peer EOF wait.
+#[cfg(test)]
+struct ProbeDriver {
+    stats: Arc<Stats>,
+    id: usize,
+}
+#[cfg(test)]
+impl ProbeDriver {
+    fn new(stats: Arc<Stats>, peer_port: u16) -> Self {
+        let id = stats
+            .next_driver
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
+                value.checked_add(1)
+            })
+            .expect("probe driver identity exhausted");
+        assert!(
+            stats
+                .driver_states
+                .lock()
+                .unwrap()
+                .insert(id, (peer_port, false))
+                .is_none()
+        );
+        Self { stats, id }
+    }
+    fn headers_complete(&self) {
+        self.stats
+            .driver_states
+            .lock()
+            .unwrap()
+            .get_mut(&self.id)
+            .expect("live probe driver")
+            .1 = true;
+    }
+}
+#[cfg(test)]
+impl Drop for ProbeDriver {
+    fn drop(&mut self) {
+        assert!(
+            self.stats
+                .driver_states
+                .lock()
+                .unwrap()
+                .remove(&self.id)
+                .is_some()
+        );
+    }
+}
+#[cfg(test)]
+impl Stats {
+    fn driver_snapshot(&self) -> Vec<serde_json::Value> {
+        self.driver_states.lock().unwrap().iter().map(|(id, (port, complete))| serde_json::json!({"id":id,"peerPort":port,"phase":if *complete {"http"} else {"headers"}})).collect()
+    }
 }
 enum Command {
     Open {
@@ -235,6 +294,7 @@ async fn owned_response(
     let status = metadata.status;
     let content_type = metadata.content_type;
     let bearer = metadata.authenticate_bearer;
+    let allow = metadata.allow_header();
     let body = PacketBody {
         first: Some(first),
         response,
@@ -257,6 +317,12 @@ async fn owned_response(
         result.headers_mut().insert(
             hyper::header::WWW_AUTHENTICATE,
             hyper::header::HeaderValue::from_static("Bearer"),
+        );
+    }
+    if let Some(allow) = allow {
+        result.headers_mut().insert(
+            hyper::header::ALLOW,
+            hyper::header::HeaderValue::from_static(allow),
         );
     }
     result
@@ -384,6 +450,11 @@ async fn drive(
         }
     }
     let _count = DriverCount(handle.stats.clone());
+    #[cfg(test)]
+    let probe_driver = ProbeDriver::new(
+        handle.stats.clone(),
+        stream.peer_addr().map_or(0, |address| address.port()),
+    );
     let head_credit = Arc::new(
         head_pool
             .try_acquire_many_owned(HEAD_CUSTODY as u32)
@@ -413,6 +484,10 @@ async fn drive(
         prefix.extend_from_slice(&slab[..n]);
         tokio::task::consume_budget().await;
     };
+    #[cfg(test)]
+    if matches!(&facts, head::Parsed::Complete(_)) {
+        probe_driver.headers_complete();
+    }
     let connection = Arc::new(connection);
     let owner = connection.clone();
     let facts = Arc::new(facts);
@@ -518,6 +593,28 @@ impl Running {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn probe_driver_identity_and_phase_survive_until_guard_drop() {
+        let stats = Arc::new(Stats::default());
+        let idle = ProbeDriver::new(stats.clone(), 1001);
+        let http = ProbeDriver::new(stats.clone(), 1002);
+        http.headers_complete();
+        assert_eq!(
+            stats.driver_snapshot(),
+            vec![
+                serde_json::json!({"id":idle.id,"peerPort":1001,"phase":"headers"}),
+                serde_json::json!({"id":http.id,"peerPort":1002,"phase":"http"})
+            ]
+        );
+        let old = http.id;
+        drop(http);
+        assert_eq!(stats.driver_snapshot().len(), 1);
+        assert_eq!(stats.driver_snapshot()[0]["id"], idle.id);
+        drop(idle);
+        assert!(stats.driver_snapshot().is_empty());
+        let next = ProbeDriver::new(stats.clone(), 1003);
+        assert!(next.id > old);
+    }
     #[tokio::test]
     async fn queued_head_custody_survives_abandoned_http_observer_until_actual_queue_drop() {
         let pool = Arc::new(Semaphore::new(HEAD_CUSTODY));
@@ -563,7 +660,7 @@ mod tests {
             let write=std::env::var("NATIVE_HTTP_TCP_WRITE_MS").ok().and_then(|n|n.parse::<u64>().ok()).unwrap_or(5000);let read=std::env::var("NATIVE_HTTP_TCP_READ_MS").ok().and_then(|n|n.parse::<u64>().ok()).unwrap_or(5000);let server=Running::start(bridge,Policy::new(token.as_deref()),Bounds{read:Duration::from_millis(read),write:Duration::from_millis(write),..Bounds::default()},0).await.unwrap();
             fn send(value:serde_json::Value){use std::io::Write;let mut out=std::io::stdout().lock();out.write_all(b"HTTP_TCP_PROBE ").unwrap();serde_json::to_writer(&mut out,&value).unwrap();out.write_all(b"\n").unwrap();out.flush().unwrap();}
             send(serde_json::json!({"ready":true,"port":server.port(),"headCustodyBytes":HEAD_CUSTODY}));let mut lines=tokio::io::BufReader::new(tokio::io::stdin()).lines();
-            while let Some(line)=lines.next_line().await.unwrap(){if line=="shutdown"{break;}else if line=="stats"{send(serde_json::json!({"accepted":server.handle.stats.accepted.load(Ordering::SeqCst),"drivers":server.handle.stats.drivers.load(Ordering::SeqCst),"bridgeOpens":server.handle.stats.bridge_opens.load(Ordering::SeqCst),"refused":server.handle.stats.refused.load(Ordering::SeqCst)}));}}
+            while let Some(line)=lines.next_line().await.unwrap(){if line=="shutdown"{break;}else if line=="stats"{send(serde_json::json!({"accepted":server.handle.stats.accepted.load(Ordering::SeqCst),"drivers":server.handle.stats.drivers.load(Ordering::SeqCst),"bridgeOpens":server.handle.stats.bridge_opens.load(Ordering::SeqCst),"refused":server.handle.stats.refused.load(Ordering::SeqCst),"driverStates":server.handle.stats.driver_snapshot()}));}}
             server.handle.closing.cancel();server.stopped().await;server.close().await.unwrap();send(serde_json::json!({"joined":true}));
         });
     }

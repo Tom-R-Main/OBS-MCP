@@ -559,8 +559,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-02T19:44:13.976Z",
-    "sourceRevision": "8757dbad7b3d477adf61ef609afe5104e4e5fe8c",
+    "at": "2026-11-02T21:59:54.001Z",
+    "sourceRevision": "d152703690070bc9f36b532634f3f440a0149f4c",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -692,11 +692,11 @@
       "native/src/generic_requests.rs": "e9adbb1f7292932e27893ae0bf901f63751725270d45d3059730ec756452e417",
       "native/src/http_bridge.rs": "aec82df824d0bc3e4a91cd1d0136a9b8d201f0108e03c33e15c4fe1aac81994e",
       "native/src/http_ingress.rs": "908382adfdc15e4ce330e5c57704cefd9dfeb6a612bc0ec4c50d442f6ef46906",
-      "native/src/http_protocol.rs": "779f18ac3af2db94f616a2de263a97c8c5d02c239aef3ff4bf3a401c3496f271",
+      "native/src/http_protocol.rs": "6978874914df57a1e8198cd7dfe6b719246ea6eea6a4d4a781f33806d1f53c35",
       "native/src/http_resources.rs": "c0c1815219d731143ad8c02ec0c1281cc30c39fc530a08fe29ce5435c5dd8122",
       "native/src/http_sink.rs": "0e5f3539a8485fa94317e6df0af49fc8e53747ab6ea00f777d4182f4fe904229",
       "native/src/http_startup.rs": "e740c2e2cc7daa5ba26de0d86861db9ea93787ff72ab728c085a9f713fa40b6b",
-      "native/src/http_tcp.rs": "2e3f01ac0a70e056eb22859d349ba6846d2c520529b0aa2f9a327a2953442ce7",
+      "native/src/http_tcp.rs": "608bd29f11031a2cd33dcf9afe84948ba364a1bcfdb4df3845c45142d11e553c",
       "native/src/http_tcp_head.rs": "c234362523e2077641d0257c9d71c1d2730c84d6522b1528a9a404a53cf1a076",
       "native/src/http_tcp_io.rs": "b53226bcc0dcbd8ae7306dbe3395ee8b2c38d6f4281ca98b8ea6e3440c947025",
       "native/src/identity.rs": "c1ae69be0c0542cc93d80f3e8f6989d830fb0cfffb926c84a0b75d9aabe84028",
@@ -786,7 +786,7 @@
       "native/tests/generic20_contract.rs": "2f77c2c79060315df742fd45a0f3cb7121d8a4b67d8da226a23d2869f95a1181",
       "native/tests/generic6_contract.rs": "a0e22ff44d771f1c3dcbd0404ced418ab0c61514013693d9de7a8404a2fcb57a",
       "native/tests/generic8_contract.rs": "a3c5efe445094d9931e5b66ccb28f3494a61c96525165a6830251f84673f8ea3",
-      "native/tests/http_protocol_contract.rs": "1ba611389ef8ea824a0000ea1599a1d86421e0f41517b87290d85cd0af1c1772",
+      "native/tests/http_protocol_contract.rs": "7d76c874f6d9a0c0879a1e2dce9a997f7f4fa79d40df88963b7798efde4f766c",
       "native/tests/input_receipt_contract.rs": "708d896752c791607e8b6decbc987b078d28fd923104820cfd8fecad7185ba0b",
       "native/tests/json_number_wire_contract.rs": "6728b7df662712b194f47a5261dd44c8119659ef7d5918553b6ac40350e2cb54",
       "native/tests/manual_record_stop_contract.rs": "a7a59276200c9487b95d3f11fb153a6bff1f21032c9af0b0534495ee224064cc",

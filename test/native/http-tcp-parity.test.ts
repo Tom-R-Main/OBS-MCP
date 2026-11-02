@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdirSync,mkdtempSync,realpathSync,rmSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,realpathSync,rmSync,readFileSync,readdirSync,writeFileSync,appendFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import net from 'node:net';
@@ -13,11 +13,13 @@ import {FakeOBSServer} from '../support/fake-obs-server.js';
 import {serveProduction} from '../support/production-fixture.js';
 import {initialize} from '../../src/tools/index.js';
 import {serveHttp} from '../../src/http.js';
+import {closeHttpNativeEntries,launchHttpNativeEntry} from '../support/http-native-entry.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const binary=process.env.HTTP_TCP_PROBE_BINARY;
 type Row=Record<string,unknown>;
 const closes:(()=>Promise<void>)[]=[];
 afterEach(async()=>{for(const close of closes.splice(0).reverse())await close();});
+afterEach(closeHttpNativeEntries);
 function modern(id:number,method:string,params:Row={}){return{jsonrpc:'2.0',id,method,params:{...params,_meta:{'io.modelcontextprotocol/protocolVersion':'2026-07-28','io.modelcontextprotocol/clientInfo':{name:'wire-caller',version:'1'},'io.modelcontextprotocol/clientCapabilities':{}}}};}
 async function native(confirm=false,read=5000,take=false,token?:string,write=5000){
  if(!binary)throw Error('HTTP_TCP_PROBE_BINARY must name an immutable candidate test executable');
@@ -49,9 +51,7 @@ async function source(confirm=false,token?:string){
 async function client(url:string,legacy:boolean,form=false){
  const client=new Client({name:legacy?'sdk-legacy':'sdk-modern',version:'1'},{capabilities:form?{elicitation:{form:{}}}:{},versionNegotiation:{mode:legacy?'legacy':{pin:'2026-07-28'}}});
  if(form)client.setRequestHandler('elicitation/create',async()=>({action:'accept',content:{confirm:true}}));
- // Own the test client's one-exchange connection policy. Fetch may otherwise
- // preconnect an unused replacement after abort, which is a separate header reader.
- const transport=new StreamableHTTPClientTransport(new URL(url),{requestInit:{headers:{Connection:'close'}}});await client.connect(transport,{timeout:5000});closes.push(async()=>{await client.close();});return client;
+ const transport=new StreamableHTTPClientTransport(new URL(url));await client.connect(transport,{timeout:5000});closes.push(async()=>{await client.close();});return client;
 }
 async function raw(port:number,request:string){const socket=net.connect({host:'127.0.0.1',port});const closed=new Promise<void>(resolve=>socket.once('close',()=>resolve()));socket.on('error',()=>{});await once(socket,'connect');let response='';socket.on('data',chunk=>{response+=chunk.toString('latin1');});socket.write(request);const timer=setTimeout(()=>socket.destroy(),3000);await closed;clearTimeout(timer);return response;}
 for(const legacy of[false,true])it(`actual SDK2.4 discovers, reads and reconnects on explicit-close native TCP (${legacy})`,async()=>{
@@ -61,18 +61,29 @@ for(const legacy of[false,true])it(`actual SDK2.4 discovers, reads and reconnect
  expect(Number((await n.stats()).accepted)).toBeGreaterThan(2);
 });
 it('actual SDK modern confirmation resumes once over separate native TCP exchanges',async()=>{const n=await native(true),c=await client(n.url,false,true);expect((await c.callTool({name:'obs-stop-record',arguments:{}})).isError).not.toBe(true);expect(n.fake.history().filter(row=>row.frame.op===6&&row.frame.d.requestType==='StopRecord')).toHaveLength(1);});
-it('actual SDK modern SSE listen stays open while a distinct TCP exchange reads and closes',async()=>{const n=await native(),c=await client(n.url,false);const subscription=await c.listen({resourcesListChanged:true});expect(await c.listTools()).toHaveProperty('tools');expect((await c.callTool({name:'obs-get-stats',arguments:{}})).isError).not.toBe(true);await subscription.close();expect(await subscription.closed).toBe('local');await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(0));});
+type DriverState={id:number;peerPort:number;phase:'headers'|'http'};
+function driverStates(stats:Row):DriverState[]{return stats.driverStates as DriverState[];}
+async function singleHttpDriver(n:{stats:()=>Promise<Row>}){let driver:DriverState|undefined;await vi.waitFor(async()=>{const live=driverStates(await n.stats()).filter(row=>row.phase==='http');expect(live).toHaveLength(1);driver=live[0];});return driver!;}
+it('actual SDK modern SSE listen stays open while a distinct TCP exchange reads and closes',async()=>{
+ const n=await native(),c=await client(n.url,false),subscription=await c.listen({resourcesListChanged:true});
+ const sse=await singleHttpDriver(n);expect(await c.listTools()).toHaveProperty('tools');expect((await c.callTool({name:'obs-get-stats',arguments:{}})).isError).not.toBe(true);
+ expect(driverStates(await n.stats())).toContainEqual(sse);await subscription.close();expect(await subscription.closed).toBe('local');
+ // Pool-created pre-head sockets own separate bounded readers. The exact SSE
+ // driver must join, independently of whether the fetch pool retains one.
+ await vi.waitFor(async()=>expect(driverStates(await n.stats()).some(row=>row.id===sse.id)).toBe(false));
+});
 it('closing an SDK SSE response joins that exchange while an independent idle header reader remains owned',async()=>{
- const n=await native();const idle=net.connect({host:'127.0.0.1',port:n.port});idle.on('error',()=>{});const closed=once(idle,'close');await once(idle,'connect');
+ const n=await native();const idle=net.connect({host:'127.0.0.1',port:n.port});idle.on('error',()=>{});const closed=once(idle,'close');await once(idle,'connect');const port=idle.localPort;
+ let idleDriver:DriverState|undefined;
  try{
-  await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(1));expect((await n.stats()).bridgeOpens).toBe(0);
-  const c=await client(n.url,false),subscription=await c.listen({resourcesListChanged:true});
-  await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(2));
-  expect((await c.callTool({name:'obs-get-stats',arguments:{}})).isError).not.toBe(true);
+  await vi.waitFor(async()=>{idleDriver=driverStates(await n.stats()).find(row=>row.peerPort===port);expect(idleDriver?.phase).toBe('headers');});expect((await n.stats()).bridgeOpens).toBe(0);
+  const c=await client(n.url,false),subscription=await c.listen({resourcesListChanged:true}),sse=await singleHttpDriver(n);
+  const roles=new Set([idleDriver!.id,sse.id]);const controlled=(stats:Row)=>driverStates(stats).filter(row=>roles.has(row.id));
+  expect(controlled(await n.stats())).toHaveLength(2);expect((await c.callTool({name:'obs-get-stats',arguments:{}})).isError).not.toBe(true);
   await subscription.close();expect(await subscription.closed).toBe('local');
-  await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(1));expect(idle.destroyed).toBe(false);
+  await vi.waitFor(async()=>expect(controlled(await n.stats())).toEqual([idleDriver]));expect(idle.destroyed).toBe(false);
+  idle.destroy();await closed;await vi.waitFor(async()=>expect(controlled(await n.stats())).toEqual([]));
  }finally{idle.destroy();await closed;}
- await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(0));
 });
 it('one native TCP connection emits explicit close and cannot execute a pipelined second MCP call',async()=>{const n=await native();const body=JSON.stringify(modern(1,'tools/call',{name:'obs-get-stats',arguments:{}}));const request=`POST /mcp HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMcp-Protocol-Version: 2026-07-28\r\nMcp-Method: tools/call\r\nMcp-Name: obs-get-stats\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;const response=await raw(n.port,request+request);expect(response.toLowerCase()).toContain('connection: close');expect([...response.matchAll(/HTTP\/1.1 200/g)]).toHaveLength(1);expect(n.fake.history().filter(row=>row.frame.op===6&&row.frame.d.requestType==='GetStats')).toHaveLength(1);});
 for(const lines of[
@@ -187,3 +198,36 @@ for(const[name,request]of[
  ['folded header','POST /mcp HTTP/1.1\r\nHost: localhost\r\nX-Test: a\r\n b\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'],
  ['space before colon','POST /mcp HTTP/1.1\r\nHost : localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'],
 ]as const)it(`Source-observed strict syntax refuses ${name} before Bridge/OBS`,async()=>{const n=await native();expect(await raw(n.port,request)).toMatch(/^HTTP\/1.1 400/);expect((await n.stats()).bridgeOpens).toBe(0);expect(n.fake.connectionCount).toBe(0);});
+
+// Compare policy headers and the complete decoded body without relying on JSON
+// key order, Date, or the transport implementation's framing choice.
+async function methodWire(url:string,verb:string,legacy:boolean,headers:[string,string][]=[],path='/mcp'){
+ const endpoint=new URL(url);
+ return await new Promise<{status:number;type:string|undefined;allow:string|undefined;authenticate:string|undefined;connection:string|undefined;body:unknown;bodyText:string}>((resolve,reject)=>{
+  const request=http.request({host:'127.0.0.1',port:endpoint.port,path,method:verb,headers:[['Host','localhost'],...headers,...(legacy?[]:[['Mcp-Protocol-Version','2026-07-28']]),['Connection','close']].flat()},response=>{
+   let text='';response.setEncoding('utf8');response.on('data',chunk=>{text+=chunk;});response.on('end',()=>{let body:unknown=text;try{body=JSON.parse(text);}catch{}resolve({status:response.statusCode!,type:response.headers['content-type'],allow:response.headers.allow,authenticate:response.headers['www-authenticate'],connection:response.headers.connection,body,bodyText:text});});response.on('error',reject);
+  });request.once('error',reject);request.end();
+ });
+}
+const methodSemantic=({bodyText:_raw,...reply}:Awaited<ReturnType<typeof methodWire>>)=>reply;
+for(const legacy of[true,false])for(const verb of['GET','PUT'])it(`HTTP method refusal preserves Source Allow POST over actual app and TCP (${verb},legacy=${legacy})`,async()=>{
+ const s=await source(),n=await native(),entry=await launchHttpNativeEntry();
+ const expected=await methodWire(s.url,verb,legacy),probe=await methodWire(n.url,verb,legacy),product=await methodWire((await entry.url()).href,verb,legacy);
+ const facts={bridgeOpens:Number((await n.stats()).bridgeOpens),sourceConnections:s.fake.connectionCount,probeConnections:n.fake.connectionCount,productConnections:entry.fake.connectionCount,sourceHistory:s.fake.history(),probeHistory:n.fake.history(),productHistory:entry.fake.history(),stdout:entry.stdout()};
+ if(process.env.HTTP_METHOD_EVIDENCE)appendFileSync(process.env.HTTP_METHOD_EVIDENCE,JSON.stringify({kind:'method',legacy,verb,source:expected,probe,product,facts})+'\n');
+ expect(expected).toMatchObject({status:405,allow:'POST',body:{jsonrpc:'2.0',error:{code:-32000,message:'Method not allowed.'},id:null}});
+ expect(methodSemantic(probe)).toEqual(methodSemantic(expected));expect(methodSemantic(product)).toEqual(methodSemantic(expected));
+ expect((await n.stats()).bridgeOpens).toBe(0);for(const fake of[s.fake,n.fake,entry.fake]){expect(fake.connectionCount).toBe(0);expect(fake.history()).toEqual([]);}expect(entry.stdout()).toBe('');
+});
+const methodPriorRefusals=[
+ {name:'path',path:'/wrong',headers:[] as [string,string][],token:undefined,status:404},
+ {name:'auth',path:'/mcp',headers:[] as [string,string][],token:'fixture-method-token',status:401},
+ {name:'Origin before auth',path:'/mcp',headers:[['Origin','http://other.invalid']] as [string,string][],token:'fixture-method-token',status:403},
+];
+for(const legacy of[true,false])it.each(methodPriorRefusals)(`HTTP method refusal preserves prior $name security reply without Allow (legacy=${legacy})`,async({name,path,headers,token,status})=>{
+ const s=await source(false,token),n=await native(false,5000,false,token),entry=await launchHttpNativeEntry({token});
+ const expected=await methodWire(s.url,'GET',legacy,headers,path),probe=await methodWire(n.url,'GET',legacy,headers,path),product=await methodWire((await entry.url()).href,'GET',legacy,headers,path);
+ if(process.env.HTTP_METHOD_EVIDENCE)appendFileSync(process.env.HTTP_METHOD_EVIDENCE,JSON.stringify({kind:'prior',name,legacy,source:expected,probe,product})+'\n');
+ expect(expected.status).toBe(status);expect(expected.allow).toBeUndefined();expect(methodSemantic(probe)).toEqual(methodSemantic(expected));expect(methodSemantic(product)).toEqual(methodSemantic(expected));
+ expect((await n.stats()).bridgeOpens).toBe(0);for(const fake of[s.fake,n.fake,entry.fake]){expect(fake.connectionCount).toBe(0);expect(fake.history()).toEqual([]);}expect(entry.stdout()).toBe('');
+});

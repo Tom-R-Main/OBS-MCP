@@ -260,6 +260,11 @@ fn response(era: Era, mode: ResponseMode, payload: &Value, origin: ErrorOrigin) 
     }
 }
 impl Response {
+    /// This endpoint accepts POST only. Earlier path, security and admission
+    /// refusals keep their own status and do not advertise a method policy.
+    pub fn allow_header(&self) -> Option<&'static str> {
+        (self.status == 405).then_some("POST")
+    }
     fn empty(status: u16) -> Self {
         Self {
             status,

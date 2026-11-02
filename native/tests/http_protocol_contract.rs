@@ -270,3 +270,74 @@ fn unsupported_capability_shapes_cannot_become_confirmation_authority() {
         ));
     }
 }
+
+#[test]
+fn method_refusal_advertises_post_with_the_complete_source_error() {
+    for version in [None, Some(http::MODERN)] {
+        let mut headers = vec![("host", "localhost")];
+        if let Some(version) = version {
+            headers.push(("mcp-protocol-version", version));
+        }
+        for method in ["GET", "PUT"] {
+            let Admission::Reply(reply) = http::admit(
+                RequestHead {
+                    method,
+                    target: "/mcp",
+                    headers: &headers,
+                },
+                Vec::new(),
+                &Policy::new(None),
+            ) else {
+                panic!("unsupported method was admitted");
+            };
+            assert_eq!(reply.status, 405);
+            assert_eq!(reply.allow_header(), Some("POST"));
+            assert_eq!(reply.content_type, Some("application/json"));
+            assert!(!reply.authenticate_bearer);
+            assert_eq!(
+                serde_json::from_slice::<Value>(&reply.body).unwrap(),
+                json!({
+                    "jsonrpc":"2.0","error":{"code":-32000,"message":"Method not allowed."},"id":null
+                })
+            );
+        }
+    }
+}
+
+#[test]
+fn earlier_path_auth_and_origin_refusals_do_not_advertise_methods() {
+    for version in [None, Some(http::MODERN)] {
+        for (target, origin, token, status) in [
+            ("/wrong", None, None, 404),
+            ("/mcp", None, Some("fixture-token"), 401),
+            (
+                "/mcp",
+                Some("http://other.invalid"),
+                Some("fixture-token"),
+                403,
+            ),
+        ] {
+            let mut headers = vec![("host", "localhost")];
+            if let Some(version) = version {
+                headers.push(("mcp-protocol-version", version));
+            }
+            if let Some(origin) = origin {
+                headers.push(("origin", origin));
+            }
+            let Admission::Reply(reply) = http::admit(
+                RequestHead {
+                    method: "GET",
+                    target,
+                    headers: &headers,
+                },
+                Vec::new(),
+                &Policy::new(token),
+            ) else {
+                panic!("earlier refusal was admitted");
+            };
+            assert_eq!(reply.status, status);
+            assert_eq!(reply.allow_header(), None);
+            assert_eq!(reply.authenticate_bearer, status == 401);
+        }
+    }
+}
