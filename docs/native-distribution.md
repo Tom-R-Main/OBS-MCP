@@ -2,7 +2,7 @@
 
 OBS MCP runs as a Rust executable. Its main entry supports stdio and loopback HTTP; the native MCPB layout contains no Node runtime, JavaScript SDK or TypeScript server payload. The TypeScript implementation remains an explicit development oracle.
 
-Use a build qualified for your host and CPU. On 2 November 2026, the optimized candidate passed the normal native gate and 1,002 public cases with no skips. Its matching macOS MCPB passed three extraction checks and a bounded real-OBS fixture journey. Linux qualification is in progress without a platform/runtime acceptance claim; production TLS, final-head CI and client activation remain pending. See [cutover status](full-rust-cutover.md) for exact artifact hashes and evidence limits.
+Use a build qualified for your host and CPU. On 2 November 2026, the optimized candidate passed the normal native gate and 1,003 public cases with no skips. Its matching macOS MCPB passed three extraction checks and a bounded real-OBS fixture journey. Linux qualification is in progress without a platform/runtime acceptance claim; production TLS, final-head CI and client activation remain pending. See [cutover status](full-rust-cutover.md) for exact artifact hashes and evidence limits.
 
 ## Build and configure
 

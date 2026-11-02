@@ -49,7 +49,9 @@ async function source(confirm=false,token?:string){
 async function client(url:string,legacy:boolean,form=false){
  const client=new Client({name:legacy?'sdk-legacy':'sdk-modern',version:'1'},{capabilities:form?{elicitation:{form:{}}}:{},versionNegotiation:{mode:legacy?'legacy':{pin:'2026-07-28'}}});
  if(form)client.setRequestHandler('elicitation/create',async()=>({action:'accept',content:{confirm:true}}));
- const transport=new StreamableHTTPClientTransport(new URL(url));await client.connect(transport,{timeout:5000});closes.push(async()=>{await client.close();});return client;
+ // Own the test client's one-exchange connection policy. Fetch may otherwise
+ // preconnect an unused replacement after abort, which is a separate header reader.
+ const transport=new StreamableHTTPClientTransport(new URL(url),{requestInit:{headers:{Connection:'close'}}});await client.connect(transport,{timeout:5000});closes.push(async()=>{await client.close();});return client;
 }
 async function raw(port:number,request:string){const socket=net.connect({host:'127.0.0.1',port});const closed=new Promise<void>(resolve=>socket.once('close',()=>resolve()));socket.on('error',()=>{});await once(socket,'connect');let response='';socket.on('data',chunk=>{response+=chunk.toString('latin1');});socket.write(request);const timer=setTimeout(()=>socket.destroy(),3000);await closed;clearTimeout(timer);return response;}
 for(const legacy of[false,true])it(`actual SDK2.4 discovers, reads and reconnects on explicit-close native TCP (${legacy})`,async()=>{
@@ -60,6 +62,18 @@ for(const legacy of[false,true])it(`actual SDK2.4 discovers, reads and reconnect
 });
 it('actual SDK modern confirmation resumes once over separate native TCP exchanges',async()=>{const n=await native(true),c=await client(n.url,false,true);expect((await c.callTool({name:'obs-stop-record',arguments:{}})).isError).not.toBe(true);expect(n.fake.history().filter(row=>row.frame.op===6&&row.frame.d.requestType==='StopRecord')).toHaveLength(1);});
 it('actual SDK modern SSE listen stays open while a distinct TCP exchange reads and closes',async()=>{const n=await native(),c=await client(n.url,false);const subscription=await c.listen({resourcesListChanged:true});expect(await c.listTools()).toHaveProperty('tools');expect((await c.callTool({name:'obs-get-stats',arguments:{}})).isError).not.toBe(true);await subscription.close();expect(await subscription.closed).toBe('local');await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(0));});
+it('closing an SDK SSE response joins that exchange while an independent idle header reader remains owned',async()=>{
+ const n=await native();const idle=net.connect({host:'127.0.0.1',port:n.port});idle.on('error',()=>{});const closed=once(idle,'close');await once(idle,'connect');
+ try{
+  await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(1));expect((await n.stats()).bridgeOpens).toBe(0);
+  const c=await client(n.url,false),subscription=await c.listen({resourcesListChanged:true});
+  await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(2));
+  expect((await c.callTool({name:'obs-get-stats',arguments:{}})).isError).not.toBe(true);
+  await subscription.close();expect(await subscription.closed).toBe('local');
+  await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(1));expect(idle.destroyed).toBe(false);
+ }finally{idle.destroy();await closed;}
+ await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(0));
+});
 it('one native TCP connection emits explicit close and cannot execute a pipelined second MCP call',async()=>{const n=await native();const body=JSON.stringify(modern(1,'tools/call',{name:'obs-get-stats',arguments:{}}));const request=`POST /mcp HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMcp-Protocol-Version: 2026-07-28\r\nMcp-Method: tools/call\r\nMcp-Name: obs-get-stats\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;const response=await raw(n.port,request+request);expect(response.toLowerCase()).toContain('connection: close');expect([...response.matchAll(/HTTP\/1.1 200/g)]).toHaveLength(1);expect(n.fake.history().filter(row=>row.frame.op===6&&row.frame.d.requestType==='GetStats')).toHaveLength(1);});
 for(const lines of[
  ['Transfer-Encoding: chunked','Content-Length: 0'],['Content-Length: 0','Transfer-Encoding: chunked'],['Content-Length: 0','Content-Length: 0'],

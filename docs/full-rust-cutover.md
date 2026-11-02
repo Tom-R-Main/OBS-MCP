@@ -25,8 +25,8 @@ their normal test profiles. This replaces the earlier debug-only status.
 | Default-feature Rust suite | 1,045 passed | Five helper entrypoints intentionally ignored |
 | All-feature Rust bin/library suite | 213 passed | Three helper entrypoints intentionally ignored |
 | Resolver and platform components | Four resolver process contracts, two resolver protocol units, five Mac TLS component units passed | Component checks; no production TLS or Linux admission |
-| Public client suite | 1,002 passed in 45 files, no skips | Optimized executable, both MCP eras and explicit Source/SDK oracle |
-| HTTP coverage within the public suite | 17 actual-entry and 47 TCP cases | Loopback framing, authentication, ownership and cleanup |
+| Public client suite | 1,003 passed in 45 files, no skips | Optimized executable, both MCP eras and explicit Source/SDK oracle |
+| HTTP coverage within the public suite | 17 actual-entry and 48 TCP cases | Loopback framing, authentication, ownership and cleanup |
 | Development unit suite | 735 passed | Development Source, tooling and contract controls |
 | Extracted native MCPB | Three package checks passed | Corresponding source/notices, both MCP eras, localhost self-helper and Node trap |
 | Extracted executable against real OBS | Bounded Mac fixture journey passed | One macOS host with OBS 32.2.2; no streaming or unrelated-window capture |
@@ -34,7 +34,11 @@ their normal test profiles. This replaces the earlier debug-only status.
 The suites overlap and are not a sum of unique tests. The public gate retains
 whole Source error comparisons, zero-effect refusals and consumed-grant replay
 checks. A Source readiness race in the Capture fixture was reproduced and fenced
-before the successful full run; its prior failing result remains separate.
+before the successful full run; its prior failing result remains separate. A separate
+HTTP fixture check distinguished its closed SSE exchange from an unused client
+connection-pool replacement. Explicit fixture connection ownership and an
+independent idle-reader regression preserve the original cleanup assertion and
+timeout; the unchanged extracted executable passed the full 1,003-case rerun.
 
 The observed release executable is 7,840,416 bytes, SHA-256
 `bacc9b3fc29da844e47057ded7b0552ac28f599d0f0766703fdfc6e03e8b8218`.
