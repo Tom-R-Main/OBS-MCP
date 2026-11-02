@@ -558,8 +558,8 @@
     "obs-trim-take": "compat"
   },
   "sealed": {
-    "at": "2026-11-02T01:46:30.809Z",
-    "sourceRevision": "addbf9c389f1fc9e3402c2633b6351cce0bf0a44",
+    "at": "2026-11-02T02:52:41.060Z",
+    "sourceRevision": "255751a7063f0df23ec1c4a3f6b3fbf2c7af2c95",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -673,7 +673,7 @@
       "native/src/media_backend.rs": "91130d9658f0e0337ba9fa51c2fcf387c18da2de42226ebf98d3c9a20775394e",
       "native/src/media_tools.rs": "20ea87a19e994068dae24921cbb912475495d3d747efbc9788fd40b847f30087",
       "native/src/media_verification.rs": "b31e31a5afc4841ee08fe1a7d9b083c47728f1ddf61c473c09e7ed72fdaf04c6",
-      "native/src/native_service.rs": "65da623f3cbced3c6a03a4065d484fb1b205bf6b9f74cfe32ffe8c09c422d76d",
+      "native/src/native_service.rs": "3468b350b0cb3bb5de9dc1a7f96fd4b8a148561541badd9ebd8890a24f511998",
       "native/src/obs.rs": "80f0bf6ddcbc01eb99abf1f0048afaf731fd4916e39b465d4246a31f12759ad0",
       "native/src/observation.rs": "e7708101677c1f682623c863850436e05efc31f1e98175ffc0d10ea02e905058",
       "native/src/operation_store.rs": "dc189c4fda6a0d51910dcb3aef4d619f5bb531df47b5d8d1a1ccc64cf71ea87a",

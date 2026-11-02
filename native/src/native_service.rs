@@ -540,6 +540,18 @@ type Completed = (
     bool,
 );
 
+type LocalReply = (String, Arc<AtomicBool>, crate::stdio_output::Reservation);
+/// Count retained ownership, independent of stdin read chunking or pipe flush.
+fn ordinary_frontend_jobs(
+    jobs: &JoinSet<Completed>,
+    local_replies: &VecDeque<LocalReply>,
+    reserved_stop: bool,
+    reserved_safety_stop: bool,
+) -> usize {
+    (jobs.len() + local_replies.len())
+        .saturating_sub(usize::from(reserved_stop) + usize::from(reserved_safety_stop))
+}
+
 // Encoded URI-template variables undergo exactly one decodeURIComponent pass.
 fn resource_request(uri: &str) -> Result<(ReadRequest, Value, String), ResourceFailure> {
     let missing = || ResourceFailure {
@@ -688,10 +700,7 @@ pub(crate) async fn run() -> io::Result<()> {
     tokio::pin!(stop);
     let mut jobs: JoinSet<Completed> = JoinSet::new();
     let mut pending = HashMap::<String, Pending>::new();
-    let mut local_replies =
-        VecDeque::<(String, Arc<AtomicBool>, crate::stdio_output::Reservation)>::with_capacity(
-            ORDINARY_FRONTEND_JOBS,
-        );
+    let mut local_replies = VecDeque::<LocalReply>::with_capacity(ORDINARY_FRONTEND_JOBS);
     let mut fatal = None;
     'frontend: loop {
         macro_rules! send_reply {
@@ -739,7 +748,7 @@ pub(crate) async fn run() -> io::Result<()> {
                 // the other's reservation; transport and journal guards remain.
                 let reserved_active=pending.values().any(|job|job.reserved_stop);
                 let safety_reserved_active=pending.values().any(|job|job.reserved_safety_stop);
-                let ordinary_jobs=(jobs.len()+local_replies.len()).saturating_sub(usize::from(reserved_active)+usize::from(safety_reserved_active));
+                let ordinary_jobs=ordinary_frontend_jobs(&jobs,&local_replies,reserved_active,safety_reserved_active);
                 let reserved_stop=ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !reserved_active && !resource && name=="obs-take-stop";
                 let reserved_safety_stop=ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !safety_reserved_active && !resource && matches!(name.as_str(),"obs-stop-stream"|"obs-stop-virtual-cam"|"obs-stop-replay-buffer"|"obs-stop-record");
                 if pending.contains_key(&key)||(ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !reserved_stop && !reserved_safety_stop) {send_reply!(&output,&rpc_error(value["id"].clone(),-32000,"Native request admission unavailable; live state retained"));continue;}
@@ -1035,6 +1044,54 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn retained_controller_reply_ownership_consumes_ordinary_admission_until_retired() {
+        use crate::stdio_output::{Cycle, Output};
+        let (output, worker) = Output::spawn(tokio::io::sink());
+        let mut jobs = JoinSet::<Completed>::new();
+        let mut replies = VecDeque::<LocalReply>::new();
+        let frame = json!({"jsonrpc":"2.0","id":1,"result":{}});
+        for n in 0..ORDINARY_FRONTEND_JOBS {
+            assert!(ordinary_frontend_jobs(&jobs, &replies, false, false) < ORDINARY_FRONTEND_JOBS);
+            let reserved = output
+                .reserve_publication(&[Cycle {
+                    values: std::slice::from_ref(&frame),
+                    repetitions: 1,
+                }])
+                .unwrap();
+            replies.push_back((n.to_string(), Arc::new(AtomicBool::new(false)), reserved));
+        }
+        assert_eq!(
+            ordinary_frontend_jobs(&jobs, &replies, false, false),
+            ORDINARY_FRONTEND_JOBS
+        );
+        // Cancellation suppresses delivery; its retained reservation still owns
+        // admission until the frontend actually retires it.
+        replies.front().unwrap().1.store(true, Ordering::Release);
+        assert_eq!(
+            ordinary_frontend_jobs(&jobs, &replies, false, false),
+            ORDINARY_FRONTEND_JOBS
+        );
+        // Already-admitted safety work does not consume ordinary capacity.
+        jobs.spawn(std::future::pending::<Completed>());
+        jobs.spawn(std::future::pending::<Completed>());
+        assert_eq!(
+            ordinary_frontend_jobs(&jobs, &replies, true, true),
+            ORDINARY_FRONTEND_JOBS
+        );
+        drop(replies.pop_front());
+        assert_eq!(
+            ordinary_frontend_jobs(&jobs, &replies, true, true),
+            ORDINARY_FRONTEND_JOBS - 1
+        );
+        replies.clear();
+        jobs.abort_all();
+        while jobs.join_next().await.is_some() {}
+        assert_eq!(ordinary_frontend_jobs(&jobs, &replies, false, false), 0);
+        drop(output);
+        assert!(worker.await.unwrap().is_ok());
+    }
+
     #[test]
     fn clip_closed_validation_preserves_fractional_fields_defaults_and_source_stripping() {
         assert_eq!(
