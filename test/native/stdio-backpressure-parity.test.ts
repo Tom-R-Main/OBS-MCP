@@ -288,7 +288,9 @@ for (const legacy of [false, true]) {
       expect(session.child.stdout.isPaused()).toBe(true);
       expect(session.child.stdout.readableLength).toBeGreaterThanOrEqual(session.child.stdout.readableHighWaterMark);
       // Queue-admission failure must signal shutdown despite blocked output.
-      await session.fake.waitForRequest('StopRecord', { after: cursor, timeoutMs: 1500 });
+      // Physical Stop must precede stdout resume within the bounded watchdog;
+      // this is not a 1.5-second scheduling guarantee on a loaded runner.
+      await session.fake.waitForRequest('StopRecord', { after: cursor, timeoutMs: WATCH });
       expect(session.child.stdout.isPaused()).toBe(true);
       expect(session.recording()).toBe(false);
       expect(session.packets('StopRecord')).toHaveLength(1);

@@ -93,9 +93,23 @@ it('keeps owned Stop priority while an ordinary UI request awaits its reply duri
  expect(receipts(native).find(receipt=>receipt.requestType==='OpenInputPropertiesDialog')).toMatchObject({phase:'accepted',postconditionObserved:false});
 });
 it('bounds queued projector geometry bytes before journal admission and cancels without UI replay',async()=>{
- const native=await start(true,false);native.fake.queueSuccess('OpenInputPropertiesDialog',{},60_000);const after=native.fake.cursor();const active=native.client.callTool({name:'obs-open-input-properties',arguments:{inputName:'Fixture'}}).then(value=>({value}),error=>({error:String(error)}));const request=await native.fake.waitForRequest('OpenInputPropertiesDialog',{after,timeoutMs:10_000});const controllers=[new AbortController(),new AbortController()];const projectorGeometry='x'.repeat(7*1024*1024);const queued=controllers.map(controller=>native.client.callTool({name:'obs-open-source-projector',arguments:{projectorGeometry}},{signal:controller.signal}).then(value=>({value}),error=>({error:String(error)})));
+ const native=await start(true,false);native.fake.queueSuccess('OpenInputPropertiesDialog',{},60_000);const after=native.fake.cursor();const active=native.client.callTool({name:'obs-open-input-properties',arguments:{inputName:'Fixture'}}).then(value=>({value}),error=>({error:String(error)}));const request=await native.fake.waitForRequest('OpenInputPropertiesDialog',{after,timeoutMs:10_000});const controllers=[new AbortController(),new AbortController()];const projectorGeometry='x'.repeat(7*1024*1024);
+ const cancellationSends:Promise<void>[]=[];const send=native.transport.send.bind(native.transport);
+ native.transport.send=(message,...options)=>{const sent=send(message,...options);if('method' in message&&message.method==='notifications/cancelled')cancellationSends.push(sent);return sent;};
+ const queued=controllers.map(controller=>native.client.callTool({name:'obs-open-source-projector',arguments:{projectorGeometry}},{signal:controller.signal}).then(value=>({value}),error=>({error:String(error)})));
  try{const excess=await native.client.callTool({name:'obs-open-source-projector',arguments:{projectorGeometry}});expect(excess.isError).toBe(true);expect(JSON.stringify(excess)).toContain('Capacity');expect(trace(native,'OpenSourceProjector')).toHaveLength(0);expect(receipts(native)).toHaveLength(1);
- }finally{for(const controller of controllers)controller.abort();native.fake.sendRaw({op:7,d:{requestType:'OpenInputPropertiesDialog',requestId:request.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{}}},request.connectionId);await Promise.all([active,...queued]);}await vi.waitFor(()=>expect(receipts(native)[0]).toMatchObject({phase:'accepted',postconditionObserved:false}));expect(trace(native,'OpenSourceProjector')).toHaveLength(0);expect(receipts(native)).toHaveLength(1);
+ }finally{
+  try{
+   for(const controller of controllers)controller.abort();expect(cancellationSends).toHaveLength(2);await Promise.all(cancellationSends);
+   // Client abort settles locally. This actual wire round trip fences server
+   // cancellation before releasing the independent held OBS response.
+   await native.client.request({method:'tools/list',params:{}});
+   expect(trace(native,'OpenSourceProjector')).toHaveLength(0);expect(receipts(native)).toHaveLength(1);
+  }finally{
+   native.transport.send=send;native.fake.sendRaw({op:7,d:{requestType:'OpenInputPropertiesDialog',requestId:request.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{}}},request.connectionId);await Promise.all([active,...queued]);
+  }
+ }
+ await vi.waitFor(()=>expect(receipts(native)[0]).toMatchObject({phase:'accepted',postconditionObserved:false}));expect(trace(native,'OpenSourceProjector')).toHaveLength(0);expect(receipts(native)).toHaveLength(1);
 });
 it('does not reuse staged evidence after an actual Studio Mode event changes the transition context',async()=>{
  const source=await start(false,false),native=await start(true,false);const target={sceneCollection:native.state.collection,sceneName:native.state.sceneName};const old=await source.client.callTool({name:'obs-stage-scene',arguments:target}),staged=await native.client.callTool({name:'obs-stage-scene',arguments:target});expect(old.isError).not.toBe(true);expect(staged.isError).not.toBe(true);await same(source,native,'obs-set-studio-mode',{studioModeEnabled:false});const expected=await source.client.callTool({name:'obs-take-scene',arguments:{stageId:(old.structuredContent as {stageId:string}).stageId}}),actual=await native.client.callTool({name:'obs-take-scene',arguments:{stageId:(staged.structuredContent as {stageId:string}).stageId}});expect(expected.isError).toBe(true);expect(actual.isError).toBe(true);expect((actual.structuredContent as {reason?:string})?.reason).toBe((expected.structuredContent as {reason?:string})?.reason);expect(trace(native,'TriggerStudioModeTransition')).toHaveLength(0);expect(native.fake.connectionCount).toBe(1);
