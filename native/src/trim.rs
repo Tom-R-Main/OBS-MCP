@@ -333,6 +333,9 @@ pub struct MediaProbe {
     pub color_space: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color_range: Option<String>,
+    /// Matching declared average/nominal rate, not a packet-timing measurement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -342,6 +345,8 @@ pub struct ExpectedMetadata {
     pub height: Option<f64>,
     pub audio_streams: usize,
     pub chapters: Vec<Chapter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<String>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -460,6 +465,28 @@ fn js_number(value: Option<&Value>) -> f64 {
         }
     }
 }
+fn rational_frame_rate(value: &str) -> Option<String> {
+    let (numerator, denominator) = value.split_once('/')?;
+    let parse = |text: &str| {
+        if text.is_empty()
+            || text.len() > 10
+            || text.starts_with('0')
+            || !text.bytes().all(|c| c.is_ascii_digit())
+        {
+            return None;
+        }
+        text.parse::<u32>().ok().filter(|n| *n <= i32::MAX as u32)
+    };
+    let (n, d) = (parse(numerator)?, parse(denominator)?);
+    if u64::from(n) > u64::from(d) * 1000 {
+        return None;
+    }
+    let (mut a, mut b) = (n, d);
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    Some(format!("{}/{}", n / a, d / a))
+}
 pub fn parse_probe(data: &Value) -> MediaProbe {
     let streams = data
         .get("streams")
@@ -470,6 +497,17 @@ pub fn parse_probe(data: &Value) -> MediaProbe {
         .collect::<Vec<_>>();
     let video = streams.iter().find(|s| s["codec_type"] == "video");
     let text = |key: &str| video.and_then(|v| v[key].as_str()).map(str::to_owned);
+    // Conflicting or unavailable rate metadata supplies no fixed-rate target.
+    let frame_rate = text("avg_frame_rate")
+        .as_deref()
+        .and_then(rational_frame_rate)
+        .filter(|average| {
+            text("r_frame_rate")
+                .as_deref()
+                .and_then(rational_frame_rate)
+                .as_ref()
+                == Some(average)
+        });
     let bit_depth = video
         .map(|v| js_number(v.get("bits_per_raw_sample")))
         .filter(|v| *v != 0.0 && !v.is_nan());
@@ -511,6 +549,7 @@ pub fn parse_probe(data: &Value) -> MediaProbe {
         color_primaries: text("color_primaries"),
         color_space: text("color_space"),
         color_range: text("color_range"),
+        frame_rate,
     }
 }
 pub fn require_sdr_input(info: &MediaProbe) -> Result<(), TrimError> {
@@ -565,6 +604,9 @@ pub fn validate_trimmed_metadata(
     }
     if actual.width != expected.width || actual.height != expected.height {
         return Err(evidence("Staged export dimensions differ from the source"));
+    }
+    if expected.frame_rate.is_some() && actual.frame_rate != expected.frame_rate {
+        return Err(evidence("Staged export frame rate differs from the source"));
     }
     if actual.audio_streams != expected.audio_streams.min(1) {
         return Err(evidence(
@@ -668,7 +710,13 @@ pub fn encode_command(
         audio_streams,
         chapters,
         duration,
+        frame_rate,
     } = plan;
+    let rate = frame_rate
+        .map(|value| {
+            rational_frame_rate(value).ok_or_else(|| evidence("Invalid export frame rate"))
+        })
+        .transpose()?;
     let audio = audio_streams > 0;
     let parts = keep
         .iter()
@@ -702,12 +750,17 @@ pub fn encode_command(
             )
         })
         .collect::<String>();
+    // Audio padding can put concat seams off the declared video frame grid.
     let filter = format!(
-        "{};{inputs}concat=n={}:v=1:a={}[v]{}",
+        "{};{inputs}concat=n={}:v=1:a={}{}{}{}",
         parts.join(";"),
         keep.len(),
         usize::from(audio),
-        if audio { "[a]" } else { "" }
+        if rate.is_some() { "[joined]" } else { "[v]" },
+        if audio { "[a]" } else { "" },
+        rate.as_ref()
+            .map(|rate| format!(";[joined]fps=fps={rate}[v]"))
+            .unwrap_or_default()
     );
     let mut args = vec![
         "-hide_banner".into(),
@@ -751,6 +804,7 @@ pub struct EncodePlan<'a> {
     pub audio_streams: usize,
     pub chapters: &'a [Chapter],
     pub duration: f64,
+    pub frame_rate: Option<&'a str>,
 }
 pub fn probe_args(path: &Path) -> Vec<OsString> {
     [

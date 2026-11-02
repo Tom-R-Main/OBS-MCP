@@ -161,6 +161,158 @@ async fn capture_ffmpeg(arguments: &[OsString], limit: usize) -> std::sync::Arc<
     .unwrap();
     process.finish().await.unwrap()
 }
+
+#[tokio::test]
+async fn fractional_cadence_survives_audio_concat_seams_in_every_packet() {
+    let root = Scratch::new();
+    let source = root.path("fractional.mp4");
+    let metadata = root.path("chapters.txt");
+    fs::write(&metadata, ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=4000\ntitle=Before\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=4000\nEND=8000\ntitle=Marker\n").unwrap();
+    let mut arguments = args(&[
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=red:s=160x90:r=30000/1001:d=8",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=1000:sample_rate=48000:duration=0.25,adelay=4000,apad=whole_dur=8",
+        "-f",
+        "ffmetadata",
+        "-i",
+    ]);
+    arguments.push(metadata.into_os_string());
+    arguments.extend(args(&[
+        "-vf",
+        "drawbox=x=0:y=0:w=iw:h=ih:color=blue:t=fill:enable=gte(t\\,4)",
+        "-map",
+        "0:v",
+        "-map",
+        "1:a",
+        "-map_chapters",
+        "2",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+    ]));
+    arguments.push(source.as_os_str().to_owned());
+    run_ffmpeg(&arguments).await;
+    let mut media = backend(&root.work());
+    let input = probe(&mut media, &source).await;
+    assert_eq!(input.frame_rate.as_deref(), Some("30000/1001"));
+    let stage = ExportStage::new(&root.0, "partial.mp4", "final.mp4").unwrap();
+    let chapters = vec![
+        trim::Chapter {
+            at: 0.0,
+            name: "Before".into(),
+        },
+        trim::Chapter {
+            at: 0.6,
+            name: "Marker".into(),
+        },
+    ];
+    // These are the three retained spans from the independently reproduced
+    // public Source plan. Audio padding makes the last seam fall off-grid.
+    let request = trim::encode_command(
+        &source,
+        stage.partial_path(),
+        &root.path("unused.txt"),
+        EncodePlan {
+            keep: &[
+                Span {
+                    start: 0.0,
+                    end: 0.35,
+                },
+                Span {
+                    start: 3.75,
+                    end: 4.5,
+                },
+                Span {
+                    start: 7.75,
+                    end: 8.01,
+                },
+            ],
+            audio_streams: input.audio_streams,
+            chapters: &chapters,
+            duration: 1.36,
+            frame_rate: input.frame_rate.as_deref(),
+        },
+        &encoder_list(&media).await,
+    )
+    .unwrap();
+    let expected = ExpectedMetadata {
+        duration: 1.36,
+        width: input.width,
+        height: input.height,
+        audio_streams: input.audio_streams,
+        chapters,
+        frame_rate: input.frame_rate.clone(),
+    };
+    let mut owner = ExportOwner::new(
+        media,
+        stage,
+        request,
+        &input,
+        expected,
+        None,
+        Cancellation::default(),
+    )
+    .unwrap();
+    let committed = owner.finish().await.unwrap();
+    assert_eq!(committed.verified.frame_rate.as_deref(), Some("30000/1001"));
+    let mut arguments = args(&[
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_packets",
+        "-show_streams",
+        "-of",
+        "json",
+    ]);
+    arguments.push(root.path("final.mp4").into_os_string());
+    let mut job = media_verification::capture_bounded_media_process(
+        tool("ffprobe"),
+        &arguments,
+        ProcessOptions {
+            timeout: Duration::from_secs(10),
+            ..ProcessOptions::default()
+        },
+        4 * 1024 * 1024,
+    )
+    .unwrap();
+    let data: serde_json::Value = serde_json::from_slice(&job.finish().await.unwrap()).unwrap();
+    assert_eq!(data["streams"][0]["avg_frame_rate"], "30000/1001");
+    let (n, d) = data["streams"][0]["time_base"]
+        .as_str()
+        .unwrap()
+        .split_once('/')
+        .unwrap();
+    let (n, d) = (n.parse::<i128>().unwrap(), d.parse::<i128>().unwrap());
+    let packets = data["packets"].as_array().unwrap();
+    let mut pts = packets
+        .iter()
+        .map(|p| p["pts"].as_i64().unwrap())
+        .collect::<Vec<_>>();
+    pts.sort_unstable();
+    assert!(pts.len() > 20);
+    for pair in pts.windows(2) {
+        assert_eq!(i128::from(pair[1] - pair[0]) * n * 30000, 1001 * d);
+    }
+    for packet in packets {
+        assert_eq!(
+            i128::from(packet["duration"].as_i64().unwrap()) * n * 30000,
+            1001 * d
+        );
+    }
+}
 #[tokio::test]
 async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publishes_after_strict_decode()
  {
@@ -190,6 +342,7 @@ async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publi
         stage.partial_path(),
         &root.path("must-not-be-created.txt"),
         EncodePlan {
+            frame_rate: None,
             keep: &[
                 Span {
                     start: 0.0,
@@ -208,6 +361,7 @@ async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publi
     )
     .unwrap();
     let expected = ExpectedMetadata {
+        frame_rate: None,
         duration: 3.5,
         width: input.width,
         height: input.height,
@@ -320,6 +474,7 @@ async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publi
         stage.partial_path(),
         &root.path("not-used.txt"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 4.0,
@@ -337,6 +492,7 @@ async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publi
         request,
         &input,
         ExpectedMetadata {
+            frame_rate: None,
             duration: 4.0,
             width: input.width,
             height: input.height,
@@ -372,6 +528,7 @@ async fn actual_ffmpeg_terminal_failure_and_pre_cancel_never_publish_or_leave_me
         stage.partial_path(),
         &root.path("not-used"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 1.0,
@@ -389,6 +546,7 @@ async fn actual_ffmpeg_terminal_failure_and_pre_cancel_never_publish_or_leave_me
         request,
         &info,
         ExpectedMetadata {
+            frame_rate: None,
             duration: 1.0,
             width: info.width,
             height: info.height,
@@ -412,6 +570,7 @@ async fn actual_ffmpeg_terminal_failure_and_pre_cancel_never_publish_or_leave_me
         stage.partial_path(),
         &root.path("not-used"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 1.0,
@@ -466,6 +625,7 @@ async fn actual_ffmpeg_cancel_after_spawn_joins_before_metadata_cleanup() {
         stage.partial_path(),
         &root.path("unused"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 4.0,
@@ -539,6 +699,7 @@ async fn abandoned_await_keeps_one_child_and_metadata_until_cancelled_child_is_r
         stage.partial_path(),
         &root.path("unused"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 1.0,
@@ -619,6 +780,7 @@ async fn replaced_metadata_symlink_is_retained_as_unknown_without_following_clea
         stage.partial_path(),
         &root.path("unused"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 1.0,
@@ -1287,6 +1449,7 @@ async fn local_hls_and_concat_are_blocked_in_probe_decode_encode_and_preview_bef
             stage.partial_path(),
             &root.path("unused-metadata"),
             EncodePlan {
+                frame_rate: None,
                 keep: &[Span {
                     start: 0.0,
                     end: 4.0,
@@ -1304,6 +1467,7 @@ async fn local_hls_and_concat_are_blocked_in_probe_decode_encode_and_preview_bef
             request,
             &input,
             ExpectedMetadata {
+                frame_rate: None,
                 duration: 4.0,
                 width: input.width,
                 height: input.height,
@@ -1372,6 +1536,7 @@ async fn helper_ready_is_not_visible_before_complete_metadata_publication() {
         stage.partial_path(),
         &root.path("unused"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 1.0,

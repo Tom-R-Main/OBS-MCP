@@ -58,6 +58,13 @@ describe("verified export boundary", () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  it("refuses a staged export whose declared cadence changed", () => {
+    const expectedCadence = { ...expected, frameRate: "30000/1001" };
+    expect(() => validateTrimmedMetadata({ ...valid, frameRate: "60000/1001" }, expectedCadence)).toThrow("frame rate differs");
+    expect(() => validateTrimmedMetadata(valid, expectedCadence)).toThrow("frame rate differs");
+    expect(() => validateTrimmedMetadata({ ...valid, frameRate: "30000/1001" }, expectedCadence)).not.toThrow();
+  });
+
   it("withholds publication after apparent encoder completion followed by a terminal trailer error", async () => {
     const dir = mkdtempSync(join(tmpdir(), "obs-export-trailer-"));
     const partial = join(dir, "partial"), output = join(dir, "final");
@@ -379,6 +386,21 @@ describe.skipIf(!ffmpegAvailable)("obs-trim-take and obs-contact-sheet", () => {
     expect(Math.abs(exportedVideo - exportedAudio)).toBeLessThanOrEqual(frameTolerance + audioTolerance);
     const probe = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-show_format", "-show_streams", "-show_chapters", "-of", "json", output], { encoding: "utf8" })) as { format: { duration: string }; streams: { codec_type: string; avg_frame_rate: string }[]; chapters: { start_time: string; tags: { title: string } }[] };
     expect(probe.streams.find((stream) => stream.codec_type === "video")!.avg_frame_rate).toBe("30000/1001");
+    // Metadata and successful decoding alone do not prove cadence: concat can
+    // leave a longer presentation gap at an audio/video seam. Check every
+    // encoded packet on its actual container timebase, including duration.
+    const packets = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_packets", "-show_streams", "-of", "json", output], { encoding: "utf8" })) as {
+      streams: { time_base: string }[]; packets: { pts: number; duration: number }[];
+    };
+    const [tickNumerator, tickDenominator] = packets.streams[0]!.time_base.split("/").map(BigInt) as [bigint, bigint];
+    const packetPts = packets.packets.map((packet) => packet.pts).sort((a, b) => a - b);
+    expect(packetPts.length).toBeGreaterThan(2);
+    for (let i = 1; i < packetPts.length; i++) {
+      expect(BigInt(packetPts[i]! - packetPts[i - 1]!) * tickNumerator * 30000n).toBe(1001n * tickDenominator);
+    }
+    for (const packet of packets.packets) {
+      expect(BigInt(packet.duration) * tickNumerator * 30000n).toBe(1001n * tickDenominator);
+    }
     expect(Math.abs(Number(probe.format.duration) - plan.trimmedSeconds)).toBeLessThanOrEqual(frameTolerance + audioTolerance);
     const chapterAt = Number(probe.chapters.find((chapter) => chapter.tags.title === "Marker")!.start_time);
     expect(Math.abs(chapterAt - mapSourceTime(4))).toBeLessThanOrEqual(0.01);

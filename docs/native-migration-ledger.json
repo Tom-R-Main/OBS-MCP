@@ -559,8 +559,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-02T21:59:54.001Z",
-    "sourceRevision": "d152703690070bc9f36b532634f3f440a0149f4c",
+    "at": "2026-11-02T23:34:25.252Z",
+    "sourceRevision": "d6ff04f2ee70c45f479f6cee52efccfddcbb7075",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -643,8 +643,8 @@
       "src/tools/toolsets.test.ts": "f1af10634244d8da5c2a3ad014aaad4e7616522b50ef67194922977e0a64c46e",
       "src/tools/toolsets.ts": "597390c523f1599f1a36f0667df4f9d7b2c595f9498cd9cda39e91d63cbf3945",
       "src/tools/transitions.ts": "abcba3eb2a40a2c0fe4ceec2c12711c9b77867aa2e8ab80488bb75752cd45f1d",
-      "src/tools/trim.test.ts": "fbe5eec87a7dc68156c3a1876b0cd7a0caaef6fed1880639d7380fb753ead7b3",
-      "src/tools/trim.ts": "ca33c614604d23294908c34badd8f181743e51d1e37458d7ac0e13cc86155e58",
+      "src/tools/trim.test.ts": "2fcdbdfba3b4fc8763ea0855ada5250e0beabcdb3119b5c35af22b2d2296317b",
+      "src/tools/trim.ts": "642f7b200d2d08ff1ce584dd3bd8fdf7abaf9b6337535aee56a18071df7bff0e",
       "src/tools/ui.ts": "5fe9fe66338f2699be27ffbceacd52d1711f98effb5114cff56ded1d7339b8f3",
       "src/tools/workflows.test.ts": "ddf37e7dd6d1edc5c705eef78c90a7255662bd02d879fc44887846ff66f6315a",
       "src/tools/workflows.ts": "9fe809445a315c55a5c31b12c4ad894e8abe8475764dba7e3bd57878adf7dcc3",
@@ -704,7 +704,7 @@
       "native/src/lib.rs": "60f5b83441df60bbe56e37eb5777e27387925eb94d86c7dd9afb5f1dba699260",
       "native/src/main.rs": "9dce1b4a1a2ce59a8f8932dfe7f7c47506323473e9b4684df6b2a22cce10b945",
       "native/src/media_backend.rs": "91130d9658f0e0337ba9fa51c2fcf387c18da2de42226ebf98d3c9a20775394e",
-      "native/src/media_tools.rs": "20ea87a19e994068dae24921cbb912475495d3d747efbc9788fd40b847f30087",
+      "native/src/media_tools.rs": "3ccda76877eff66b49b221b15e635cc73c0d93d0ba36e870d329ad8215b2eccd",
       "native/src/media_verification.rs": "b31e31a5afc4841ee08fe1a7d9b083c47728f1ddf61c473c09e7ed72fdaf04c6",
       "native/src/native_connect.rs": "29feecc457d5a40ada7a0186be642c2b46ef570412f3cfc024429c6e4f34973e",
       "native/src/native_host.rs": "7f4ed76a008872d9da93f92c82be4735b465542a45e79de533de8d7e0c24c32c",
@@ -761,7 +761,7 @@
       "native/src/takes.rs": "5c7066a1b6929953310de36c35c5440b5dcc7a052522181b1402d3bb746df03c",
       "native/src/tool_filter.rs": "fc3d1d0221e9bf13e137170871026ddadcaf5c3da7e23f146a676d9012b5eb81",
       "native/src/tool_validation.rs": "6e2774a491c4555fd1f0c53c3b88d247a38021bbe8781a53b3f513af57e0040a",
-      "native/src/trim.rs": "ae9d327c9ba3656e02db0b5748694f643e24ca488599a6c16cd4e86170ccfd8e",
+      "native/src/trim.rs": "c9828437d506da4dda0b5602dceffd4a178b96a05d50a4c61a717c57fda4255b",
       "native/tests/advanced_profile_contract.rs": "1a054395d9ab225ea812adb4bc733dc65d3f3255a80eff9ccff7b74cb0ebbad8",
       "native/tests/advanced_profile_service_contract.rs": "6d088edb4c133d00f2981d90707bce3dc62bfc874dcb43c10441a8fe38d66808",
       "native/tests/apply_scene_batch_contract.rs": "22d1d8eb653fd238055b56e24bb4b027f3a9cead460b22bfe3d70c57640d7359",
@@ -792,7 +792,7 @@
       "native/tests/manual_record_stop_contract.rs": "a7a59276200c9487b95d3f11fb153a6bff1f21032c9af0b0534495ee224064cc",
       "native/tests/manual_record_stop_service_contract.rs": "35e355d2e2e6feb1a951b122c539ef82b0e876e3504af3ba6acdd7e9bf38afc3",
       "native/tests/manual_record_stop_take_contract.rs": "9641ce602a8e9271e92457b093b49a3e7f8cebf4a099c64710b1b0e164a913bd",
-      "native/tests/media_backend_contract.rs": "84cec812521915378fe82d68d9f3a537324a94bdb9e40c0fe2344e8ffc02e527",
+      "native/tests/media_backend_contract.rs": "088b29b8f37f20d205587440e3d289c57d112c40cb8fc6f04009e35834c16a55",
       "native/tests/media_capture_contract.rs": "ceb4f8343d49e5fdd599a4efe72c96ce3aa5330d637d5c92d8bf2a2a4afef6f2",
       "native/tests/media_tools_contract.rs": "db2f146bee7e1d7473b6f9e52d42a8a9df6ccee14f5ee1b7fcba59768f40d52a",
       "native/tests/media_verification_contract.rs": "409b0b4549c5876582e7bf594bd507b105a3f0331bfd064e59aa4c7a2705cba1",
@@ -844,7 +844,7 @@
       "native/tests/timeline5_contract.rs": "3d512f09ffc6dec6a1499c369c010c5203ad693d56d9f23f2adcb37127e0f5fc",
       "native/tests/tool_validation_contract.rs": "1067a6f7b162e3feff493aa89aa480dfda8f9900e4d364803135fb51fd11fd88",
       "native/tests/transform_receipt_contract.rs": "ded09b7806ce29c841986527d9897154aae3cdb71da30d6311bcc0f331ac7002",
-      "native/tests/trim_contract.rs": "adc6829b64b2a0791ec24d17a58856d0810ec87ba5ba54e15eca1c773039443a",
+      "native/tests/trim_contract.rs": "3eee236b60fa42b319dcd01df536b0d0188817215fdf159e7c6e6f72facae27a",
       "native/tests/ui6_contract.rs": "b869dcadf22238ed5113035b9c2481978be1cc8591879969aa7464a02966284b"
     }
   }
