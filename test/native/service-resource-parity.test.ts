@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeOBSServer, FakeOBSRequestError } from '../support/fake-obs-server.js';
 import { serveProduction } from '../support/production-fixture.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
@@ -86,7 +86,9 @@ it('retains an admitted resource read through frontend EOF and joins its sole so
   try{
     child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'resources/list',params:{_meta:{'io.modelcontextprotocol/protocolVersion':'2026-07-28','io.modelcontextprotocol/clientInfo':{name:'resource-eof',version:'1'},'io.modelcontextprotocol/clientCapabilities':{}}}})+'\n');
     const request=await fake.waitForRequest('GetSceneList');release=()=>{if(fake.openConnectionCount>0)fake.sendRaw({op:7,d:{requestType:'GetSceneList',requestId:request.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{scenes:[]}}});release=()=>{};};child.stdin.end();await new Promise(resolve=>setTimeout(resolve,60));expect(child.exitCode).toBeNull();expect(fake.connectionCount).toBe(1);expect(children(child.pid!)).toEqual([]);release();
-    const exit=await Promise.race([closed,new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error('retained resource child failed to join')),4000).unref())]);expect(exit).toEqual([0,null]);expect(fake.openConnectionCount).toBe(0);expect(readTypes(fake)).toEqual(['GetVersion','GetSceneList']);
+    const exit=await Promise.race([closed,new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error('retained resource child failed to join')),4000).unref())]);expect(exit).toEqual([0,null]);
+    // Child exit and the fake peer's close callback are independent observations.
+    await vi.waitFor(()=>expect(fake.openConnectionCount).toBe(0),{timeout:4000});expect(readTypes(fake)).toEqual(['GetVersion','GetSceneList']);
   }finally{release();if(child.exitCode===null&&child.signalCode===null){child.kill('SIGTERM');await closed;}await fake.close();}
 });
 

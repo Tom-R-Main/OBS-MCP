@@ -115,18 +115,26 @@ it('cancels an undispatched public Stop while public lane occupied',async()=>{
  const native=await start(true,false,false,false,{},fake=>fake.queueSuccess('StopStream',{},60_000));
  const after=native.fake.cursor();const first=native.client.callTool({name:'obs-stop-stream',arguments:{}}).then(value=>({value}),error=>({error:String(error)}));
  const held=await native.fake.waitForRequest('StopStream',{after,timeoutMs:10_000});
+ const cancellationSends:Promise<void>[]=[];const send=native.transport.send.bind(native.transport);
+ native.transport.send=(message,...options)=>{const sent=send(message,...options);if('method' in message&&message.method==='notifications/cancelled')cancellationSends.push(sent);return sent;};
  const abort=new AbortController();const second=native.client.callTool({name:'obs-stop-replay-buffer',arguments:{}},{signal:abort.signal}).then(value=>({value}),error=>({error:String(error)}));
  try{
   // This sentinel only orders frontend calls; the direct Rust contract proves
   // the internal queued state. Holding the first public lane bounds dispatch.
   await native.client.callTool({name:'obs-control-status',arguments:{}});abort.abort();
-  expect(await second).toHaveProperty('error');expect(trace(native,'StopReplayBuffer')).toEqual([]);
+  expect(await second).toHaveProperty('error');expect(cancellationSends).toHaveLength(1);await Promise.all(cancellationSends);
+  // Fence actual cancellation delivery before the independent held ACK is released.
+  await native.client.request({method:'tools/list',params:{}});
+  expect(trace(native,'StopReplayBuffer')).toEqual([]);
  }finally{
-  native.fake.sendRaw({op:7,d:{requestType:'StopStream',requestId:held.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{}}},held.connectionId);
+  native.transport.send=send;native.fake.sendRaw({op:7,d:{requestType:'StopStream',requestId:held.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{}}},held.connectionId);
   const accepted=await first;expect(accepted).toMatchObject({value:{structuredContent:{message:'Successfully stopped streaming'}}});await second;
  }
  await vi.waitFor(()=>expect(receipts(native)[0]).toMatchObject({phase:'accepted'}));
  expect(trace(native,'StopReplayBuffer')).toEqual([]);expect(receipts(native)).toHaveLength(1);
+ // Cancellation retires only the original request, not this explicitly new call.
+ expect((await native.client.callTool({name:'obs-stop-replay-buffer',arguments:{}})).isError).not.toBe(true);
+ expect(trace(native,'StopReplayBuffer')).toEqual([undefined]);expect(receipts(native)).toHaveLength(2);
 });
 it('preserves the owned recording Stop priority and reservation while a public Stop awaits its ACK',async()=>{
  const source=await start(false,false,true),native=await start(true,false,true);for(const session of[source,native])expect((await session.client.callTool({name:'obs-take-start',arguments:{expectSilent:true,maxDurationSeconds:30}})).isError).not.toBe(true);const held:{session:Session;request:Awaited<ReturnType<FakeOBSServer['waitForRequest']>>;job:Promise<unknown>}[]=[];const stops:Promise<unknown>[]=[];
