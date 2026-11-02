@@ -7,6 +7,7 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import type { OBSWebSocketClient } from "../client.js";
 import { screenshotResult } from "./screenshot.js";
 import { activeTake, takeUpdates } from "./take-monitor.js";
+import { observe } from "./observe.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -26,6 +27,12 @@ const STATUS_EVENTS = [
   "CurrentProgramSceneChanged",
   "CurrentProfileChanged",
   "CurrentSceneCollectionChanged",
+  "CurrentPreviewSceneChanged",
+  "StudioModeStateChanged",
+  "VideoSettingsChanged",
+  "CanvasCreated",
+  "CanvasRemoved",
+  "SceneNameChanged",
 ];
 const SCENE_LIST_EVENTS = [
   "SceneCreated",
@@ -80,22 +87,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient, { sess
     STATUS_URI,
     {
       title: "OBS status",
-      description: "Connection, recording, streaming, and current scene; updates when any of them change",
+      description: "Bounded production observation, identical to obs-observe; explicit unknowns and consistency checks",
       mimeType: "application/json",
     },
-    async (uri) => {
-      const [record, stream, scene] = await Promise.all([
-        client.sendRequest("GetRecordStatus"),
-        client.sendRequest("GetStreamStatus"),
-        client.sendRequest("GetCurrentProgramScene"),
-      ]);
-      return json(uri.href, {
-        connection: client.getConnectionStatus(),
-        record,
-        stream,
-        currentProgramSceneName: isObject(scene) ? scene.currentProgramSceneName : null,
-      });
-    },
+    async (uri) => json(uri.href, await observe(client)),
   );
 
   server.registerResource(

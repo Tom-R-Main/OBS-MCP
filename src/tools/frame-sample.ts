@@ -110,18 +110,27 @@ export class StillTracker {
   private samples: Sample[] = [];
   private stillFrom: number | null = null;
   private lastTime: number | null = null;
+  private comparisonQualified = false;
 
   constructor(private readonly minStillSeconds: number) {}
 
   /** Start of the stretch the picture has held still since, once it is long enough to report. */
   stillSince(): number | null {
-    return this.stillFrom !== null && this.lastTime !== null && this.lastTime - this.stillFrom >= this.minStillSeconds
+    return this.comparisonQualified && this.stillFrom !== null && this.lastTime !== null && this.lastTime - this.stillFrom >= this.minStillSeconds
       ? this.stillFrom
       : null;
   }
 
   push(time: number, luma: Uint8Array): void {
-    if (this.samples.length > 0 && this.samples[0]!.luma.length !== luma.length) this.samples = [];
+    if (this.samples.length > 0 && this.samples[0]!.luma.length !== luma.length) {
+      // A changed sample size ends the compatible evidence at its last sample,
+      // never across the new, still unqualified history.
+      if (this.lastTime !== null) this.close(this.lastTime);
+      this.samples = [];
+      this.stillFrom = null;
+      this.lastTime = null;
+      this.comparisonQualified = false;
+    }
     this.stillFrom ??= time;
     this.lastTime = time;
     this.samples.push({ time, luma });
@@ -131,6 +140,15 @@ export class StillTracker {
     const before = medianLuma(b0.luma, b1.luma, b2.luma);
     const after = medianLuma(a0.luma, a1.luma, a2.luma);
     if (!isSameLuma(before, after)) {
+      // A first transition can close a genuine old median-stable window;
+      // never backdate that inference before its first matching old sample.
+      if (!this.comparisonQualified) {
+        const matching = [b0, b1, b2].filter((sample) => isSameLuma(before, sample.luma));
+        if (matching.length >= 2) {
+          this.stillFrom = Math.max(this.stillFrom ?? matching[0]!.time, matching[0]!.time);
+          this.comparisonQualified = true;
+        }
+      }
       // The medians place the step within a sample or so; pin it to the first
       // sample that left the old picture and the first that shows the new one.
       const changedAt = [b1, b2, a0, a1].find((sample) => !isSameLuma(before, sample.luma))?.time ?? a0.time;
@@ -141,6 +159,12 @@ export class StillTracker {
       }
       this.close(changedAt);
       this.stillFrom = Math.max(changedAt, settled.time);
+      // Motion cannot qualify its trailing candidate. Wait for equal before/
+      // after medians; a majority in one after-window alone also occurs during
+      // full-frame ABA/BAB alternation. Keep the existing denoising metric.
+      this.comparisonQualified = false;
+    } else {
+      this.comparisonQualified = before.length > 0;
     }
     this.samples.shift();
   }
@@ -149,12 +173,14 @@ export class StillTracker {
   finish(time: number): StillSpan[] {
     this.close(time);
     this.stillFrom = null;
+    this.lastTime = null;
+    this.comparisonQualified = false;
     this.samples = [];
     return this.spans;
   }
 
   private close(time: number): void {
-    if (this.stillFrom !== null && time - this.stillFrom >= this.minStillSeconds) {
+    if (this.comparisonQualified && this.stillFrom !== null && time - this.stillFrom >= this.minStillSeconds) {
       this.spans.push({ start: this.stillFrom, end: time });
     }
   }

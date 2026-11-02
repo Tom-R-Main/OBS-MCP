@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">OBS MCP frame and cue</title>
+  <desc id="description">An outlined preview frame behind a dark program frame, with one mint cue point.</desc>
+  <rect x="64" y="88" width="304" height="232" rx="40" fill="#F1F5F9" stroke="#14283F" stroke-width="28"/>
+  <rect x="144" y="184" width="304" height="232" rx="40" fill="#14283F" stroke="#F1F5F9" stroke-width="16"/>
+  <circle cx="388" cy="300" r="28" fill="#52D6AF"/>
+</svg>

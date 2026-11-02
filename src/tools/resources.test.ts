@@ -19,8 +19,14 @@ beforeEach(async () => {
   const { fakeObs } = harness;
   fakeObs.respondWith("GetSceneList", () => ({
     currentProgramSceneName: "Demo",
-    scenes: [{ sceneName: "Demo", sceneIndex: 0 }, { sceneName: "Be Right Back", sceneIndex: 1 }],
+    scenes: [{ sceneName: "Demo", sceneUuid: "demo-uuid", sceneIndex: 0 }, { sceneName: "Be Right Back", sceneUuid: "brb-uuid", sceneIndex: 1 }],
   }));
+  fakeObs.respondWith("GetSceneCollectionList", () => ({ currentSceneCollectionName: "Resource test" }));
+  fakeObs.respondWith("GetStudioModeEnabled", () => ({ studioModeEnabled: false }));
+  fakeObs.respondWith("GetVideoSettings", () => ({ baseWidth: 1920, baseHeight: 1080 }));
+  fakeObs.respondWith("GetReplayBufferStatus", () => ({ outputActive: false }));
+  fakeObs.respondWith("GetVirtualCamStatus", () => ({ outputActive: false }));
+  fakeObs.respondWith("GetOutputList", () => ({ outputs: [] }));
   fakeObs.respondWith("GetRecordStatus", () => ({ outputActive: true, outputDuration: 1200 }));
   fakeObs.respondWith("GetStreamStatus", () => ({ outputActive: false }));
   fakeObs.respondWith("GetCurrentProgramScene", () => ({ currentProgramSceneName: "Demo" }));

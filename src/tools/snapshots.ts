@@ -212,7 +212,7 @@ function saveSnapshot(snapshot: Snapshot): void {
     } finally { closeSync(fd); }
     renameSync(temporary, path);
     // Windows does not support opening directories with this Node API. The
-    // restricted demo workflow additionally requires macOS OBS on loopback.
+    // restricted demo workflow additionally requires local OBS on loopback.
     if (process.platform !== "win32") {
       const directory = openSync(stateDirectory(), "r");
       try { fsyncSync(directory); } finally { closeSync(directory); }
