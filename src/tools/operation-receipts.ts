@@ -41,9 +41,12 @@ function persist(receipt: OperationReceipt): OperationReceipt {
     try { writeFileSync(file, JSON.stringify(checked)); fsyncSync(file); } finally { closeSync(file); }
     renameSync(temporary, destination);
     temporary = undefined;
-    for (const path of [directory(), stateDirectory()]) {
-      const file = openSync(path, "r");
-      try { fsyncSync(file); } finally { closeSync(file); }
+    // Node cannot open directory handles on Windows; keep file fsync above.
+    if (process.platform !== "win32") {
+      for (const path of [directory(), stateDirectory()]) {
+        const file = openSync(path, "r");
+        try { fsyncSync(file); } finally { closeSync(file); }
+      }
     }
     return checked;
   } catch { throw new OperationReceiptError(); }

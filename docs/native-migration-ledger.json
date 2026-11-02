@@ -558,8 +558,8 @@
     "obs-trim-take": "compat"
   },
   "sealed": {
-    "at": "2026-11-02T02:52:41.060Z",
-    "sourceRevision": "255751a7063f0df23ec1c4a3f6b3fbf2c7af2c95",
+    "at": "2026-11-02T03:29:04.549Z",
+    "sourceRevision": "f743013aa274dc587d98e898cdab45bf5908802f",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -601,7 +601,7 @@
       "src/tools/observation.ts": "49a9e6931ff4ed939027de0e8fa79e664cbab48a1f6820aef4cefee37c34980c",
       "src/tools/observe.ts": "266ef7a60b7096a3faf9178346769939a6b904c36acc104e67170ad6c70af107",
       "src/tools/operation-receipts.test.ts": "de274ae8e5612a12417428e37cea8895fd7c7aa3e12b48d529ee7a4925a7784c",
-      "src/tools/operation-receipts.ts": "279765b6370bd3ea040f5e1d71eb1c1a151f798a71a5abbba077468953da0551",
+      "src/tools/operation-receipts.ts": "185bec02e292f05d9ea136f7a4142b1b98e998c34a8461c78797325d23b2e72c",
       "src/tools/output-schema.test.ts": "9cd5aa6dc048452c42da45933e01d4660837afe337365d6556ac1d085a6db954",
       "src/tools/output-schema.ts": "6b2543cea39fd14259d500d257841767e5e7cfc49b1f7955e13c577e3cdabb39",
       "src/tools/output-start.test.ts": "bc5df4880222ec39f4e5f8273bff3654af643d0da53ab77c422d99fdbc90b803",
