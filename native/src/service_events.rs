@@ -264,12 +264,17 @@ impl Drop for ObservedFrame {
 pub(crate) struct EventHub {
     slot: Mutex<Option<Weak<FeedState>>>,
     outputs: Arc<crate::output_events::Registry>,
+    resources: Option<crate::resource_events::Publisher>,
 }
 impl EventHub {
-    pub(crate) fn new(token: ConnectionToken) -> Self {
+    pub(crate) fn new(
+        token: ConnectionToken,
+        resources: Option<crate::resource_events::Publisher>,
+    ) -> Self {
         Self {
             slot: Mutex::new(None),
             outputs: Arc::new(crate::output_events::Registry::new(token)),
+            resources,
         }
     }
     pub(crate) fn output_events(
@@ -288,6 +293,14 @@ impl EventHub {
         let mut slot = self.slot.lock().map_err(|_| invalidated())?;
         update();
         self.outputs.publish(&event);
+        // Project owned URI/recipient data only; resource backpressure cannot
+        // revoke the physical observer or retain this event's permits.
+        if let Some(resources) = &self.resources {
+            resources.obs(
+                &event.event_type,
+                event.data.as_ref().unwrap_or(&serde_json::Value::Null),
+            );
+        }
         let scope = slot
             .as_ref()
             .and_then(Weak::upgrade)
@@ -387,6 +400,12 @@ mod tests {
     }
     impl Fixture {
         async fn new(event_items: usize) -> Self {
+            Self::with_resources(event_items, None).await
+        }
+        async fn with_resources(
+            event_items: usize,
+            resources: Option<crate::resource_events::Publisher>,
+        ) -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let url = format!("ws://{}", listener.local_addr().unwrap());
             let (commands, mut receiver) = mpsc::channel::<Command>(8);
@@ -449,7 +468,16 @@ mod tests {
             )
             .await
             .unwrap();
-            let bridge = ObservationBridge::bind(owner.handle(), events, None).unwrap();
+            let bridge = match resources {
+                Some(resources) => ObservationBridge::bind_with_resource_events(
+                    owner.handle(),
+                    events,
+                    None,
+                    resources,
+                ),
+                None => ObservationBridge::bind(owner.handle(), events, None),
+            }
+            .unwrap();
             Self {
                 owner,
                 bridge,
@@ -495,6 +523,39 @@ mod tests {
             Event::Observed(frame) => frame.apply(callback),
             _ => panic!("unowned event feed"),
         }
+    }
+
+    #[tokio::test]
+    async fn resource_publication_overflow_does_not_revoke_sole_observer_or_take_feed() {
+        let mut resources = crate::resource_events::Owner::new(false);
+        resources.set_legacy(true).unwrap();
+        resources
+            .commit_uri(resources.plan_uri("obs://status", true).unwrap())
+            .unwrap();
+        let fixture = Fixture::with_resources(8, Some(resources.publisher())).await;
+        let mut feed = fixture.bridge.attach_take_feed().unwrap();
+        let fence = feed.fence();
+        let mut receiver = feed.take_receiver().unwrap();
+        for _ in 0..65 {
+            fixture.emit("RecordStateChanged").await;
+            fixture.received().await;
+            let event = tokio::time::timeout(Duration::from_secs(2), receiver.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            apply(event, |_, name, _| assert_eq!(name, "RecordStateChanged"));
+            assert!(fence.ready(), "resource pressure revoked the Take feed");
+        }
+        for _ in 0..64 {
+            assert!(resources.next().await.unwrap().is_ok());
+        }
+        assert!(matches!(
+            resources.next().await.unwrap(),
+            Err(crate::resource_events::Failure::Capacity)
+        ));
+        assert!(fence.ready());
+        drop(feed);
+        fixture.close().await;
     }
 
     #[tokio::test]

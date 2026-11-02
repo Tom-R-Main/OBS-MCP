@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture, productionSourceTools, recordDefaultOracle } from "../support/native-default-fixture.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -35,7 +36,7 @@ async function start(lane: Lane, env: Environment = {}, legacy = false) {
   const directory = join(process.env.OBS_MCP_STATE_DIR!, `${lane}-${sessions.length}`);
   mkdirSync(directory);
   const client = new Client({ name: "static-filter-parity", version: "1" }, { versionNegotiation: { mode: legacy ? "legacy" : { pin: "2026-07-28" } } });
-  const transport = new StdioClientTransport({ command: lane === "native" ? binary : process.execPath, args: lane === "native" ? [] : [compatibility], cwd: root, env: environment({ OBS_WEBSOCKET_URL: fake.url, OBS_MCP_STATE_DIR: directory, ...env }), stderr: "pipe" });
+  const transport = new StdioClientTransport({ command: lane === "native" ? binary : process.execPath, args: lane === "native" ? [] : [compatibility], cwd: root, env: environment({ OBS_WEBSOCKET_URL: fake.url, OBS_MCP_STATE_DIR: directory, ...env, ...(lane === "native" ? nativeDefaultFixture(root, true) : {}) }), stderr: "pipe" });
   transport.stderr?.on("data", () => undefined);
   const session = { client, transport, fake };
   sessions.push(session);
@@ -70,7 +71,7 @@ describe.each([false, true])("static native tool filtering (legacy=%s)", legacy 
     const native = await start("native", env, legacy);
     const expected = (await oracle.client.listTools()).tools;
     expect(expected.length).toBeGreaterThan(0);
-    expect((await native.client.listTools()).tools).toEqual(expected);
+    expect((await native.client.listTools()).tools).toEqual(productionSourceTools(expected));
     expect(children(native.transport.pid!)).toEqual([]);
   });
 
@@ -89,23 +90,24 @@ describe.each([false, true])("static native tool filtering (legacy=%s)", legacy 
       { name: "obs-get-input-mute", arguments: { inputName: "Fixture" } },
       { name: "obs-set-input-mute", arguments: { inputName: "Fixture", inputMuted: true } },
     ]) {
-      const expected = await oracle.client.callTool(hidden).then(value => ({ value }), error => ({ error: String(error) }));
-      const actual = await native.client.callTool(hidden).then(value => ({ value }), error => ({ error: String(error) }));
-      expect(actual).toEqual(expected);
+      const outcome = (client: Client) => client.callTool(hidden).then(value => ({ value }), (error: Error & { code?: unknown; data?: unknown }) => ({ error: { message: error.message, code: error.code, data: error.data } }));
+      const expected = await outcome(oracle.client), actual = await outcome(native.client);
+      recordDefaultOracle("static-hidden-tool", legacy, hidden, expected, actual);
+      expect.soft(actual).toEqual(expected);
     }
     expect(oracle.fake.history().some(record => record.frame.d.requestType === "GetInputMute")).toBe(false);
     expect(native.fake.history().some(record => record.frame.d.requestType === "GetInputMute")).toBe(false);
     expect(oracle.fake.history().some(record => record.frame.d.requestType === "SetInputMute")).toBe(false);
     expect(native.fake.history().some(record => record.frame.d.requestType === "SetInputMute")).toBe(false);
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
   });
 
-  it("retains the SDK owner for dynamic toolsets", async () => {
+  it("retains native ownership for dynamic toolsets", async () => {
     const env = { OBS_MCP_DYNAMIC_TOOLSETS: "\uFEFFtrue\uFEFF" };
     const oracle = await start("typescript", env, legacy);
     const native = await start("native", env, legacy);
-    expect((await native.client.listTools()).tools).toEqual((await oracle.client.listTools()).tools);
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect((await native.client.listTools()).tools).toEqual(productionSourceTools((await oracle.client.listTools()).tools));
+    expect(children(native.transport.pid!)).toHaveLength(0);
   });
 });
 
@@ -119,7 +121,7 @@ const refusals: { env: Environment; message: string }[] = [
 describe("static filter startup failures", () => {
   it.each(refusals)("matches predecessor refusal $message", ({ env, message }) => {
     for (const lane of ["typescript", "native"] as const) {
-      const result = spawnSync(lane === "native" ? binary : process.execPath, lane === "native" ? [] : [compatibility], { cwd: root, env: environment(env), input: "", encoding: "utf8", timeout: 5_000 });
+      const result = spawnSync(lane === "native" ? binary : process.execPath, lane === "native" ? [] : [compatibility], { cwd: root, env: environment({ ...env, ...(lane === "native" ? nativeDefaultFixture(root, true) : {}) }), input: "", encoding: "utf8", timeout: 5_000 });
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(1);
       expect(result.stdout).toBe("");

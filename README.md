@@ -8,42 +8,43 @@ Start with `obs-observe`, resolve a layout with `obs-plan-scene-template`, then 
 
 The server uses MCP 2026-07-28 and accepts legacy 2025-era clients. Tool discovery remains available while OBS is closed.
 
-## Choose a runtime
+## Native runtime and qualification
 
-| Entry | Runtime | Current surface |
-| --- | --- | --- |
-| `node build/index.js` or the npm `obs-mcp` executable | Node.js 20.19 or newer | The full 178-tool compatibility interface, including background reconnection. The source-install instructions below use this entry. |
-| `npm start`, after `npm run native:build` | Rust entry with Node compatibility | Discovery and eligible reads run in Rust. Other workflows transfer the session exclusively to the included Node server. Node remains required for compatibility and encrypted OBS endpoints. |
-| Rust entry with `OBS_MCP_NATIVE_STATEFUL=1` | Persistent Rust service | Up to 164 candidate tools, with explicit refusal for unowned interfaces and no SDK handoff. Approved state/recording roots and existing media tools determine the exposed inventory. See the [checkpoint and limits](#rust-native-entry). |
+The executable runs the retained Rust service directly over stdio or loopback HTTP. The native MCPB layout contains no Node runtime, JavaScript SDK or TypeScript server payload. TypeScript remains a development oracle.
 
-The persistent mode is an explicit qualification lane. Default full Rust cutover, native TLS, and Linux/Windows desktop qualification remain open. Build and package details are in the [native architecture guide](docs/native-architecture.md).
+Production is the default immutable profile and exposes up to 164 ordinary tools with approved host/media adapters. Advanced exposes 163 and excludes guarded Take, media, Stage and recovery owners. Their union contains 178 ordinary names; stdio dynamic mode can add three group controllers. Filters, read-only mode and available adapters narrow discovery. See [native profiles](docs/native-profiles.md).
+
+On 2 November 2026, the optimized native candidate passed the normal native gate: 1,045 default-feature Rust cases, 213 all-feature bin/library cases, four resolver process contracts, and 1,002 public cases with no skips. The public suite includes 17 actual HTTP-entry and 47 TCP cases. The development unit suite passed 735 cases. These suites overlap; their counts are not a unique-test total.
+
+The matching macOS MCPB passed three extracted-package checks, including localhost resolution with a Node trap, then a bounded live OBS journey on that extracted executable. Its 2.837-second silent A/B fixture clip passed strict decoding and sampled-content checks; the screenshots/contact sheet were reviewed, recovery preserved a conflict, and the original state snapshots matched after restoration and cleanup. Linux qualification is in progress without a platform/runtime acceptance claim; production TLS, final-head CI and client activation remain pending. Native runtime cutover does not yet provide full Source transport parity: encrypted `wss:` endpoints that previously used the SDK route now refuse in default builds. [Cutover status](docs/full-rust-cutover.md) binds these observations to exact artifact hashes; [native distribution](docs/native-distribution.md) gives setup and rebuild commands.
 
 ## How it works
 
 ```text
-MCP client  <-- stdio -->  OBS MCP  <-- WebSocket v5 -->  OBS Studio
+MCP clients  <-- stdio or loopback HTTP -->  Rust OBS MCP  <-- WebSocket v5 -->  OBS Studio
 ```
 
-OBS MCP runs as a separate MCP server process using the entry selected above. It does not patch OBS or require an OBS plugin; it uses the WebSocket server built into OBS Studio. MCP handles tool discovery, schemas, results, and approval hints. OBS WebSocket handles the live application state.
+OBS MCP runs as a separate MCP server process using the native executable. It does not patch OBS or require an OBS plugin; it uses the WebSocket server built into OBS Studio. MCP handles tool discovery, schemas, results, and approval hints. OBS WebSocket handles the live application state.
 
 ## What is covered
 
-The full compatibility interface exposes 178 tools across the OBS WebSocket v5 request surface.
+The 178-name ordinary catalog spans both profiles; it is not a promise of 178 simultaneous tools in one process.
 
-- All 147 request types in the OBS WebSocket protocol revision pinned by the current OBS Studio source tree
+- Descriptions for all 147 request types in the pinned OBS WebSocket protocol; profile policy controls dispatch
 - Explicit read-only, destructive, idempotent, and open-world annotations on every tool
 - Runtime capability checks against the requests advertised by the connected OBS instance
 - Structured MCP results for automation, with readable text retained for people and older clients
 - Source screenshots returned as MCP image content instead of clipped base64 text
 - Protocol inspection through `obs-describe-request`
-- A generic `obs-call-request` escape hatch, limited to requests in the bundled OBS protocol and marked destructive for client approval
-- A reproducible `.mcpb` build with its tool inventory generated through MCP rather than private SDK internals
+- Advanced-profile raw, batch, vendor and hotkey tools with explicit policy and durable guarded-reentry barriers
+- A host-specific `.mcpb` built from checked native assets and corresponding Rust source, with profile-conditional inventory
 
-The explicit tools remain the normal interface. The generic request tool is there so a newly added OBS operation can be used before it receives a more ergonomic wrapper.
+Use the explicit tools for normal workflows. Advanced raw tools accept the bundled request names and retain destructive/open-world policy even when a wrapped request is a read. They do not borrow Production Take, Stop, file or recovery authority.
 
 ## Requirements
 
-- Node.js 20.19 or newer
+- A qualified native executable for your host (or the pinned Rust toolchain to build it)
+- An existing approved private state directory; optional recording root and trusted FFmpeg/ffprobe for local media workflows
 - OBS Studio 28 or newer with the WebSocket server enabled
 - An MCP client that supports MCP 2026-07-28 or the compatible legacy protocol
 
@@ -51,32 +52,21 @@ OBS includes WebSocket v5. Enable it under **Tools > WebSocket Server Settings**
 
 ## Install from source
 
-This independent repository does not yet have its own npm release. Until it does, run it from a local checkout:
+Build the runtime directly from its checked native inputs; Node and a TypeScript
+build are unnecessary:
 
-```bash
-git clone https://github.com/Tom-R-Main/OBS-MCP.git
-cd OBS-MCP
-npm ci
-npm run check
+```sh
+cd native
+RUSTUP_AUTO_INSTALL=0 cargo build --locked --offline --release --bin obs-mcp-native
 ```
 
-Then point your MCP client at the built entrypoint:
-
-```json
-{
-  "mcpServers": {
-    "obs": {
-      "command": "node",
-      "args": ["/absolute/path/to/OBS-MCP/build/index.js"],
-      "env": {
-        "OBS_WEBSOCKET_PASSWORD": "<password-from-obs>"
-      }
-    }
-  }
-}
-```
-
-If OBS uses a non-default address, add `OBS_WEBSOCKET_URL` to the environment block.
+The pinned toolchain and Cargo sources must already be available. A missing
+cache is an explicit prerequisite, not permission for an automatic fetch.
+Create and approve a safe state directory inside your chosen project, then
+configure the absolute native executable and `OBS_MCP_STATE_DIR` in your MCP
+client. [Native distribution](docs/native-distribution.md) gives the complete
+setup, optional recording/media paths and immutable profile behavior. No home
+directory is initialized or history erased as part of source qualification.
 
 ## Verify the connection
 
@@ -84,23 +74,23 @@ Open OBS, start a new agent session, and ask:
 
 > Check the OBS connection. Report the OBS version, current scene, stream status, and recording status. Do not change anything.
 
-The client should request only read-only tools and return live values from OBS. If tool discovery works but the prompt reports that OBS is disconnected, leave the MCP server running and start OBS; reconnection happens in the background.
+The client should request only read-only tools and return live values from OBS. If discovery works while OBS is closed, start OBS and request the read-only connection check again. Native operation history never authorizes automatic mutation replay; a lost owned session may require a fresh MCP process while retained unknown effects remain refused.
 
 ## Install the MCPB package
 
-Build the desktop package locally:
+With the explicit development archive tools installed, `node scripts/pack.mjs`
+builds `dist/obs-studio-native.mcpb` for the build host. It compiles from checked
+native assets, keeps corresponding Rust source/configuration and notices, and
+uses no staging dependency install or Source server build. Node/MCPB CLI are
+development packaging tools; the installed extension contains no Node, JavaScript
+SDK or server payload.
 
-```bash
-npm run pack
-```
-
-The command rebuilds the server, reads the public tool list through MCP, installs production-only dependencies in an isolated staging directory, validates the manifest, and writes:
-
-```text
-dist/obs-studio.mcpb
-```
-
-Open that file in an MCPB-compatible desktop client. The package prompts for the OBS WebSocket URL and password.
+The MCPB setup requires an existing approved private state directory and exposes
+profile and optional recording/media paths. Discovery works while OBS is offline
+after valid local startup. The 2 November macOS candidate passed extraction and
+a bounded live journey; a changed artifact or another platform needs its own
+checks. Package contents alone prove neither production TLS nor Linux desktop
+support. See [native distribution](docs/native-distribution.md).
 
 ## Configuration
 
@@ -117,14 +107,16 @@ Open that file in an MCPB-compatible desktop client. The package prompts for the
 | `OBS_MCP_CONFIRM_LIVE` | No | `false` | Ask before starting a stream/output or stopping or toggling a stream, recording, or output (see [Confirming live actions](#confirming-live-actions)) |
 | `OBS_MCP_HTTP_PORT` | No | none (stdio) | Serve MCP over Streamable HTTP at `http://127.0.0.1:<port>/mcp` instead of stdio, so several agents share one server (see [Sharing one server](#sharing-one-server)); `0` picks a free port |
 | `OBS_MCP_HTTP_TOKEN` | No | none | With `OBS_MCP_HTTP_PORT`, require `Authorization: Bearer <token>` on every request |
-| `OBS_MCP_STATE_DIR` | No | `~/Library/Application Support/obs-mcp` (macOS), `%LOCALAPPDATA%\obs-mcp` (Windows), `$XDG_STATE_HOME/obs-mcp` (Linux) | Where snapshots, recovery journals, and operation receipts are saved |
-| `OBS_MCP_LOG_LEVEL` | No | `info` | Diagnostic output on stderr: `debug`, `info`, `error`, or `silent` |
+| `OBS_MCP_STATE_DIR` | An existing approved namespace is required | Prefer an explicit canonical path | Endpoint-bound snapshots, recovery journals and receipts; startup does not create an unsolicited namespace or clear history |
+| `OBS_MCP_NATIVE_PROFILE` | No | `production` | Immutable `production` or `advanced` capability profile |
+| `OBS_MCP_NATIVE_RECORDING_ROOT` | For Production recording/file workflows | None | Existing approved recording directory; does not grant recording or file authority |
+| `OBS_MCP_NATIVE_FFMPEG` / `OBS_MCP_NATIVE_FFPROBE` | For media workflows | Trusted executable on PATH | Explicit existing media-tool bindings; the package installs neither |
 
-The server never prints the password. Connection and protocol diagnostics are written to stderr so stdout remains reserved for MCP messages.
+Passwords and HTTP tokens are not printed. Stdio reserves stdout for MCP; HTTP keeps it empty and announces its loopback endpoint on stderr. Default builds refuse encrypted `wss:` OBS endpoints before connection. Conditional macOS Network.framework and Linux GnuTLS backends remain behind `platform-tls-evaluation`; see [transport status](docs/native-distribution.md#dns-and-encrypted-obs-endpoints).
 
 ## Tool surface
 
-The 178 tools are organized around the OBS protocol rather than a smaller opinionated workflow:
+The profile-conditional tool catalog covers:
 
 - server status, version information, statistics, hotkeys, and studio mode
 - scenes, groups, sources, filters, and scene items
@@ -135,13 +127,13 @@ The 178 tools are organized around the OBS protocol rather than a smaller opinio
 - a recording preflight (`obs-preflight`) that catches the conditions under which OBS silently refuses or botches a recording
 - `obs-audit-scene`, which inspects one selected scene for missing or hidden required items, incomplete observations, and structural problems without changing OBS
 - `obs-record-clip`, which preflights, records up to 50 seconds with chapter markers, stops, and checks the file's length and audio with ffprobe/ffmpeg when they are installed. While it records, it watches the take (see [Watching a take](#watching-a-take))
-- `obs-take-start`, `obs-take-mark`, `obs-take-status`, and `obs-take-stop` for a watched recording of any length, with a chapter per step (see [Watching a take](#watching-a-take))
+- `obs-take-start`, `obs-take-mark`, `obs-take-status`, and `obs-take-stop` for watched recordings, with chapters and duration policy (see [Watching a take](#watching-a-take))
 - `obs-trim-take`, which cuts dead time out of a recording, and `obs-contact-sheet`, which tiles frames from it into one image (see [Trimming a take](#trimming-a-take))
 - `obs-apply-scene`, which takes a description of a scene and makes OBS match it (see [Describing a scene](#describing-a-scene))
 - `obs-snapshot` and `obs-restore`, which save the state of inputs and scene items and later undo changes to them (see [Undoing changes](#undoing-changes))
 - `obs-capture-window`, which plans or selects macOS or Linux X11 windows from an existing capture inventory, or fits an existing user-authorized Wayland portal capture
 - input and transform changes that return the resulting settings, size, and an optional screenshot, warning when a source renders at 0×0
-- protocol description, the guarded generic request fallback, and `obs-batch`, which sends several requests in one message, in order or one per rendered frame (so a change to two sources lands on the same frame), with `Sleep` between them. OBS's parallel mode is not offered: in obs-websocket 5.7, concurrent parallel batches deadlock its WebSocket server until OBS restarts
+- protocol description and Advanced raw/batch tools, which send several requests in one message, in order or one per rendered frame (so a change to two sources lands on the same frame), with `Sleep` between them. OBS's parallel mode is not offered: in obs-websocket 5.7, concurrent parallel batches deadlock its WebSocket server until OBS restarts
 
 Tools that send a single OBS request declare an `outputSchema` generated from the pinned protocol, so clients receive typed `structuredContent` with the documented response fields. Fields are optional and nullable because OBS omits newer fields in older versions and returns undocumented nulls.
 
@@ -149,7 +141,7 @@ Tool discovery works without an OBS connection. Calls that need OBS return an MC
 
 ### Choosing tools
 
-Every tool is registered by default. Clients load each registered tool's definition into the model's context, so a smaller set is cheaper and easier for the model to choose from.
+Every available tool in the selected profile is registered by default. Clients load these definitions into the model's context, so a smaller set is cheaper and easier to choose from. Filters cannot enable a tool excluded by its profile or missing adapter.
 
 | Group | Covers |
 |---|---|
@@ -168,7 +160,7 @@ Every tool is registered by default. Clients load each registered tool's definit
 | `ui` | studio mode, dialogs, projectors |
 | `protocol` | `obs-describe-request`, the generic `obs-call-request`, and `obs-batch` |
 
-`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record` (93 tools). `OBS_MCP_TOOLSETS=core OBS_MCP_READ_ONLY=true` gives a 42-tool inspection-only server. The server refuses to start when a group or tool name is unknown.
+`core` expands to `general`, `scenes`, `scene-items`, `sources`, `inputs`, and `record`. Add `OBS_MCP_READ_ONLY=true` for inspection-only discovery. Counts depend on profile and adapters. Unknown groups or names refuse at startup.
 
 With `OBS_MCP_DYNAMIC_TOOLSETS=true`, every group is registered but only the groups in `OBS_MCP_TOOLSETS` (by default just `general`) and the tools in `OBS_MCP_TOOLS` start enabled. Three more tools manage the rest: `obs-list-toolsets` shows each group and how many of its tools are on, and `obs-enable-toolset` and `obs-disable-toolset` switch groups for the session. Each change sends `notifications/tools/list_changed`, so clients that support it (Claude Code, VS Code, Cursor) reload the list. Read-only mode still applies: enabling a group adds only its read-only tools.
 
@@ -184,13 +176,15 @@ Resources give clients that support them a live view without tool calls. Each on
 | `obs://scene/{sceneName}/screenshot` | 960px JPEG of the scene | (read on demand) |
 | `obs://take/current` | the running take: audio levels, skipped frames, black or unchanging picture, chapters, warnings | a warning or chapter |
 
-Clients on the 2025 protocol receive `notifications/resources/updated` for URIs they subscribe to; 2026-07-28 clients choose them on their `subscriptions/listen` stream.
+Legacy stdio clients receive updates for subscribed URIs; modern clients choose updates on their `subscriptions/listen` stream. Legacy HTTP requests do not retain initialize offers or subscription state as authority for later exchanges.
 
 Three prompts appear as slash commands in clients that show MCP prompts: `record-demo` (capture a window silently, preflight, record a clip), `software-demo` (the bounded demo recipe below), and `pre-stream-check` (a read-only go/no-go review).
 
 ### Confirming live actions
 
 With `OBS_MCP_CONFIRM_LIVE=true`, `obs-start-stream`, generic `StartStream`/`StartOutput` requests, `obs-stop-stream`, `obs-toggle-stream`, `obs-stop-record`, `obs-toggle-record`, `obs-take-stop`, `obs-stop-output`, and `obs-toggle-output` ask before they run, as do `obs-call-request` and `obs-batch` when they carry one of those requests. The generic output tools are included because the stream and the recording are outputs too. Clients that support elicitation (Claude Code, VS Code, Cursor) show the user a confirmation, and `confirm: true` from the model does not skip it. Other clients get an error asking the model to get the user's agreement and call again with `confirm: true`. These tools are also marked destructive, so clients that ask before destructive tools already prompt without this setting.
+
+Confirmation never enables a profile-excluded tool or bypasses a durable barrier. Native grants are single-use and bound to the caller and original request; re-enabling a hidden tool cannot revive a consumed grant.
 
 ## Where it fits
 
@@ -202,15 +196,15 @@ It does not replace visual or editorial judgment. Framing, color, transition tim
 
 Every tool publishes all four MCP behavior hints. Read-only inspection is separated from state changes, and actions with broader consequences are marked destructive or open-world as appropriate.
 
-Pay particular attention to approvals for tools that:
+Get explicit user permission before capture, recording, streaming, file publication or destructive changes. Keep qualification bounded to an approved collection and fixture. Tool hints and a successful preflight are not permission. Pay particular attention to tools that:
 
 - start or stop streaming, recording, virtual camera, replay buffer, or another output
 - switch profiles or scene collections
 - trigger hotkeys or interact with OBS UI elements
 - invoke vendor requests
-- save files or use the generic `obs-call-request` fallback
+- save files or use Advanced `obs-call-request`
 
-`obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StartStream`, `StartOutput`, `StopStream`, `ToggleStream`, `StopRecord`, `ToggleRecord`, `StopOutput`, or `ToggleOutput`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
+In Advanced, `obs-call-request` and `obs-batch` accept only request types in the bundled OBS protocol, but their payloads are intentionally generic. With `OBS_MCP_CONFIRM_LIVE=true`, they ask before sending `StartStream`, `StartOutput`, `StopStream`, `ToggleStream`, `StopRecord`, `ToggleRecord`, `StopOutput`, or `ToggleOutput`. Both are always advertised as destructive and open-world so a client does not silently treat an unfamiliar operation as safe.
 
 ### Watching a take
 
@@ -221,7 +215,7 @@ Pay particular attention to approvals for tools that:
 3. `obs-take-status` reports what the take has seen so far.
 4. `obs-take-stop` stops recording, checks the file, and reports.
 
-While a take records, tools that would switch the profile or scene collection, or change output, video, recording directory, or stream service settings, refuse to run, including through `obs-call-request` and `obs-batch`. Stopping and pausing are never refused. Start with `lock: false` to allow those changes.
+While a locked take records, profile, collection and output-setting changes refuse. Use the owned Take Stop for that recording. Explicit Stop admission is separately bounded; unavailable storage or uncertain ownership can still refuse it. `lock: false` changes the take lock, not immutable profile rules or durable barriers. Advanced raw/batch tools cannot be used to bypass those rules in a guarded Production process.
 
 While a take records, the server watches OBS instead of waiting for the file:
 
@@ -233,7 +227,7 @@ The result lists the findings, and when OBS records to this machine the server w
 
 ### Bounded software demos
 
-The `software-demo` MCP prompt and [obs-demo agent skill](.agents/skills/obs-demo/SKILL.md) use the [version 1 recipe](docs/recipes/software-demo.v1.json). The skill ships in the npm package and MCPB source bundle. Open this checkout in your agent host and explicitly load the linked skill, or request the `software-demo` prompt through MCP. Merely installing an MCPB does not install a skill into every host. Automatic host discovery and real rendered OBS output have not been qualified by the hermetic checks.
+The `software-demo` MCP prompt and [obs-demo agent skill](.agents/skills/obs-demo/SKILL.md) use the [version 1 recipe](docs/recipes/software-demo.v1.json). The skill remains in the development checkout and native MCPB source bundle. Open this checkout in your agent host and explicitly load the linked skill, or request the `software-demo` prompt through MCP. Merely installing an MCPB does not install a skill into every host. Automatic host discovery and real rendered OBS output have not been qualified by the hermetic checks.
 
 V1 uses local OBS on macOS or Linux, an existing current scene, and one enabled, preconfigured window capture. Linux supports XComposite on X11 and an existing portal-authorized PipeWire capture on Wayland. A portal selection still needs visual inspection for window identity. Video-only Linux capture sources have no mute or audio tracks to change; preflight checks the complete recording audio path. The capture must appear exactly once in a collection without groups or nested scenes. The tools require stable OBS object identifiers and complete state; they refuse unsupported setups rather than create or retarget sources. Streaming, recording, virtual camera, replay buffer, and every listed generic output must be inactive during preparation and recovery. Missing or failed output status blocks the operation. OBS code 604 explicitly reporting an unavailable virtual camera or replay buffer is accepted as an unavailable feature; named output statuses must still establish inactivity.
 
@@ -312,21 +306,24 @@ Snapshots are saved in the server's state directory (the last 20 you take, plus 
 
 ### Sharing one server
 
-By default each agent starts its own server over stdio, with its own OBS connection, and nothing stops two agents from changing OBS at once. With `OBS_MCP_HTTP_PORT`, one server listens on `http://127.0.0.1:<port>/mcp` and every agent connects to it:
+By default, each stdio client starts its own server and OBS owner. To share one retained service, start the native executable in HTTP mode:
 
-```bash
-OBS_MCP_HTTP_PORT=8765 OBS_MCP_READ_OBS_CONFIG=true node /path/to/OBS-MCP/build/index.js
-claude mcp add --transport http obs 'http://127.0.0.1:8765/mcp?client=claude'
-# In Codex's config, point it at http://127.0.0.1:8765/mcp?client=codex
+```sh
+OBS_MCP_STATE_DIR=/absolute/canonical/approved-state \
+OBS_MCP_HTTP_PORT=8765 \
+native/target/release/obs-mcp-native
+# Point each MCP client at http://127.0.0.1:8765/mcp?client=its-name
 ```
 
-The server listens only on 127.0.0.1 and rejects requests whose Host or Origin header is not localhost, which blocks DNS rebinding from web pages. Without `OBS_MCP_HTTP_TOKEN`, any program running on the machine can control OBS through the server; set it to require a bearer token. Each HTTP request is served statelessly, so `OBS_MCP_DYNAMIC_TOOLSETS` is ignored over HTTP.
+The server binds only to `127.0.0.1` and checks Host and Origin headers. Set an opaque `OBS_MCP_HTTP_TOKEN` through approved secret configuration to require bearer authentication; without it, local programs can reach the server. HTTP uses static tool groups and ignores `OBS_MCP_DYNAMIC_TOOLSETS`.
 
-While agents share a server, `obs-claim-control` gives one of them control of OBS for a set time (30 minutes by default). Until it calls `obs-release-control` or the time runs out, tools that change OBS refuse calls from other clients; reading OBS and stopping outputs always work. `obs-control-status` shows who holds control. `obs-take-start` claims control for the length of the take. Clients are told apart by name: the `client` parameter of the URL they connect with, or else the name a 2026-07-28 client sends with each request. Clients using the 2025 protocol over HTTP send each request without a name, so give each agent its own `?client=` name. An unnamed client cannot claim control and is refused while another client holds it. Two agents given the same name share control. The names are not credentials; control is for agents cooperating on one machine, not for keeping out someone who can reach the server.
+The port accepts trimmed decimal digits from 0 through 65535, including leading zeros. `0` chooses a free port. An absent, empty or JavaScript-whitespace-only value selects stdio; signed, fractional, exponent and hexadecimal forms refuse. HTTP ignores stdin EOF and joins its service and drivers on SIGINT or SIGTERM. Closing one client does not shut down peer work or a Take.
+
+While agents share a server, `obs-claim-control` gives one of them control of OBS for a set time (30 minutes by default). Until it calls `obs-release-control` or the time runs out, tools that change OBS refuse calls from other clients. Read-only inspection and explicitly admitted Stop routes retain their own policy and capacity limits. `obs-control-status` shows who holds control. `obs-take-start` claims control for the length of the take. Clients are told apart by name: the `client` parameter of the URL they connect with, or else the name a 2026-07-28 client sends with each request. Clients using the 2025 protocol over HTTP send each request without a name, so give each agent its own `?client=` name. An unnamed client cannot claim control and is refused while another client holds it. Two agents given the same name share control. The names are not credentials; control is for agents cooperating on one machine, not for keeping out someone who can reach the server.
 
 ## Troubleshooting
 
-**Tools appear, but OBS calls fail:** make sure OBS is open and its WebSocket server is enabled. The MCP process stays available while it retries the connection.
+**Tools appear, but OBS calls fail:** make sure OBS is open and its WebSocket server is enabled. Discovery is local; the shared OBS connection starts lazily. A failed or lost owned session can require a fresh MCP process. Keep its receipts and do not replay an uncertain mutation.
 
 **Authentication fails:** copy the password from **Tools > WebSocket Server Settings** into `OBS_WEBSOCKET_PASSWORD`, then restart the MCP server process. When the server runs on the same machine as OBS, `OBS_MCP_READ_OBS_CONFIG=true` reads the saved password instead, so it never has to be copied into an agent's configuration. The server logs which file it used, never the password.
 
@@ -334,18 +331,18 @@ While agents share a server, `obs-claim-control` gives one of them control of OB
 
 **A request is unsupported:** the connected OBS build did not advertise that WebSocket request. Use an operation supported by that version or update OBS.
 
-**The process exits or emits protocol errors:** inspect stderr. stdout is reserved for MCP traffic and should not be redirected into ordinary application logs.
+**The process exits or emits protocol errors:** inspect stderr. stdio stdout is reserved for MCP traffic; HTTP stdout stays empty. Keep ordinary logs on stderr.
 
 ## Development
 
-Install the pinned dependencies, then run the complete hermetic gate:
+After approving the project-scoped dependency fetch, install the pinned development tooling and run the native gate:
 
-```bash
-npm ci
-npm run check
+```sh
+npm ci --ignore-scripts --no-audit
+npm run native:check
 ```
 
-This does not require OBS. It builds with TypeScript 7, type-checks the tests, runs the unit suite, starts the compiled stdio server against a fake OBS WebSocket endpoint, exercises modern and legacy MCP clients, and validates the manifest. The end-to-end cases cover connection recovery, request routing, clean EOF and signal shutdown, structured results, bounded screenshot payloads, and session survival after a rejected screenshot.
+The gate uses the checked Rust toolchain/assets and explicit TypeScript/SDK oracles. It runs default and all-feature Rust checks, path-crate and resolver lifetime controls, then both MCP eras, actual HTTP entry and TCP controls against a pinned optimized executable and fake OBS. License and migration checks also run. This command does not record live OBS. `npm run check` remains the development Source-oracle gate; Node tooling is not part of the native runtime.
 
 Test the file users will actually install with:
 
@@ -353,11 +350,11 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command creates `dist/obs-studio.mcpb`, extracts it into a temporary directory, validates its manifest and source contents, checks all 178 tool definitions, and calls the extracted server through MCP against fake OBS, including a read-only scene audit.
+That command builds the host-specific `dist/obs-studio-native.mcpb`, extracts it, and checks its manifest, corresponding source and native entry. Verify profile-conditional inventories rather than treating the 178-name union as one runtime. The recorded macOS artifact passed all three package checks; later artifacts and other platforms need their own receipts.
 
 ### Live OBS tests
 
-The live suite is separate from `npm run check` and CI. By default it is skipped. With OBS open and the standard WebSocket environment variables already available to the process, run the read-only checks with:
+The development live suite is separate from CI and native release acceptance. It exercises the explicit Source oracle; the extracted native Mac journey recorded above has its own receipts. Changed executables, other platforms and additional live workflows need the relevant authorized checks. By default this development suite is skipped. With OBS open and the standard WebSocket environment variables already available to the process, run the read-only checks with:
 
 ```bash
 OBS_MCP_LIVE_TEST=1 npm run test:obs-live
@@ -378,7 +375,7 @@ The suite refuses to mutate if the selected collection does not exactly match `O
 
 Add `OBS_MCP_LIVE_RECORD=1` to the mutation command to also record a one-second clip. It checks that `obs-start-record` reports success only after OBS confirms the output is active, then stops the recording in a `finally` block. The clip is saved to the profile's recording directory and captures whatever the selected collection shows, so select a collection whose sources are safe to record.
 
-Pull-request CI checks the dependency policy before installation, then runs the hermetic gate on Node 20.19, 22, and 24, plus the packaged-artifact smoke test on Node 22. Dependency auditing checks the lockfile in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
+Pull-request CI checks the dependency policy before installation. Native-default delivery must run the hermetic development gate on a supported pinned Node toolchain and separately exercise the extracted executable with Node unavailable. Historical Node20 matrix results are not native-only distribution acceptance. Dependency auditing checks the lockfile in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
 
 ### Dependency safety
 
@@ -388,17 +385,17 @@ Direct dependencies use exact versions. `npm run check:dependencies` checks that
 node scripts/check-dependencies.mjs
 ```
 
-The project disables dependency lifecycle scripts through `.npmrc`; the MCPB staging install also passes `--ignore-scripts` explicitly. Explicit commands such as `npm run build` still run. Dependabot proposes weekly npm and GitHub Actions updates for review. CI actions are pinned to verified commit hashes. The residual development advisory and published SDK license findings are recorded in [`docs/dependency-security.md`](docs/dependency-security.md).
+The private development project disables dependency lifecycle scripts through `.npmrc`; native MCPB staging installs no npm dependencies. Explicit commands such as `npm run build` still run. Dependabot proposes weekly npm and GitHub Actions updates for review. CI actions are pinned to verified commit hashes. The residual development advisory and published SDK license findings are recorded in [`docs/dependency-security.md`](docs/dependency-security.md).
 
 For a dependency update, inspect its release notes and changes to the lockfile, retain exact direct versions, then run `npm run check` and `npm run test:package`. Check current advisories with `npm audit --package-lock-only --ignore-scripts --audit-level=low`. An audit reports known registry advisories; the offline policy check validates the dependency graph's packaging constraints.
 
-Vitest remains on 4.1.11 because Vitest 5 drops Node 20 support. Node type declarations stay on the supported Node 22 line.
+The private development toolchain is pinned in package.json/package-lock.json. The current Vitest5 range supports Node22.12+,24 or26+, independently of the installed native runtime, which requires no Node.
 
 ### TypeScript policy
 
-The application builds with TypeScript 7.0.2 and does not import the TypeScript compiler API. If a future generator, linter, or build tool needs programmatic compiler access, keep that tool on TypeScript 6 while the application compiler remains on TypeScript 7. TypeScript 7.0 does not ship a programmatic API; Microsoft documents the side-by-side TypeScript 6 compatibility package in the [TypeScript 7.0 release notes](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6-0).
+The development oracle builds with TypeScript 7.0.2 and does not import the TypeScript compiler API. If a future generator, linter, or build tool needs programmatic compiler access, keep that tool on TypeScript 6 while the application compiler remains on TypeScript 7. TypeScript 7.0 does not ship a programmatic API; Microsoft documents the side-by-side TypeScript 6 compatibility package in the [TypeScript 7.0 release notes](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6-0).
 
-## Protocol baselines
+## Historical protocol baseline
 
 On October 14, 2026, this revision was compared with the `modelcontextprotocol`, `mcp-typescript-sdk`, and `obs-studio` checkouts under `/Volumes/External SSD/referencerepos`. Those checkouts were read without modification. The exact reference sources are:
 
@@ -417,15 +414,8 @@ This project began with [Roy Shilkrot's `obs-mcp`](https://github.com/royshil/ob
 
 ## License
 
-OBS MCP is licensed under GPL-2.0-only. Published npm and MCPB packages include the corresponding TypeScript source and build scripts. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
+OBS MCP is licensed under GPL-2.0-only. The native MCPB layout retains corresponding Rust source, native assets, pinned build inputs and notices. TypeScript remains development oracle code. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
 
-### Rust native entry
+## Native implementation notes
 
-After `npm run native:build`, `npm start` runs the Rust executable. `npm run start:compat` runs the existing Node server. The Rust executable serves static filtered discovery, 59 read-only OBS routes, offline `obs-describe-request`, qualified read-only `obs-plan-scene-template`, structural `obs-audit-scene`, three offline prompts, static resource-template discovery and live resource listing without starting Node. All 178 tools remain available through an exclusive, one-way handoff to the included compatibility server for stateful workflows. Node remains required for that path and for encrypted OBS endpoints. See [native architecture, build commands and migration boundaries](docs/native-architecture.md). `npm run native:check` exercises both runtimes and the offline dependency gate; `npm run pack:native` builds the host-specific MCPB.
-
-
-The explicit `OBS_MCP_NATIVE_STATEFUL=1` qualification lane owns up to 164 tools on one persistent Rust service. It includes all 75 Source tools annotated read-only, snapshots and manual Restore, guarded input-property enumeration, closed mutation routes, watched recording and Record Clip, and Apply Scene. Approved state/recording roots and available media tools determine the exposed inventory. The ordinary native union contains 167 tools; three Stream controls are excluded when immutable Take/media owners exist. Dynamic mode adds three group controllers separately and can select only tools that this runtime actually owns.
-
-Checkpoint166 passes 907 Rust tests and 739 public MCP cases against both source and the extracted MCPB, using SDK2.4.0. Its bounded Mac check exercised public Apply Scene creation/change batches, dynamic enable/disable, a 2.837-second silent A/B Clip, manual Restore, conflict-preserving recovery, and fresh-process offline snapshot listing. Independent decode/content checks and visual review passed; original OBS state was restored and owned helpers closed. ACK receipts preserve their narrower postcondition and render limits. See the [artifact evidence](docs/native-architecture.md).
-
-The persistent lane remains opt-in. Capture Window orchestration, remaining recording/raw/named-output routes, resource subscriptions, confirmation/resume, HTTP, TLS and native-only packaging still gate full Rust default cutover. Node compatibility remains available for the full 178-tool interface. Other desktop platforms and TLS are not qualified by the Mac check.
+[Native architecture](docs/native-architecture.md) describes retained service, journal, connection and shutdown ownership. [Full Rust cutover](docs/full-rust-cutover.md) records the optimized, package and bounded Mac evidence alongside the remaining release gates. Earlier 83/166/167 checkpoint configuration, timings and Mac recordings are artifact-bound historical evidence; their compatibility/opt-in commands are superseded by the current native setup.

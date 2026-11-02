@@ -2,15 +2,24 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // A reviewed-inventory gate, not a general SPDX parser or a legal opinion.
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, statSync, lstatSync, realpathSync } from "node:fs";
+import { dirname, resolve, join, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index";
 // Exact source/version/license tuples observed on 2026-10-31. No auto-adoption mode.
 export const reviewedNativePackages = new Map([
+  ["atomic-waker@1.1.2", "Apache-2.0 OR MIT"],
+  ["futures-channel@0.3.34", "MIT OR Apache-2.0"],
+  ["http-body@1.1.0", "MIT"],
+  ["http-body-util@0.1.5", "MIT"],
+  ["httpdate@1.0.3", "MIT OR Apache-2.0"],
+  ["hyper@1.11.1", "MIT"],
+  ["hyper-util@0.1.20", "MIT"],
+  ["smallvec@1.16.4", "MIT OR Apache-2.0"],
   ["base64@0.22.1", "MIT OR Apache-2.0"],
   ["block-buffer@0.10.4", "MIT OR Apache-2.0"],
+  ["block2@0.6.2", "MIT"],
   ["bytes@1.12.1", "MIT"],
   ["cfg-if@1.0.5", "MIT OR Apache-2.0"],
   ["cpufeatures@0.2.17", "MIT OR Apache-2.0"],
@@ -32,7 +41,11 @@ export const reviewedNativePackages = new Map([
   ["log@0.4.34", "MIT OR Apache-2.0"],
   ["memchr@2.8.3", "Unlicense OR MIT"],
   ["mio@1.2.4", "MIT"],
+  ["objc2@0.6.5", "MIT"],
+  ["objc2-encode@4.1.0", "MIT"],
   ["obs-mcp-native@1.1.1", "GPL-2.0-only"],
+  ["obs-mcp-platform-tls-qualification@0.0.0", "GPL-2.0-only"],
+  ["obs-mcp-resolver-qualification@0.0.0", "GPL-2.0-only"],
   ["pin-project-lite@0.2.17", "Apache-2.0 OR MIT"],
   ["ppv-lite86@0.2.21", "MIT OR Apache-2.0"],
   ["proc-macro2@1.0.107", "MIT OR Apache-2.0"],
@@ -86,6 +99,28 @@ const choices = new Map([
   ["MIT/Apache-2.0", "MIT"],
 ]);
 
+// Sole reviewed local identities. A source=null field alone grants no admission.
+const ROOT_PACKAGE = "obs-mcp-native@1.1.1";
+const ownedManifests = new Map([
+  [ROOT_PACKAGE, ["native", "Cargo.toml"]],
+  ["obs-mcp-resolver-qualification@0.0.0", ["native", "crates", "resolver", "Cargo.toml"]],
+  ["obs-mcp-platform-tls-qualification@0.0.0", ["native", "crates", "platform-tls", "Cargo.toml"]],
+]);
+function ownedManifestMatches(path, parts, root) {
+  const project = resolve(root), expected = resolve(project, ...parts);
+  if (typeof path !== "string" || !isAbsolute(path) || path !== expected) return false;
+  try {
+    // Reject a symlink at the project, any private-path component, or manifest.
+    if (realpathSync(project) !== project || lstatSync(project).isSymbolicLink()) return false;
+    let current = project;
+    for (const part of parts) {
+      current = join(current, part);
+      if (lstatSync(current).isSymbolicLink()) return false;
+    }
+    return statSync(expected).isFile() && realpathSync(expected) === expected;
+  } catch { return false; }
+}
+
 function graphIds(metadata) {
   if (!metadata?.resolve?.root || !Array.isArray(metadata.resolve.nodes) || !Array.isArray(metadata.packages)) {
     throw new Error("Incomplete Cargo metadata: packages and resolved root graph are required");
@@ -106,11 +141,19 @@ function graphIds(metadata) {
 
 /** Input seams permit deterministic controls without changing the CLI's fixed review policy. */
 export function auditNativeLicenses({ metadata, activeMetadata, target, reviewed = reviewedNativePackages,
+  root = resolve(dirname(fileURLToPath(import.meta.url)), ".."),
   manifestExists = path => typeof path === "string" && existsSync(path) && statSync(path).isFile() }) {
   if (typeof target !== "string" || !target) throw new Error("An explicit target is required");
   const allIds = graphIds(metadata), activeIds = graphIds(activeMetadata);
   if (metadata.resolve.root !== activeMetadata.resolve.root) throw new Error("Target graph has a different root");
   if ([...activeIds].some(id => !allIds.has(id))) throw new Error("Active target contains a package absent from the all-target graph");
+  const fullPackages = new Map(metadata.packages.map(pkg => [pkg.id, pkg]));
+  for (const pkg of activeMetadata.packages.filter(pkg => activeIds.has(pkg.id))) {
+    const full = fullPackages.get(pkg.id);
+    if (["name", "version", "license", "source", "manifest_path"].some(field => pkg[field] !== full[field])) {
+      throw new Error("Default-host projection changed a package identity");
+    }
+  }
   const packages = [], blockers = [], observed = new Set();
   for (const pkg of metadata.packages) {
     const key = `${pkg.name}@${pkg.version}`;
@@ -124,22 +167,29 @@ export function auditNativeLicenses({ metadata, activeMetadata, target, reviewed
     if (!reviewed.has(key)) reason = "unreviewed package/version";
     else if (typeof expression !== "string" || !expression) reason = "missing license metadata";
     else if (expression !== expected) reason = "license expression changed after review";
-    else if ((isRoot && pkg.source !== null) || (!isRoot && pkg.source !== CRATES_IO)) reason = "unreviewed package source";
-    else if (isRoot && pkg.name === "obs-mcp-native" && expression === "GPL-2.0-only") choice = expression;
-    else if (expression === "GPL-2.0-only") reason = "project license is admitted only for the root package";
+    else if (ownedManifests.has(key)) {
+      if (isRoot !== (key === ROOT_PACKAGE)) reason = "owned package has an unreviewed graph role";
+      else if (pkg.source !== null) reason = "unreviewed package source";
+      else if (!ownedManifestMatches(pkg.manifest_path, ownedManifests.get(key), root)) reason = "owned package is outside its canonical manifest path or uses a symlink";
+      else choice = expression;
+    }
+    else if (isRoot) reason = "unreviewed root package identity";
+    else if (pkg.source !== CRATES_IO) reason = "unreviewed package source";
+    else if (expression === "GPL-2.0-only") reason = "project license is admitted only for the exact root and two canonical private path crates";
     else if (choices.has(expression)) choice = choices.get(expression);
     else reason = "no reviewed GPL-2.0-only-compatible choice; Apache-only/conjunctive/unknown terms fail closed";
     const entry = { package: key, expression: expression ?? null, choice, active: activeIds.has(pkg.id),
-      scope: activeIds.has(pkg.id) ? "active-target" : "other-target", ...(reason ? { reason } : {}) };
+      scope: activeIds.has(pkg.id) ? "default-active-host-projection" : "outside-default-host-projection", ...(reason ? { reason } : {}) };
     packages.push(entry);
     if (reason) blockers.push(entry);
   }
   for (const key of reviewed.keys()) if (!observed.has(key)) blockers.push({ package: key, reason: "reviewed package removed; inventory change requires review" });
   packages.sort((a, b) => a.package.localeCompare(b.package));
-  return { schemaVersion: 1, passed: blockers.length === 0, target, scope: "all resolved targets, including build/proc-macro dependencies",
+  return { schemaVersion: 1, passed: blockers.length === 0, target, scope: "all-feature, all-target resolved graph, including build/proc-macro dependencies",
+    activeProjection: "default features filtered to the host target; excludes optional features that are disabled by default",
     packagesChecked: packages.length, activeTargetPackages: packages.filter(pkg => pkg.active).length,
     otherTargetPackages: packages.filter(pkg => !pkg.active).length, packages, blockers,
-    limitations: ["Metadata/inventory review only; not a complete file-level, notice, patent, artifact, or legal audit", "Target filtering is a Cargo graph projection, not proof of a compiled or distributed artifact"] };
+    limitations: ["Metadata/inventory review only; not a complete file-level, notice, patent, artifact, or legal audit", "Packages outside the default-host projection include other targets and disabled optional features", "Target filtering is a Cargo graph projection, not proof of a compiled or distributed artifact"] };
 }
 
 function run(command, args, cwd, env) {
@@ -157,9 +207,9 @@ export function checkNativeLicenses(root = resolve(dirname(fileURLToPath(import.
   const target = /^host: (\S+)$/m.exec(version)?.[1];
   if (!target) throw new Error("Pinned Rust toolchain did not report its host target");
   const args = ["metadata", "--locked", "--offline", "--format-version", "1"];
-  const metadata = JSON.parse(run("cargo", args, cwd, env));
+  const metadata = JSON.parse(run("cargo", [...args, "--all-features"], cwd, env));
   const activeMetadata = JSON.parse(run("cargo", [...args, "--filter-platform", target], cwd, env));
-  return auditNativeLicenses({ metadata, activeMetadata, target });
+  return auditNativeLicenses({ metadata, activeMetadata, target, root });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

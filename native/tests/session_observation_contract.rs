@@ -864,3 +864,223 @@ async fn later_publication_cannot_restore_canceled_profile_permissions() {
     bridge.shutdown().await.unwrap();
     peer.await.unwrap();
 }
+
+#[tokio::test]
+async fn flushed_observational_timeout_keeps_socket_and_ignores_late_ack_during_batch() {
+    use obs_mcp_native::session::{BatchOptions, BatchRequest};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    let (release, released) = tokio::sync::oneshot::channel();
+    let peer = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut peer = accept_async(stream).await.unwrap();
+        send(
+            &mut peer,
+            json!({"op":0,"d":{"rpcVersion":1,"obsWebSocketVersion":"5.7.0"}}),
+        )
+        .await;
+        assert_eq!(receive(&mut peer).await["op"], 1);
+        send(&mut peer, json!({"op":2,"d":{"negotiatedRpcVersion":1}})).await;
+        let first = receive(&mut peer).await;
+        assert_eq!(first["d"]["requestType"], "GetVideoSettings");
+        released.await.unwrap();
+        let batch = receive(&mut peer).await;
+        assert_eq!(batch["op"], 8);
+        assert_ne!(first["d"]["requestId"], batch["d"]["requestId"]);
+        // The expired read reply arrives while a differently shaped exchange
+        // is active; its never-reused identity grants no batch result authority.
+        send(&mut peer,json!({"op":7,"d":{"requestId":first["d"]["requestId"],"requestType":"GetVideoSettings","requestStatus":{"result":true,"code":100},"responseData":{"baseWidth":123}}})).await;
+        send(&mut peer,json!({"op":9,"d":{"requestId":batch["d"]["requestId"],"results":[{"requestId":"0","requestType":"GetStats","requestStatus":{"result":true,"code":100},"responseData":{"fresh":true}}]}})).await;
+        let fresh = receive(&mut peer).await;
+        assert_eq!(fresh["d"]["requestType"], "GetStats");
+        assert_ne!(fresh["d"]["requestId"], first["d"]["requestId"]);
+        send(&mut peer,json!({"op":7,"d":{"requestId":fresh["d"]["requestId"],"requestType":"GetStats","requestStatus":{"result":true,"code":100},"responseData":{"fresh":true}}})).await;
+        assert!(matches!(
+            timeout(Duration::from_secs(2), peer.next()).await.unwrap(),
+            Some(Ok(Message::Close(_))) | Some(Err(_)) | None
+        ));
+    });
+    let (owner, events) = ObsSession::connect(&url, None, SessionOptions::default())
+        .await
+        .unwrap();
+    let bridge = ObservationBridge::bind(owner.handle(), events, None).unwrap();
+    let mut reader = bridge.reader();
+    let error = reader
+        .read(
+            ReadRequest::VideoSettings,
+            json!({}),
+            Instant::now() + Duration::from_millis(40),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.reason, "evidence_unavailable");
+    assert_eq!(
+        error.message,
+        "Request GetVideoSettings timed out after 40ms"
+    );
+    assert!(owner.handle().invalidation().is_none());
+    release.send(()).unwrap();
+    let batch = owner
+        .handle()
+        .batch(
+            owner.token(),
+            vec![BatchRequest {
+                request_type: "GetStats".into(),
+                request_data: None,
+            }],
+            BatchOptions {
+                timeout: Some(Duration::from_secs(2)),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(batch[0].response_data["fresh"], true);
+    let fresh = reader
+        .read(
+            ReadRequest::Stats,
+            json!({}),
+            Instant::now() + Duration::from_secs(2),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fresh["fresh"], true);
+    assert!(owner.handle().invalidation().is_none());
+    owner.shutdown().await.unwrap();
+    bridge.shutdown().await.unwrap();
+    peer.await.unwrap();
+}
+
+#[tokio::test]
+async fn structural_event_and_real_disconnect_keep_precedence_over_read_timeout() {
+    for disconnect in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let (release, released) = tokio::sync::oneshot::channel();
+        let peer = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut peer = accept_async(stream).await.unwrap();
+            send(
+                &mut peer,
+                json!({"op":0,"d":{"rpcVersion":1,"obsWebSocketVersion":"5.7.0"}}),
+            )
+            .await;
+            assert_eq!(receive(&mut peer).await["op"], 1);
+            send(&mut peer, json!({"op":2,"d":{"negotiatedRpcVersion":1}})).await;
+            let first = receive(&mut peer).await;
+            if disconnect {
+                peer.close(None).await.unwrap();
+                return;
+            }
+            send(&mut peer,json!({"op":5,"d":{"eventType":"InputSettingsChanged","eventIntent":8,"eventData":{}}})).await;
+            released.await.unwrap();
+            let fresh = receive(&mut peer).await;
+            assert_ne!(first["d"]["requestId"], fresh["d"]["requestId"]);
+            for (request, data) in [
+                (first, json!({"stale":true})),
+                (fresh, json!({"fresh":true})),
+            ] {
+                send(&mut peer,json!({"op":7,"d":{"requestId":request["d"]["requestId"],"requestType":request["d"]["requestType"],"requestStatus":{"result":true,"code":100},"responseData":data}})).await;
+            }
+            let _ = timeout(Duration::from_secs(2), peer.next()).await.unwrap();
+        });
+        let (owner, events) = ObsSession::connect(&url, None, SessionOptions::default())
+            .await
+            .unwrap();
+        let bridge = ObservationBridge::bind(owner.handle(), events, None).unwrap();
+        let mut reader = bridge.reader();
+        let mut sample = Observation::new(
+            &mut reader,
+            bridge.evidence(),
+            owner.token().generation(),
+            "2026-11-02T00:00:00.000Z".into(),
+            Instant::now() + Duration::from_secs(12),
+        )
+        .unwrap();
+        let error = sample
+            .read(ReadRequest::VideoSettings, json!({}))
+            .await
+            .unwrap_err();
+        assert_eq!(error.reason, "observation_invalidated");
+        drop(sample);
+        if !disconnect {
+            assert!(owner.handle().invalidation().is_none());
+            assert_eq!(bridge.evidence().borrow().revision, 1);
+            release.send(()).unwrap();
+            assert_eq!(
+                reader
+                    .read(
+                        ReadRequest::Stats,
+                        json!({}),
+                        Instant::now() + Duration::from_secs(2)
+                    )
+                    .await
+                    .unwrap()["fresh"],
+                true
+            );
+        } else {
+            drop(release);
+            assert!(owner.handle().invalidation().is_some());
+        }
+        owner.shutdown().await.unwrap();
+        bridge.shutdown().await.unwrap();
+        peer.await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn abandoned_flushed_typed_read_releases_only_its_waiter_and_peer_read_progresses() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    let (entered, entry) = tokio::sync::oneshot::channel();
+    let peer = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut peer = accept_async(stream).await.unwrap();
+        send(
+            &mut peer,
+            json!({"op":0,"d":{"rpcVersion":1,"obsWebSocketVersion":"5.7.0"}}),
+        )
+        .await;
+        assert_eq!(receive(&mut peer).await["op"], 1);
+        send(&mut peer, json!({"op":2,"d":{"negotiatedRpcVersion":1}})).await;
+        let abandoned = receive(&mut peer).await;
+        entered.send(()).unwrap();
+        let fresh = receive(&mut peer).await;
+        assert_ne!(abandoned["d"]["requestId"], fresh["d"]["requestId"]);
+        for (request, data) in [
+            (abandoned, json!({"late":true})),
+            (fresh, json!({"fresh":true})),
+        ] {
+            send(&mut peer,json!({"op":7,"d":{"requestId":request["d"]["requestId"],"requestType":request["d"]["requestType"],"requestStatus":{"result":true,"code":100},"responseData":data}})).await;
+        }
+        let _ = timeout(Duration::from_secs(2), peer.next()).await.unwrap();
+    });
+    let (owner, events) = ObsSession::connect(&url, None, SessionOptions::default())
+        .await
+        .unwrap();
+    let bridge = ObservationBridge::bind(owner.handle(), events, None).unwrap();
+    let mut reader = bridge.reader();
+    let mut first = Box::pin(reader.read(
+        ReadRequest::VideoSettings,
+        json!({}),
+        Instant::now() + Duration::from_secs(2),
+    ));
+    assert!(futures_util::poll!(first.as_mut()).is_pending());
+    entry.await.unwrap();
+    drop(first);
+    assert_eq!(
+        reader
+            .read(
+                ReadRequest::Stats,
+                json!({}),
+                Instant::now() + Duration::from_secs(2)
+            )
+            .await
+            .unwrap()["fresh"],
+        true
+    );
+    assert!(owner.handle().invalidation().is_none());
+    owner.shutdown().await.unwrap();
+    bridge.shutdown().await.unwrap();
+    peer.await.unwrap();
+}

@@ -9977,8 +9977,168 @@
     }
   },
   "service": {
-    "activation": "OBS_MCP_NATIVE_STATEFUL",
+    "activation": "native-default",
     "handlers": {
+      "obs-call-request": {
+        "handler": "advanced-opaque-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "requestType": {
+              "type": "string",
+              "description": "Exact OBS WebSocket request type"
+            },
+            "requestData": {
+              "description": "Request fields defined by obs-describe-request",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "requestType"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-batch": {
+        "handler": "advanced-opaque-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "requests": {
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "requestType": {
+                    "type": "string",
+                    "description": "Exact OBS WebSocket request type"
+                  },
+                  "requestData": {
+                    "description": "Request fields defined by obs-describe-request",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "requestType"
+                ]
+              },
+              "description": "Requests in the order OBS should run them"
+            },
+            "executionType": {
+              "default": "serial-realtime",
+              "description": "How OBS runs the requests",
+              "type": "string",
+              "enum": [
+                "serial-realtime",
+                "serial-frame"
+              ]
+            },
+            "haltOnFailure": {
+              "default": false,
+              "description": "Skip the remaining requests after one fails",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "requests"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-call-vendor-request": {
+        "handler": "advanced-opaque-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "vendorName": {
+              "type": "string",
+              "description": "Name of the vendor to use"
+            },
+            "requestType": {
+              "type": "string",
+              "description": "The request type to call"
+            },
+            "requestData": {
+              "description": "Object containing appropriate request data",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "vendorName",
+            "requestType"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-trigger-hotkey-by-name": {
+        "handler": "advanced-opaque-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "hotkeyName": {
+              "type": "string",
+              "description": "Name of the hotkey to trigger"
+            },
+            "contextName": {
+              "description": "Name of context of the hotkey to trigger",
+              "type": "string"
+            }
+          },
+          "required": [
+            "hotkeyName"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-trigger-hotkey-by-key-sequence": {
+        "handler": "advanced-opaque-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "keyId": {
+              "description": "The OBS key ID to use",
+              "type": "string"
+            },
+            "keyModifiers": {
+              "description": "Object containing key modifiers to apply",
+              "type": "object",
+              "properties": {
+                "shift": {
+                  "description": "Press Shift",
+                  "type": "boolean"
+                },
+                "control": {
+                  "description": "Press CTRL",
+                  "type": "boolean"
+                },
+                "alt": {
+                  "description": "Press ALT",
+                  "type": "boolean"
+                },
+                "command": {
+                  "description": "Press CMD (Mac)",
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
       "obs-record-clip": {
         "handler": "record-clip",
         "inputSchema": {
@@ -10206,11 +10366,136 @@
           "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },
+      "obs-capture-window": {
+        "handler": "capture-window",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "backend": {
+              "default": "auto",
+              "description": "OBS capture backend; portal reuses a user-authorized Wayland window selection",
+              "type": "string",
+              "enum": [
+                "auto",
+                "x11",
+                "portal"
+              ]
+            },
+            "sceneName": {
+              "type": "string",
+              "description": "Scene to add the input to if it does not exist"
+            },
+            "inputName": {
+              "type": "string",
+              "description": "Name of the capture input to create or reuse"
+            },
+            "window": {
+              "description": "Case-insensitive part of \"[App] Title\", or the window ID",
+              "type": "string"
+            },
+            "application": {
+              "description": "Linux only: case-insensitive application name identifying one window; Mac application auto-discovery is refused",
+              "type": "string"
+            },
+            "displayUuid": {
+              "description": "Legacy parameter retained for compatibility; ignored for window capture, which does not need a display",
+              "type": "string"
+            },
+            "silent": {
+              "default": true,
+              "description": "Mute the capture and remove it from every audio track",
+              "type": "boolean"
+            },
+            "fit": {
+              "default": true,
+              "description": "Scale the capture to fit the canvas, centered",
+              "type": "boolean"
+            },
+            "includeScreenshot": {
+              "default": false,
+              "description": "Also return a screenshot after applying; ignored for apply:false",
+              "type": "boolean"
+            },
+            "apply": {
+              "default": true,
+              "description": "Apply the resolved selection; false returns a read-only plan with unverified rendering",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sceneName",
+            "inputName"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
       "obs-stop-record": {
         "handler": "manual-record-stop",
         "inputSchema": {
           "type": "object",
           "properties": {}
+        }
+      },
+      "obs-start-record": {
+        "handler": "advanced-manual-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "obs-toggle-record": {
+        "handler": "advanced-manual-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "obs-start-output": {
+        "handler": "advanced-manual-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "outputName": {
+              "type": "string",
+              "description": "Output name"
+            }
+          },
+          "required": [
+            "outputName"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-stop-output": {
+        "handler": "advanced-manual-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "outputName": {
+              "type": "string",
+              "description": "Output name"
+            }
+          },
+          "required": [
+            "outputName"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-toggle-output": {
+        "handler": "advanced-manual-command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "outputName": {
+              "type": "string",
+              "description": "Output name"
+            }
+          },
+          "required": [
+            "outputName"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },
       "obs-toggle-stream": {

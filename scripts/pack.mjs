@@ -1,147 +1,35 @@
 #!/usr/bin/env node
-/*
- * Modified for the independent OBS MCP project in August 2026.
- * See NOTICE.md and Git history for authorship and change dates.
- * SPDX-License-Identifier: GPL-2.0-only
- */
-import { execFileSync } from "node:child_process";
-import { createRequire } from "node:module";
-import {
-  cpSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { listTools } from "./list-tools.mjs";
-import { checkDependencies } from "./check-dependencies.mjs";
-
-const require = createRequire(import.meta.url);
-const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
+// SPDX-License-Identifier: GPL-2.0-only
+// Node/MCPB CLI are development archive tools only, never extension payload.
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {cpSync,lstatSync,mkdirSync,mkdtempSync,renameSync,rmSync,writeFileSync} from 'node:fs';
+import {dirname,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {checkDependencies} from './check-dependencies.mjs';
+import {nativeBundleFiles,nativeManifest} from './native-bundle.mjs';
+const require=createRequire(import.meta.url),defaultRoot=fileURLToPath(new URL('../',import.meta.url));
+export async function pack({root=defaultRoot,nativeBundle=true,offline=false,output=resolve(root,'dist/obs-studio-native.mcpb'),keepStaging=false}={}){
+ if(!nativeBundle)throw new Error('The product package is native-only; Source is retained as development oracle');
+ if(!['darwin','linux'].includes(process.platform))throw new Error('Native MCPB packaging is qualified only for macOS/Linux build hosts');
+ if(process.env.CARGO_BUILD_TARGET)throw new Error('Host-native packaging only; cross-target artifacts require separate qualification');
+ checkDependencies({root});
+ // Qualification gates run before creating a staging owner or changing output.
+ for(const script of['check-native-licenses.mjs','build-native.mjs','check-native-migration.mjs'])execFileSync(process.execPath,['scripts/'+script],{cwd:root,stdio:'inherit'});
+ const manifest=nativeManifest(root),files=nativeBundleFiles(root),binary=resolve(root,'native',process.env.CARGO_TARGET_DIR||'target','release/obs-mcp-native'),info=lstatSync(binary);
+ if(!info.isFile()||info.isSymbolicLink()||(info.mode&0o111)===0)throw new Error('Native bundle requires the freshly checked executable');
+ const staging=mkdtempSync(resolve(root,'.pack-native-stage-'));let archive;
+ try{
+  for(const file of files){mkdirSync(dirname(resolve(staging,file)),{recursive:true});cpSync(resolve(root,file),resolve(staging,file));}
+  cpSync(binary,resolve(staging,'native/obs-mcp-native'));
+  writeFileSync(resolve(staging,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+  // Retain buildable corresponding Rust source/configuration that default MCPB
+  // ignore rules otherwise hide. There is no npm install or Source build.
+  writeFileSync(resolve(staging,'.mcpbignore'),'!native/\n!native/**\n!docs/\n!docs/**\n!licenses/\n!licenses/**\n!.agents/\n!.agents/**\n');
+  mkdirSync(dirname(output),{recursive:true});archive=resolve(dirname(output),`.${randomUUID()}-obs-native.mcpb`);
+  const cli=resolve(dirname(require.resolve('@anthropic-ai/mcpb')),'cli/cli.js');execFileSync(process.execPath,[cli,'pack','.',archive],{cwd:staging,stdio:'inherit'});
+  renameSync(archive,output);archive=undefined;return{output,staging};
+ }finally{if(archive)rmSync(archive,{force:true});if(!keepStaging)rmSync(staging,{recursive:true,force:true});}
 }
-
-function mcpbCliPath() {
-  return resolve(dirname(require.resolve("@anthropic-ai/mcpb")), "cli/cli.js");
-}
-
-export async function pack({
-  root = defaultRoot,
-  nativeBundle = false,
-  offline = false,
-  output = resolve(root, nativeBundle ? "dist/obs-studio-native.mcpb" : "dist/obs-studio.mcpb"),
-  keepStaging = false,
-} = {}) {
-  checkDependencies({ root });
-  if (nativeBundle) {
-    if (!["darwin", "linux"].includes(process.platform)) throw new Error("Native MCPB packaging currently accepts only macOS/Linux build hosts");
-    execFileSync(process.execPath, ["scripts/check-native-licenses.mjs"], { cwd: root, stdio: "inherit" });
-    execFileSync(npmCommand(), ["run", "native:build"], { cwd: root, stdio: "inherit" });
-    execFileSync(process.execPath, ["scripts/check-native-migration.mjs"], { cwd: root, stdio: "inherit" });
-  }
-  const staging = resolve(root, ".pack-staging");
-  console.log("Preparing staging directory...");
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging, { recursive: true });
-
-  try {
-    console.log("Building server...");
-    execFileSync(npmCommand(), ["run", "build"], { cwd: root, stdio: "inherit" });
-
-    for (const file of [
-      "package.json",
-      "package-lock.json",
-      "icon.png",
-      "LICENSE",
-      "README.md",
-      "NOTICE.md",
-      "tsconfig.json",
-    ]) {
-      cpSync(resolve(root, file), resolve(staging, file), { force: true });
-    }
-    for (const directory of ["src", "scripts"]) {
-      cpSync(resolve(root, directory), resolve(staging, directory), {
-        recursive: true,
-        force: true,
-      });
-    }
-    mkdirSync(resolve(staging, "assets"), { recursive: true });
-    cpSync(resolve(root, "assets/identity"), resolve(staging, "assets/identity"), { recursive: true });
-    // MCPB excludes build metadata by default. GPL source distributions need
-    // the pinned dependency graph and compiler configuration to be rebuildable.
-    writeFileSync(
-      resolve(staging, ".mcpbignore"),
-      "!package-lock.json\n!tsconfig.json\n!.agents/\n!.agents/skills/\n!.agents/skills/obs-demo/\n!.agents/skills/obs-demo/SKILL.md\n",
-    );
-    mkdirSync(resolve(staging, "docs"), { recursive: true });
-    cpSync(resolve(root, "docs/production-assistant.md"), resolve(staging, "docs/production-assistant.md"));
-    cpSync(resolve(root, "docs/recipes"), resolve(staging, "docs/recipes"), { recursive: true });
-    mkdirSync(resolve(staging, ".agents/skills"), { recursive: true });
-    cpSync(resolve(root, ".agents/skills/obs-demo"), resolve(staging, ".agents/skills/obs-demo"), { recursive: true });
-    cpSync(
-      resolve(root, "docs/protocol.json"),
-      resolve(staging, "docs/protocol.json"),
-      { force: true },
-    );
-
-    console.log("Generating tools list from server...");
-    const tools = await listTools(root);
-    const { version } = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-    const manifest = JSON.parse(readFileSync(resolve(root, "manifest.json"), "utf8"));
-    manifest.version = version;
-    manifest.tools = tools;
-    manifest.tools_generated = true;
-    if (nativeBundle) {
-      manifest.name = "obs-mcp-native";
-      manifest.display_name = "OBS MCP Native";
-      manifest.description = "Rust entry for OBS inspection and production workflows, with Node compatibility";
-      manifest.long_description = `Host-specific Rust entry for ${process.platform}/${process.arch}. Inspect OBS Studio, plan scene changes and supervise production workflows through MCP. Default routing serves discovery and eligible reads in Rust, then transfers other workflows exclusively to the included Node.js compatibility server. Node.js >=20.19 remains required for that path and encrypted OBS endpoints. The explicit persistent Rust qualification lane and its approved-root requirements are documented in docs/native-architecture.md; default full Rust cutover remains open.`;
-      manifest.compatibility.platforms = [process.platform];
-      manifest.server.type = "binary";
-      manifest.server.entry_point = "native/obs-mcp-native";
-      manifest.server.mcp_config.command = "${__dirname}/native/obs-mcp-native";
-      manifest.server.mcp_config.args = [];
-      manifest.server.mcp_config.env.OBS_MCP_COMPAT_ENTRY = "${__dirname}/server/index.js";
-      mkdirSync(resolve(staging, "native"), { recursive: true });
-      cpSync(resolve(root, "native/target/release/obs-mcp-native"), resolve(staging, "native/obs-mcp-native"));
-      for (const file of ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]) cpSync(resolve(root, "native", file), resolve(staging, "native", file));
-      for (const directory of ["src", "assets"]) cpSync(resolve(root, "native", directory), resolve(staging, "native", directory), { recursive: true });
-      for (const file of ["native-architecture.md", "native-dependencies.md", "full-rust-cutover.md", "native-migration-ledger.json"]) cpSync(resolve(root, "docs", file), resolve(staging, "docs", file));
-    }
-    writeFileSync(
-      resolve(staging, "manifest.json"),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-    );
-    console.log(`Found ${tools.length} tools.`);
-    cpSync(resolve(root, "build"), resolve(staging, "server"), {
-      recursive: true,
-      force: true,
-    });
-
-    console.log("Installing production dependencies...");
-    execFileSync(npmCommand(), ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", ...(offline ? ["--offline"] : [])], {
-      cwd: staging,
-      stdio: "inherit",
-    });
-
-    console.log("Packing...");
-    mkdirSync(dirname(output), { recursive: true });
-    rmSync(output, { force: true });
-    execFileSync(process.execPath, [mcpbCliPath(), "pack", ".", output], {
-      cwd: staging,
-      stdio: "inherit",
-    });
-    console.log(`Done: ${output}`);
-    return { output, staging };
-  } finally {
-    if (!keepStaging) rmSync(staging, { recursive: true, force: true });
-  }
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await pack({ nativeBundle: process.argv.includes("--native"), offline: process.argv.includes("--offline") });
-}
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await pack({offline:process.argv.includes('--offline')});

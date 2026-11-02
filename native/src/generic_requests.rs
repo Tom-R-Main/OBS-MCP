@@ -44,7 +44,20 @@ impl std::fmt::Debug for Call {
 }
 impl Call {
     pub fn requires_readback(&self) -> bool {
-        self.follow_up.is_some()
+        self.follow_up.is_some() || self.is_opaque()
+    }
+    pub(crate) fn arguments_ref(&self) -> &Value {
+        &self.arguments
+    }
+    pub(crate) fn is_opaque(&self) -> bool {
+        crate::opaque_commands::is_kind(self.kind)
+    }
+    pub(crate) fn execution_budget(&self, configured: Duration) -> Duration {
+        if self.kind == K::OpaqueBatch {
+            self.operation_limit()
+        } else {
+            configured.min(self.operation_limit())
+        }
     }
     pub fn kind(&self) -> K {
         self.kind
@@ -55,6 +68,7 @@ impl Call {
     pub fn confirmed_output_kind(&self) -> Option<crate::output_events::OutputKind> {
         use crate::output_events::OutputKind;
         match self.kind {
+            K::ManualRecordStart => Some(OutputKind::Record),
             K::StreamStart => Some(OutputKind::Stream),
             K::VirtualCamStart => Some(OutputKind::VirtualCam),
             K::ReplayBufferStart => Some(OutputKind::ReplayBuffer),
@@ -63,8 +77,13 @@ impl Call {
     }
     pub(crate) fn operation_limit(&self) -> Duration {
         match self.kind {
+            K::OpaqueBatch => {
+                crate::opaque_commands::budget(self).unwrap_or(Duration::from_secs(10))
+            }
             K::StreamStart => Duration::from_secs(30),
-            K::VirtualCamStart | K::ReplayBufferStart => Duration::from_secs(25),
+            K::ManualRecordStart | K::VirtualCamStart | K::ReplayBufferStart => {
+                Duration::from_secs(25)
+            }
             _ => Duration::from_secs(10),
         }
     }
@@ -77,9 +96,19 @@ impl Call {
         }
     }
     pub fn cancelled_or_expired(&self) -> Value {
+        if self.is_opaque() {
+            return crate::opaque_commands::failure(
+                self,
+                "Operation cancelled or expired before dispatch",
+            );
+        }
         if matches!(
             self.kind,
-            K::StreamToggle | K::VirtualCamToggle | K::ReplayBufferToggle
+            K::ManualRecordToggle
+                | K::NamedOutputToggle
+                | K::StreamToggle
+                | K::VirtualCamToggle
+                | K::ReplayBufferToggle
         ) {
             return self.failure("Operation cancelled or expired before dispatch");
         }
@@ -118,7 +147,9 @@ impl Call {
         }
         if matches!(
             self.kind,
-            K::StreamToggle
+            K::ManualRecordStart
+                | K::ManualRecordToggle
+                | K::StreamToggle
                 | K::VirtualCamToggle
                 | K::ReplayBufferToggle
                 | K::StreamStart
@@ -159,6 +190,25 @@ impl Call {
         self.name
     }
     pub fn parse(name: &str, args: &Value) -> Option<Self> {
+        if let Some((kind, name, title, arguments)) = crate::opaque_commands::parse(name, args) {
+            return Self {
+                kind,
+                name,
+                title,
+                arguments,
+                follow_up: None,
+            }
+            .source_numbers();
+        }
+        if let Some(request) = crate::advanced_commands::Request::parse(name, args) {
+            return Some(Self {
+                kind: request.kind(),
+                name: request.name(),
+                title: request.title(),
+                arguments: request.arguments(),
+                follow_up: None,
+            });
+        }
         if name == "obs-set-scene-item-transform" {
             let request = transform::Request::parse(args)?;
             let (arguments, follow_up) = request.into_parts();
@@ -376,6 +426,9 @@ impl Call {
     /// Pure callback business validation. The caller must evaluate Source's
     /// lease/take policy first; this returns no authority or dispatch request.
     pub fn business_refusal(&self) -> Option<Value> {
+        if self.is_opaque() {
+            return crate::opaque_commands::refusal(self);
+        }
         (self.kind == K::InputVolume
             && self.arguments.get("inputVolumeMul").is_none()
             && self.arguments.get("inputVolumeDb").is_none())
@@ -383,6 +436,9 @@ impl Call {
     }
     fn failure(&self, message: impl AsRef<str>) -> Value {
         let prefix = match self.kind {
+            K::ManualRecordToggle => "Error toggling recording",
+            K::NamedOutputToggle => "Error toggling output",
+            K::ManualRecordStart => "Recording failed to start",
             K::StreamToggle => "Error toggling stream",
             K::VirtualCamToggle => "Error toggling virtual camera",
             K::ReplayBufferToggle => "Error toggling replay buffer",
@@ -412,10 +468,19 @@ impl Call {
         error(format!("{prefix}: {}", message.as_ref()))
     }
     fn success(&self, response: Value) -> Value {
+        if self.kind == K::NamedOutputToggle {
+            let state = if js_truthy(response.get("outputActive")) {
+                "active"
+            } else {
+                "inactive"
+            };
+            return json!({"content":[{"type":"text","text":format!("Output '{}' toggled, now {state}",self.arguments["outputName"].as_str().expect("validated output name"))}]});
+        }
         // Source's toggle callbacks use JS truthiness on one ACK field. This
         // does not establish a current output state or create a future Stop.
         // Session has already normalized nullish responseData to an object.
         let toggle_prefix = match self.kind {
+            K::ManualRecordToggle => Some("Recording toggled, now "),
             K::StreamToggle => Some("Successfully toggled streaming state. Stream is now "),
             K::VirtualCamToggle => Some("Virtual camera toggled, now "),
             K::ReplayBufferToggle => Some("Replay buffer toggled, now "),
@@ -499,6 +564,11 @@ impl Call {
                 "Source projector opened for: {}",
                 name_or_uuid("sourceName", "sourceUuid")
             ),
+            K::NamedOutputStart => format!("Output '{}' started", s("outputName")),
+            K::NamedOutputStop => format!("Output '{}' stopped", s("outputName")),
+            K::ManualRecordStart | K::ManualRecordToggle | K::NamedOutputToggle => {
+                unreachable!("closed output callback handled above")
+            }
             K::RecordPause => "Recording paused".into(),
             K::RecordResume => "Recording resumed".into(),
             K::RecordPauseToggle => "Recording pause toggled".into(),
@@ -819,6 +889,23 @@ pub async fn execute_with_services(
     admitted_at: Instant,
     services: GenericServices,
 ) -> Value {
+    if call.is_opaque() {
+        let capabilities = services.readback.and_then(|readback| readback.capabilities);
+        return crate::opaque_commands::execute(
+            store,
+            call,
+            session,
+            control,
+            clock,
+            caller,
+            cancel,
+            id,
+            timeout,
+            admitted_at,
+            capabilities,
+        )
+        .await;
+    }
     // Share immutable validated arguments with the final guard. The socket
     // frame remains separately owned; active buffers are outside the FIFO's
     // encoded-payload budget and are not a process-RSS guarantee.

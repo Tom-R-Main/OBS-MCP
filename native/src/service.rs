@@ -4,7 +4,8 @@
 //! routes are registered here. Dropping Service is emergency invalidation, not
 //! evidence that OBS stopped; shutdown() is the joined lifecycle boundary.
 use crate::{
-    apply_scene, apply_scene_transport, apply_scene_workflow,
+    apply_scene, apply_scene_transport, apply_scene_workflow, capture_window,
+    capture_window_workflow,
     custody::{Clock, CustodyCoordinator, SharedControl, TrackedRequest},
     demo::{
         self, Demo, DemoAdmission, DemoContext, JournalFile, JournalStore, PrepareMetadata,
@@ -59,6 +60,7 @@ pub const REQUIRED_SUBSCRIPTIONS: u64 =
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ServiceError {
     Binding,
+    Profile,
     Busy,
     Uncertain,
     StageToken,
@@ -87,6 +89,12 @@ pub struct Resources {
     pub control: SharedControl,
     pub clock: Clock,
     pub identities: Box<dyn FnMut() -> String + Send>,
+}
+/// Complete resources plus capability evidence read from that same bound
+/// observer. Callers cannot construct or inject a cached version payload.
+pub struct BootstrappedResources {
+    resources: Resources,
+    version: Option<Value>,
 }
 pub struct TakeServices {
     pub host: Arc<dyn HostServices>,
@@ -218,6 +226,9 @@ pub struct Service {
 }
 #[derive(Clone)]
 pub struct ServiceHandle {
+    profile: crate::native_profile::NativeProfile,
+    receipts: crate::operation_store::OperationView,
+    resources: Option<crate::resource_events::Publisher>,
     sender: mpsc::Sender<Command>,
     closed: Arc<AtomicBool>,
 }
@@ -316,6 +327,13 @@ fn manual_policy_bytes(policy: &Policy) -> Option<usize> {
         .filter(|n| *n <= SAFETY_QUEUE_BYTES)
 }
 enum Command {
+    CaptureWindow(
+        capture_window::Request,
+        String,
+        Cancellation,
+        Instant,
+        Reply,
+    ),
     ApplyScene(apply_scene::Request, String, Cancellation, Instant, Reply),
     Snapshot(snapshot_tools::Request, Cancellation, Reply),
     Restore(
@@ -346,6 +364,33 @@ enum Command {
         Cancellation,
         Reply,
     ),
+}
+impl Command {
+    fn requires_guarded_owner(&self) -> bool {
+        matches!(
+            self,
+            Self::CaptureWindow(..)
+                | Self::ApplyScene(..)
+                | Self::Snapshot(..)
+                | Self::Restore(..)
+                | Self::Stage(..)
+                | Self::Tracked(..)
+                | Self::Preparation(..)
+                | Self::Take(..)
+                | Self::Clip(..)
+                | Self::Media(..)
+        )
+    }
+}
+struct CaptureWindowCall {
+    request: capture_window::Request,
+    caller: String,
+    cancellation: Cancellation,
+    admitted_at: Instant,
+    timeout: Duration,
+    reads: snapshot_tools::Context,
+    screenshot_limit: Result<ScreenshotLimit, ObservationError>,
+    platform: Option<String>,
 }
 struct ApplySceneCall {
     request: apply_scene::Request,
@@ -378,6 +423,17 @@ struct WriterReturn {
     broken: bool,
 }
 enum Completion {
+    CaptureWindowPlanned {
+        owners: Box<PreparationOwners>,
+        call: Box<CaptureWindowCall>,
+        planned: capture_window_workflow::Planned,
+        reply: Reply,
+    },
+    CaptureWindowFinished {
+        owners: Box<PreparationOwners>,
+        execution: capture_window_workflow::Execution,
+        reply: Reply,
+    },
     ApplyScenePlanned {
         owners: Box<PreparationOwners>,
         call: Box<ApplySceneCall>,
@@ -446,6 +502,65 @@ impl Service {
         resources: Resources,
         options: Options,
     ) -> Result<Self, (ServiceError, Box<Resources>)> {
+        Self::spawn_in_profile(
+            resources,
+            options,
+            crate::native_profile::NativeProfile::Production,
+        )
+    }
+    pub fn spawn_in_profile(
+        resources: Resources,
+        options: Options,
+        profile: crate::native_profile::NativeProfile,
+    ) -> Result<Self, (ServiceError, Box<Resources>)> {
+        Self::spawn_cached(resources, options, profile, None)
+    }
+    /// Source establishes/caches GetVersion before public RPC admission. The
+    /// retained initializer owns these resources through this read; preparation
+    /// stays with Runtime until the synchronous Service adoption afterward.
+    pub async fn bootstrap_resources(
+        resources: Resources,
+        deadline: Instant,
+    ) -> Result<BootstrappedResources, Box<Resources>> {
+        let version = resources
+            .bridge
+            .reader()
+            .read(ReadRequest::Version, Value::Null, deadline)
+            .await
+            .ok();
+        if Instant::now() >= deadline {
+            return Err(Box::new(resources));
+        }
+        Ok(BootstrappedResources { resources, version })
+    }
+    pub fn spawn_bootstrapped(
+        bootstrap: BootstrappedResources,
+        options: Options,
+        profile: crate::native_profile::NativeProfile,
+    ) -> Result<Self, (ServiceError, Box<Resources>)> {
+        let BootstrappedResources { resources, version } = bootstrap;
+        Self::spawn_cached(resources, options, profile, Some(version))
+    }
+    fn spawn_cached(
+        resources: Resources,
+        options: Options,
+        profile: crate::native_profile::NativeProfile,
+        initial_version: Option<Option<Value>>,
+    ) -> Result<Self, (ServiceError, Box<Resources>)> {
+        let guarded_binding = options.take.is_some()
+            || options.media.is_some()
+            || options.preparation.is_some()
+            || options.read_tools_host.is_some();
+        if profile == crate::native_profile::NativeProfile::Advanced && guarded_binding {
+            return Err((ServiceError::Profile, Box::new(resources)));
+        }
+        if profile == crate::native_profile::NativeProfile::Production && guarded_binding {
+            match resources.store.read_view().guarded_reentry_allowed() {
+                Ok(true) => {}
+                Ok(false) => return Err((ServiceError::Profile, Box::new(resources))),
+                Err(_) => return Err((ServiceError::Uncertain, Box::new(resources))),
+            }
+        }
         let handle = resources.session.handle();
         let fence = resources.bridge.fence();
         let evidence = *resources.bridge.evidence().borrow();
@@ -499,6 +614,9 @@ impl Service {
         let (stop, stopping) = watch::channel(false);
         let closed = Arc::new(AtomicBool::new(false));
         let frontend = ServiceHandle {
+            profile,
+            receipts: store.read_view(),
+            resources: bridge.resource_events(),
             sender,
             closed: closed.clone(),
         };
@@ -514,6 +632,8 @@ impl Service {
             stopping,
             closed,
             record_impact,
+            profile,
+            initial_version,
         ));
         Ok(Self {
             handle: frontend,
@@ -556,17 +676,43 @@ impl Drop for Service {
     }
 }
 impl ServiceHandle {
+    pub fn native_profile(&self) -> crate::native_profile::NativeProfile {
+        self.profile
+    }
+    pub fn profile_metadata(&self) -> Value {
+        let mut metadata = self.profile.metadata();
+        metadata["guardedReentryAllowed"] = match self.receipts.guarded_reentry_allowed() {
+            Ok(value) => json!(value),
+            Err(_) => Value::Null,
+        };
+        metadata
+    }
     async fn call(&self, build: impl FnOnce(Reply) -> Command) -> Result<Value, ServiceError> {
         if self.closed.load(Ordering::Acquire) {
             return Err(ServiceError::Closed);
         }
         let (sender, receiver) = oneshot::channel();
-        self.sender
-            .try_send(build(sender))
-            .map_err(|error| match error {
-                mpsc::error::TrySendError::Full(_) => ServiceError::Capacity,
-                mpsc::error::TrySendError::Closed(_) => ServiceError::Closed,
-            })?;
+        let command = build(sender);
+        if let Command::Generic(call, ..) = &command
+            && call.kind().advanced_only()
+            && self.profile != crate::native_profile::NativeProfile::Advanced
+        {
+            return Err(ServiceError::Profile);
+        }
+        if command.requires_guarded_owner() {
+            if self.profile == crate::native_profile::NativeProfile::Advanced {
+                return Err(ServiceError::Profile);
+            }
+            match self.receipts.guarded_reentry_allowed() {
+                Ok(true) => {}
+                Ok(false) => return Err(ServiceError::Profile),
+                Err(_) => return Err(ServiceError::Uncertain),
+            }
+        }
+        self.sender.try_send(command).map_err(|error| match error {
+            mpsc::error::TrySendError::Full(_) => ServiceError::Capacity,
+            mpsc::error::TrySendError::Closed(_) => ServiceError::Closed,
+        })?;
         receiver.await.map_err(|_| ServiceError::Closed)?
     }
     pub async fn stage(
@@ -640,6 +786,16 @@ impl ServiceHandle {
         cancel: Cancellation,
     ) -> Result<Value, ServiceError> {
         self.call(|reply| Command::Workflow(WorkflowCall::Audit(args, limit), cancel, reply))
+            .await
+    }
+    pub async fn capture_window(
+        &self,
+        request: capture_window::Request,
+        caller: String,
+        cancellation: Cancellation,
+    ) -> Result<Value, ServiceError> {
+        let admitted_at = Instant::now();
+        self.call(|reply| Command::CaptureWindow(request, caller, cancellation, admitted_at, reply))
             .await
     }
     pub async fn apply_scene(
@@ -750,6 +906,10 @@ impl ServiceHandle {
             Command::Preparation(PreparationCall::Recover(id, apply), policy, cancel, reply)
         })
         .await
+    }
+    /// Weak notification projection only; no physical session ownership.
+    pub fn resource_events(&self) -> Option<crate::resource_events::Publisher> {
+        self.resources.clone()
     }
     /// Current owned monitor only; external recording does not invent a take.
     pub async fn take_resource(&self) -> Result<Value, ServiceError> {
@@ -911,6 +1071,9 @@ impl TakeBinding {
             Err(failure) => return Err((ServiceError::Binding, failure.loan.store)),
         };
         let handle = owner.handle();
+        if let Some(resources) = observer.resource_events() {
+            handle.bind_resource_events(resources);
+        }
         let changed = handle.summaries();
         local.lock().unwrap().take = Some(handle);
         Ok(Box::new(TakeBorrow {
@@ -934,6 +1097,8 @@ async fn run(
     mut stopping: watch::Receiver<bool>,
     closed: Arc<AtomicBool>,
     record_impact: RecordImpactOwner,
+    profile: crate::native_profile::NativeProfile,
+    initial_version: Option<Option<Value>>,
 ) -> Exit {
     // Capture constructor capabilities before TakeServices can be consumed by
     // a borrower. Stream frontend operations can asynchronously start or stop
@@ -952,7 +1117,8 @@ async fn run(
     let mut preparation = options.preparation.take();
     let preparation_enabled = preparation.is_some();
     let broker = ReceiptBroker::new(initial).expect("spawn validated a direct store");
-    let mut machine = Some(StageMachine::default());
+    let mut machine =
+        (profile == crate::native_profile::NativeProfile::Production).then(StageMachine::default);
     let mut jobs = JoinSet::new();
     let mut waiting_generics: VecDeque<QueuedGeneric> = VecDeque::new();
     let mut waiting_bytes = 0usize;
@@ -968,7 +1134,7 @@ async fn run(
     let mut clip_cancel = HashMap::<u64, Cancellation>::new();
     let mut next_job = 0u64;
     let local = Arc::new(Mutex::new(LocalMetadata { take: None }));
-    let version = Arc::new(Mutex::new(None::<Option<Value>>));
+    let version = Arc::new(Mutex::new(initial_version));
     let mut borrower: Option<Box<TakeBorrow>> = None;
     let mut take_jobs = 0usize;
     let mut take_initializing = false;
@@ -1065,6 +1231,22 @@ async fn run(
             value=jobs.join_next(),if !jobs.is_empty()=>{
                 match value {
                     Some(Ok(Completion::Generic(reply,result)))=>{active_cancel=None;let _=reply.send(Ok(result));},
+                    Some(Ok(Completion::CaptureWindowPlanned{owners,call,planned,reply}))=>{
+                        match planned {
+                            capture_window_workflow::Planned::Finished(result)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(result));},
+                            capture_window_workflow::Planned::Ready(ready)=>{
+                                // The snapshot save is a joined blocking operation. Recheck
+                                // cancellation/EOF/deadline AFTER its owner comes back.
+                                if closing||call.cancellation.is_cancelled()||call.admitted_at.elapsed()>=call.timeout{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(capture_window_workflow::refusal(&ready,"Capture Window cancelled or original deadline expired before dispatch")));continue;}
+                                let writer=if ready.has_effects(){Some(match broker.scope(ScopeKind::CaptureWindow){Ok(writer)=>writer,Err(_)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(capture_window_workflow::refusal(&ready,"Unresolved receipt custody prevents Capture Window; inspect obs-observe")));continue;}})}else{None};
+                                let id=(identities.lock().unwrap())();let context=capture_window_workflow::Context{reads:call.reads,control:control.clone(),clock:clock.clone(),operation_id:id,caller:call.caller,request:call.request,screenshot_limit:call.screenshot_limit};
+                                let platform=call.platform;
+                                jobs.spawn(async move{let execution=capture_window_workflow::apply(writer,ready,context,platform).await;Completion::CaptureWindowFinished{owners,execution,reply}});
+                            },
+                            capture_window_workflow::Planned::Save(..)=>unreachable!("Capture snapshot publication joined before completion"),
+                        }
+                    },
+                    Some(Ok(Completion::CaptureWindowFinished{owners,execution,reply}))=>{drop(execution.store);preparation=Some(*owners);broken|=execution.broken;active_cancel=None;let _=reply.send(Ok(execution.result));},
                     Some(Ok(Completion::ApplyScenePlanned{owners,call,planned,reply}))=>{
                         match planned {
                             apply_scene_workflow::Planned::Finished(result)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(result));},
@@ -1127,6 +1309,31 @@ async fn run(
                     if safety_ready {let queued=waiting_safety.pop_front().unwrap();safety_waiting_bytes-=queued.bytes();queued.command()}else{let queued=waiting_generics.pop_front().unwrap();waiting_bytes-=queued.bytes;Command::Generic(queued.call,queued.caller,queued.cancel,queued.at,queued.reply)}
                 };
                 match command {
+                    Command::CaptureWindow(request,caller,cancel,admitted_at,reply)=>{
+                        let decision=match capture_window_workflow::policy(&request,&caller,&control,&clock){Ok(decision)=>decision,Err(())=>{let _=reply.send(Err(ServiceError::Binding));continue;}};
+                        if let Some(result)=decision.tool_result(){let _=reply.send(Ok(result));continue;}
+                        let refusal=if broken{Some(ServiceError::Uncertain)}else if take_initializing||jobs.len()>take_jobs||!safety_jobs.is_empty()||!waiting_safety.is_empty(){Some(ServiceError::Busy)}else if preparation.is_none()||options.connection.is_none(){Some(ServiceError::Unsupported)}else{None};
+                        if let Some(error)=refusal{let _=reply.send(Err(error));continue;}
+                        let timeout=options.operation_timeout;let Some(deadline)=admitted_at.checked_add(timeout)else{let _=reply.send(Err(ServiceError::Binding));continue;};
+                        if cancel.is_cancelled()||Instant::now()>=deadline{let _=reply.send(Ok(capture_window::Failure::thrown("Capture Window cancelled or original deadline expired before reads").result()));continue;}
+                        let owners=Box::new(preparation.take().unwrap());let endpoint=options.connection.as_ref().unwrap().url.clone();let known=version.lock().unwrap().clone().flatten();
+                        let capabilities=known.as_ref().and_then(|v|v["availableRequests"].as_array()).map(|rows|Arc::new(rows.iter().filter_map(Value::as_str).map(str::to_owned).collect::<HashSet<_>>()));
+                        let platform=known.as_ref().and_then(|v|v["platform"].as_str()).map(str::to_owned);
+                        let reads=snapshot_tools::Context{handle:physical.clone(),reader:bridge.reader(),fence:bridge.fence(),endpoint:endpoint.clone(),capabilities,cancellation:cancel.clone(),deadline};
+                        let call=Box::new(CaptureWindowCall{request,caller,cancellation:cancel.clone(),admitted_at,timeout,reads,platform,screenshot_limit:options.generic_readback_screenshot_limit.clone().unwrap_or_else(||Ok(ScreenshotLimit::default()))});active_cancel=Some(cancel.clone());
+                        let metadata_ids=identities.clone();let metadata_clock=clock.clone();let metadata=move||{let id={let mut factory=metadata_ids.lock().unwrap();factory().chars().take(8).collect()};CaptureMetadata{id,obs_url:endpoint,taken_at:(metadata_clock)().utc}};
+                        jobs.spawn(async move{
+                            let planned=capture_window_workflow::plan(call.reads.clone(),&call.request,call.platform.as_deref(),metadata).await;
+                            let (owners,planned)=match planned{
+                                capture_window_workflow::Planned::Save(ready,snapshot)=>tokio::task::spawn_blocking(move||{
+                                    let mut owners=owners;
+                                    let saved=if cancel.is_cancelled()||Instant::now()>=deadline{Err("Capture Window cancelled or original deadline expired before snapshot publication".to_owned())}else{owners.snapshots.save(&snapshot).map_err(|e|e.tool_message().to_owned())};
+                                    let planned=match saved{Ok(())=>capture_window_workflow::Planned::Ready(ready),Err(error)=>capture_window_workflow::Planned::Finished(capture_window::Failure::thrown(error).result())};(owners,planned)
+                                }).await.expect("Capture snapshot publication must join"),other=>(owners,other),
+                            };
+                            Completion::CaptureWindowPlanned{owners,call,planned,reply}
+                        });
+                    },
                     Command::ApplyScene(request,caller,cancel,admitted_at,reply)=>{
                         // Original Source write policy precedes every Apply read,
                         // including plan-only/no-change and snapshot inspection.
@@ -1399,8 +1606,9 @@ async fn run(
                         });
                     },
                     Command::Generic(call,caller,cancel,admitted_at,reply)=>{
+                        if call.kind().advanced_only() && profile!=crate::native_profile::NativeProfile::Advanced {let _=reply.send(Err(ServiceError::Profile));continue;}
                         if stream_effects_excluded && matches!(call.kind().request_type(),"StartStream"|"StopStream"|"ToggleStream") {let _=reply.send(Err(ServiceError::Unsupported));continue;}
-                        let supported=version.lock().unwrap().as_ref().and_then(|value|value.as_ref()).and_then(|value|value["availableRequests"].as_array()).map(|rows|rows.iter().any(|value|value.as_str()==Some(call.kind().request_type())));
+                        let supported=if call.is_opaque(){None}else{version.lock().unwrap().as_ref().and_then(|value|value.as_ref()).and_then(|value|value["availableRequests"].as_array()).map(|rows|rows.iter().any(|value|value.as_str()==Some(call.kind().request_type())))};
                         if supported==Some(false){
                             // Frontend policy can change before this command runs.
                             // Match Source's policy-before-callback order for this
@@ -1412,7 +1620,7 @@ async fn run(
                         }
 
                         if broken{let _=reply.send(Err(ServiceError::Uncertain));continue;}
-                        if cancel.is_cancelled()||admitted_at.elapsed()>=options.operation_timeout.min(call.operation_limit()){let _=reply.send(Ok(call.cancelled_or_expired()));continue;}
+                        if cancel.is_cancelled()||admitted_at.elapsed()>=call.execution_budget(options.operation_timeout){let _=reply.send(Ok(call.cancelled_or_expired()));continue;}
                         if let Some(kind)=call.safety_stop_kind() {
                             if !safety_jobs.is_empty() {
                                 let bytes=call.retained_bytes().and_then(|bytes|bytes.checked_add(caller.len()));
@@ -1430,7 +1638,7 @@ async fn run(
                         }
                         if uncertainty(&broker){let _=reply.send(Err(ServiceError::Uncertain));continue;}
                         let writer=match broker.scope(ScopeKind::Generic(call.kind())){Ok(port)=>port,Err(_)=>{let _=reply.send(Err(ServiceError::Uncertain));continue;}};
-                        let physical=physical.clone();let control=control.clone();let clock=clock.clone();let id=(identities.lock().unwrap())();let duration=options.operation_timeout.min(call.operation_limit());active_cancel=Some(cancel.clone());
+                        let physical=physical.clone();let control=control.clone();let clock=clock.clone();let id=(identities.lock().unwrap())();let duration=call.execution_budget(options.operation_timeout);active_cancel=Some(cancel.clone());
                         if call.confirmed_output_kind().is_some() {
                             let events=match bridge.output_events(){Ok(events)=>events,Err(error)=>{let _=reply.send(Ok(json!({"content":[{"type":"text","text":format!("Native output observation is unavailable: {error}")}],"isError":true})));continue;}};
                             let capabilities={let cached=version.lock().unwrap();cached.as_ref().and_then(|value|value.as_ref()).and_then(|value|value["availableRequests"].as_array()).map(|rows|Arc::new(rows.iter().filter_map(Value::as_str).map(str::to_owned).collect::<HashSet<_>>()))};

@@ -30,13 +30,9 @@
     "url": "https://github.com/Tom-R-Main/OBS-MCP/issues"
   },
   "engines": {
-    "node": ">=20.19"
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "type": "module",
-  "bin": {
-    "obs-mcp": "./build/index.js"
-  },
-  "main": "build/index.js",
   "scripts": {
     "build": "tsc && chmod 755 build/index.js",
     "start": "native/target/release/obs-mcp-native",
@@ -53,13 +49,14 @@
     "check:dependencies": "node scripts/check-dependencies.mjs",
     "check": "npm run check:dependencies && npm run build && npm run typecheck:test && npm run test:unit && npm run test:e2e:run && npm run validate:manifest",
     "native:contract": "npm run build && node scripts/export-native-contract.mjs && node scripts/export-native-prompts.mjs",
-    "native:build": "npm run build && node scripts/build-native.mjs",
+    "native:build": "node scripts/build-native.mjs",
     "native:test": "vitest run --config vitest.native.config.ts",
     "native:ratchet": "node scripts/check-native-migration.mjs",
     "native:licenses": "node scripts/check-native-licenses.mjs",
-    "pack:native": "node scripts/pack.mjs --native",
+    "pack:native": "node scripts/pack.mjs",
     "native:check": "node scripts/check-native.mjs",
-    "start:compat": "node build/index.js"
+    "oracle:start": "node build/index.js",
+    "native:test:archive": "vitest run --config vitest.archive.config.ts"
   },
   "files": [
     "build",
@@ -102,5 +99,6 @@
     "@anthropic-ai/mcpb": {
       "@inquirer/prompts": "8.6.0"
     }
-  }
+  },
+  "private": true
 }

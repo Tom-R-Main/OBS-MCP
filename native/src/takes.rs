@@ -400,6 +400,7 @@ struct Shared {
     closing: AtomicBool,
     closed: AtomicBool,
     clip_shutdown: Cancellation,
+    resources: Mutex<Option<crate::resource_events::Publisher>>,
 }
 fn error(text: impl Into<String>) -> Value {
     json!({"content":[{"type":"text","text":text.into()}],"isError":true})
@@ -651,6 +652,7 @@ impl TakeSupervisor {
             closing: AtomicBool::new(false),
             closed: AtomicBool::new(false),
             clip_shutdown: Cancellation::new(),
+            resources: Mutex::new(None),
         });
         let (sender, commands) = mpsc::channel(32);
         let (shutdown, stopping) = watch::channel(false);
@@ -869,6 +871,13 @@ impl TakeHandle {
         } else {
             json!({"running":false})
         })
+    }
+    pub(crate) fn bind_resource_events(&self, publisher: crate::resource_events::Publisher) {
+        self.shared
+            .resources
+            .lock()
+            .unwrap()
+            .get_or_insert(publisher);
     }
     pub fn summaries(&self) -> watch::Receiver<Value> {
         self.summary.clone()
@@ -1411,7 +1420,7 @@ async fn start_reserved_core(
         }
     }
     let snapshot = (shared.clock)();
-    let monitor = TakeMonitorCore::new(
+    let mut monitor = TakeMonitorCore::new(
         snapshot.epoch_ms.min(i64::MAX as u64) as i64,
         snapshot.utc,
         MonitorOptions {
@@ -1419,6 +1428,7 @@ async fn start_reserved_core(
             ..MonitorOptions::default()
         },
     );
+    monitor.bind_resource_events(shared.resources.lock().unwrap().clone());
     let mut receipt_unavailable = shared
         .inner
         .lock()

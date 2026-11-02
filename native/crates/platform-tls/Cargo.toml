@@ -1,0 +1,22 @@
+[package]
+name = "obs-mcp-platform-tls-qualification"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "GPL-2.0-only"
+publish = false
+
+[features]
+plain-fixture = []
+gnutls-probe = []
+gnutls-synthetic-probe = ["gnutls-probe"]
+
+[dependencies]
+tokio = { version = "=1.54.1", features = ["io-util", "time", "rt", "macros", "sync", "net"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "=0.6.2"
+objc2 = "=0.6.5"
+
+[dev-dependencies]
+serde_json = "=1.0.154"

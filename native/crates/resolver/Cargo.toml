@@ -1,0 +1,22 @@
+[package]
+name = "obs-mcp-resolver-qualification"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "GPL-2.0-only"
+publish = false
+
+[features]
+resolver-fixture = ["tokio/signal"]
+
+[dependencies]
+tokio = { version = "=1.54.1", features = ["rt", "macros", "sync", "time", "process", "io-util"] }
+
+[dev-dependencies]
+serde_json = "=1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"

@@ -43,7 +43,7 @@ for(const legacy of[false,true])it(`admits unused client offers and extended inf
  evidence.push({phase:"source",legacy,sent:source.sent,claim:sourceClaim});saveEvidence();
  const native=await start(true,legacy);expect((await native.client.listTools()).tools.map(tool=>tool.name)).toEqual(["obs-claim-control","obs-release-control","obs-control-status"]);
  const claim=await native.client.callTool({name:"obs-claim-control",arguments:{minutes:1,reason:"offer probe"}});expect(claim.structuredContent).toMatchObject({holder:"offer-caller",reason:"offer probe"});
- expect(native.client.getServerCapabilities()).toEqual({tools:{listChanged:false},resources:{listChanged:false},completions:{},prompts:{listChanged:false}});
+ expect(native.client.getServerCapabilities()).toEqual({tools:{listChanged:false},resources:{listChanged:true,subscribe:true},completions:{},prompts:{listChanged:false}});
  for(const session of[source,native]){
   session.implementation.title="Changed display title";const status=await session.client.callTool({name:"obs-control-status",arguments:{}});expect(status.structuredContent).toMatchObject({caller:"offer-caller",lease:{holder:"offer-caller"}});
   session.implementation.name="different-caller";const release=await session.client.callTool({name:"obs-release-control",arguments:{}});

@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/client/stdio";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeOBSServer, OBS_OP } from "../support/fake-obs-server.js";
+import { nativeDefaultFixture } from "../support/native-default-fixture.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = process.env.NATIVE_TEST_BINARY ?? join(root, "native/target/release/obs-mcp-native");
@@ -37,6 +38,7 @@ async function start(native: boolean, legacy: boolean, env: Record<string, strin
       OBS_MCP_DYNAMIC_TOOLSETS: "false",
       OBS_MCP_CONFIRM_LIVE: "false",
       ...env,
+      ...(native ? nativeDefaultFixture(root) : {}),
     },
     stderr: "pipe",
   });

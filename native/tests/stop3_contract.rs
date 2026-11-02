@@ -183,10 +183,15 @@ fn three_fixed_ack_only_stops_have_no_argument_or_followup_authority() {
     assert_eq!(toggle.arguments(), json!({}));
     assert!(!toggle.requires_readback());
     assert!(toggle.confirmed_output_kind().is_none());
+    let manual_start = Call::parse("obs-start-record", &json!({})).unwrap();
+    assert_eq!(
+        manual_start.kind(),
+        obs_mcp_native::operation_store::GenericKind::ManualRecordStart
+    );
+    assert!(manual_start.kind().advanced_only());
     for name in [
         "obs-stop-record",
         "obs-stop-output",
-        "obs-start-record",
         "obs-call-request",
         "StopStream",
     ] {

@@ -6,12 +6,11 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, time::Duration};
-use tokio::{
-    net::TcpStream,
-    time::{Instant, timeout, timeout_at},
-};
+#[cfg(test)]
+use tokio::net::TcpStream;
+use tokio::time::{Instant, timeout, timeout_at};
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, connect_async_with_config,
+    WebSocketStream,
     tungstenite::{Message, protocol::WebSocketConfig},
 };
 
@@ -20,7 +19,7 @@ pub(crate) const MAX_BYTES: usize = 8 * 1024 * 1024;
 // Its data URL and OBS response envelope need bounded additional room. This
 // receive-only allowance does not enlarge queued requests or event permits.
 pub(crate) const MAX_INCOMING_BYTES: usize = MAX_BYTES + 64 * 1024;
-pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+pub(crate) type Socket = WebSocketStream<crate::network_transport::ByteStream>;
 
 struct Session {
     socket: Socket,
@@ -177,15 +176,83 @@ pub(crate) async fn open_socket(
     event_subscriptions: u64,
     deadline: Instant,
 ) -> Result<Socket, String> {
-    let config = WebSocketConfig::default()
+    let bytes = crate::network_transport::numeric_plain(url, deadline)
+        .await
+        .map_err(|_| "Native hostname connection requires retained resolution ownership")?;
+    let (socket, _) =
+        tokio_tungstenite::client_async_with_config(url, bytes, Some(websocket_config()))
+            .await
+            .map_err(|_| "OBS Upgrade failed; no retry was made")?;
+    identify_socket(socket, password, event_subscriptions, deadline).await
+}
+
+fn websocket_config() -> WebSocketConfig {
+    WebSocketConfig::default()
         .read_buffer_size(64 * 1024)
         .write_buffer_size(16 * 1024)
         .max_write_buffer_size(MAX_BYTES + 16 * 1024)
         .max_message_size(Some(MAX_INCOMING_BYTES))
-        .max_frame_size(Some(MAX_INCOMING_BYTES));
-    let (mut socket, _) = connect_async_with_config(url, Some(config), false)
+        .max_frame_size(Some(MAX_INCOMING_BYTES))
+}
+
+#[cfg(all(
+    feature = "platform-tls-evaluation",
+    any(target_os = "macos", target_os = "linux")
+))]
+pub(crate) async fn open_platform_socket(
+    url: &str,
+    password: Option<&str>,
+    event_subscriptions: u64,
+    deadline: Instant,
+    custody: &crate::platform_transport::Custody,
+) -> Result<Socket, String> {
+    let (peer, port) = crate::platform_transport::Peer::from_wss(url)
+        .map_err(|_| "Invalid native TLS peer identity")?;
+    check_deadline(deadline)?;
+    let bytes = custody
+        .open(&peer, port, deadline)
         .await
-        .map_err(|_| "Unable to connect to OBS WebSocket")?;
+        .map_err(|_| "Native TLS connection unavailable; no retry was made")?;
+    check_deadline(deadline)?;
+    // Exactly one Upgrade on the owned stream. This helper has no DNS/TCP/TLS
+    // connection, redirects, reconnect or fallback responsibility.
+    let (socket, _) = tokio_tungstenite::client_async_with_config(
+        url,
+        crate::network_transport::ByteStream::Platform(bytes),
+        Some(websocket_config()),
+    )
+    .await
+    .map_err(|_| "Native OBS Upgrade failed; no retry was made")?;
+    identify_socket(socket, password, event_subscriptions, deadline).await
+}
+
+pub(crate) async fn open_owned_socket(
+    url: &str,
+    password: Option<&str>,
+    event_subscriptions: u64,
+    deadline: Instant,
+    custody: &crate::network_transport::Custody,
+) -> Result<Socket, String> {
+    let origin = crate::network_transport::Origin::parse(url).map_err(|_| "Invalid OBS origin")?;
+    check_deadline(deadline)?;
+    let bytes = custody
+        .open(&origin, deadline)
+        .await
+        .map_err(|_| "Owned OBS transport unavailable; no retry was made")?;
+    check_deadline(deadline)?;
+    let (socket, _) =
+        tokio_tungstenite::client_async_with_config(url, bytes, Some(websocket_config()))
+            .await
+            .map_err(|_| "OBS Upgrade failed; no retry was made")?;
+    identify_socket(socket, password, event_subscriptions, deadline).await
+}
+
+async fn identify_socket(
+    mut socket: Socket,
+    password: Option<&str>,
+    event_subscriptions: u64,
+    deadline: Instant,
+) -> Result<Socket, String> {
     let hello = receive(&mut socket, deadline).await?;
     if hello["op"] != 0
         || hello["d"]["obsWebSocketVersion"].as_str().is_none()

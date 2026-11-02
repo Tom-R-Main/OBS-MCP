@@ -1,0 +1,2 @@
+# Preserve upstream notice bytes, including original line endings and spacing.
+licenses/** -text -whitespace

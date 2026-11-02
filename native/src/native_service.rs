@@ -1,21 +1,39 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //! Explicit qualification lane. There is no SDK/compatibility entry point in
 //! this module: unsupported features retain the persistent owner's state.
+#[path = "confirmation.rs"]
+mod confirmation;
+#[path = "native_connect.rs"]
+mod native_connect;
+#[path = "native_host.rs"]
+mod native_host;
+use native_connect::{ConnectAttempt, ServiceSource};
+// Both transports lend frontend identities to the same retained Host.
+#[path = "http_bridge.rs"]
+mod http_bridge;
+#[path = "http_startup.rs"]
+mod http_startup;
+use native_host::{Admissions, Class, ExchangeId, FrontendId, Host};
+
 use crate::{
-    compat::Frames,
     dynamic_tools::{self, DynamicTools},
     protocol::{Admission, OwnedReplyContext, ProtocolSession},
     schema,
+    stdio_input::Frames,
     tool_filter::ToolFilter,
 };
 use obs_mcp_native::{
     clock, config,
-    control::{CallerContext, ControlDomain, GateRequest, caller_name},
+    control::{
+        CallerContext, ConfirmationContext, ControlDomain, Disposition, GateRequest, caller_name,
+        client_can_elicit,
+    },
     custody::{Clock, SharedControl},
     demo::Selection,
     demo_transport::{DemoAction, DemoPolicy},
     media_tools,
     media_verification::Cancellation as MediaCancellation,
+    native_profile::NativeProfile,
     observation::{ReadRequest, Target},
     operation_store::OperationStore,
     property_list, record_clip, restore_workflow,
@@ -34,7 +52,7 @@ use obs_mcp_native::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     fs, io,
     path::PathBuf,
     sync::{
@@ -43,12 +61,17 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{io::BufReader, task::JoinSet};
+use tokio::io::BufReader;
 
 fn error(text: impl Into<String>) -> Value {
     json!({"content":[{"type":"text","text":text.into()}],"isError":true})
 }
 fn service_error(reason: ServiceError) -> Value {
+    if reason == ServiceError::Profile {
+        return error(
+            "Native profile does not grant this operation. Advanced commands never create Take/media/Stage/recovery owners; retained advanced dispatch history blocks guarded reentry until separately qualified OBS incarnation/reset evidence. Current inactivity or restarting MCP does not clear that history",
+        );
+    }
     error(format!(
         "Native persistent capability unavailable ({reason:?}); native state is retained. No compatibility runtime was started"
     ))
@@ -102,6 +125,13 @@ fn handler(name: &str, takes: bool, media: bool) -> Option<&'static str> {
     let handler = schema::service_handler(name)?;
     let expected = match name {
         "obs-observe" => "observe-production",
+        "obs-call-request"
+        | "obs-batch"
+        | "obs-call-vendor-request"
+        | "obs-trigger-hotkey-by-name"
+        | "obs-trigger-hotkey-by-key-sequence" => "advanced-opaque-command",
+        "obs-start-record" | "obs-toggle-record" | "obs-start-output" | "obs-stop-output"
+        | "obs-toggle-output" => "advanced-manual-command",
         "obs-stop-record" => "manual-record-stop",
         "obs-start-stream" | "obs-start-virtual-cam" | "obs-start-replay-buffer" => {
             "confirmed-output-start"
@@ -191,6 +221,7 @@ fn handler(name: &str, takes: bool, media: bool) -> Option<&'static str> {
         "obs-snapshot" => "snapshot",
         "obs-restore" => "restore",
         "obs-apply-scene" => "apply-scene",
+        "obs-capture-window" => "capture-window",
         "obs-get-input-property-list-items" => "property-list",
         "obs-stage-scene" => "stage-scene",
         "obs-take-scene" => "take-scene",
@@ -236,14 +267,15 @@ fn validated_clip_arguments(mut args: Value) -> Option<Value> {
 fn read_definition(name: &str) -> Option<ReadRequest> {
     read_kind(schema::catalog()["requests"][name]["requestType"].as_str()?)
 }
-fn owned(name: &str, takes: bool, media: bool) -> bool {
-    handler(name, takes, media).is_some()
-        || read_definition(name).is_some()
-        || name == "obs-describe-request"
+fn owned(name: &str, takes: bool, media: bool, profile: NativeProfile) -> bool {
+    profile.allows(name)
+        && (handler(name, takes, media).is_some()
+            || read_definition(name).is_some()
+            || name == "obs-describe-request")
 }
-fn inventory(filter: &ToolFilter, takes: bool, media: bool) -> Value {
+fn inventory(filter: &ToolFilter, takes: bool, media: bool, profile: NativeProfile) -> Value {
     let manifest = filter.manifest();
-    json!({"tools":manifest["tools"].as_array().unwrap().iter().filter(|tool|tool["name"].as_str().is_some_and(|name|owned(name,takes,media))).cloned().collect::<Vec<_>>()})
+    json!({"tools":manifest["tools"].as_array().unwrap().iter().filter(|tool|tool["name"].as_str().is_some_and(|name|owned(name,takes,media,profile))).cloned().collect::<Vec<_>>()})
 }
 fn tool_path(variable: &str, name: &str) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os(variable).filter(|path| !path.is_empty()) {
@@ -280,6 +312,7 @@ fn admitted_clock(
 struct MediaWork {
     path: PathBuf,
     identity: fs::Metadata,
+    cleanup_allowed: bool,
 }
 impl MediaWork {
     fn new(root: &std::path::Path) -> io::Result<Self> {
@@ -294,9 +327,18 @@ impl MediaWork {
         }
         builder.create(&path)?;
         let identity = fs::symlink_metadata(&path)?;
-        Ok(Self { path, identity })
+        Ok(Self {
+            path,
+            identity,
+            cleanup_allowed: true,
+        })
     }
     fn cleanup(&self) -> io::Result<()> {
+        if !self.cleanup_allowed {
+            return Err(io::Error::other(
+                "Media work is retained after unconfirmed backend cleanup",
+            ));
+        }
         let current = match fs::symlink_metadata(&self.path) {
             Ok(current) => current,
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -323,7 +365,12 @@ impl Drop for MediaWork {
     }
 }
 struct Runtime {
+    profile: NativeProfile,
+    notifications: obs_mcp_native::resource_events::Owner,
     owner: Option<Service>,
+    initialization: Option<ConnectAttempt>,
+    initialization_broken: bool,
+    network: Option<obs_mcp_native::network_transport::Owner>,
     url: String,
     password: Option<String>,
     root: PathBuf,
@@ -334,53 +381,66 @@ struct Runtime {
     media: Option<Arc<media_tools::Config>>,
     media_work: Option<MediaWork>,
     screenshot_limit: Result<ScreenshotLimit, obs_mcp_native::observation::ObservationError>,
+    confirm_live: bool,
 }
 impl Runtime {
-    fn configure() -> io::Result<Self> {
+    fn configure(dynamic_requested: bool) -> io::Result<Self> {
         let enabled = |name: &str| std::env::var(name).is_ok_and(|value| config::enabled(&value));
         if std::env::args_os().len() > 1
-            || ["OBS_MCP_HTTP_PORT", "OBS_MCP_HTTP_TOKEN"]
-                .iter()
-                .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
-            || ["OBS_MCP_FORCE_COMPAT", "OBS_MCP_CONFIRM_LIVE"]
-                .iter()
-                .any(|name| enabled(name))
+            || ["OBS_MCP_FORCE_COMPAT"].iter().any(|name| enabled(name))
         {
             return Err(io::Error::other(
-                "Native stateful qualification supports static stdio only; requested feature is unavailable and no SDK runtime will start",
+                "Native service refuses unsupported CLI or compatibility mode; no SDK runtime will start",
             ));
         }
         let url = std::env::var("OBS_WEBSOCKET_URL")
             .ok()
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "ws://localhost:4455".into());
-        if !url.trim().to_ascii_lowercase().starts_with("ws://") {
+        if !(url.trim().to_ascii_lowercase().starts_with("ws://")
+            || cfg!(feature = "platform-tls-evaluation")
+                && url.trim().to_ascii_lowercase().starts_with("wss://"))
+        {
             return Err(io::Error::other(
-                "Native stateful qualification requires an already-qualified plaintext ws endpoint; unsupported transports cannot activate",
+                "Native configuration requires a supported WS/WSS endpoint; unavailable transports cannot activate",
             ));
         }
         let resolved = config::resolve_environment()
             .map_err(|_| io::Error::other("Native authentication configuration is unavailable"))?;
         let root = config::resolve_state_root()
             .map_err(|_| io::Error::other("Native state namespace is unavailable"))?;
-        let host = std::env::var_os("OBS_MCP_NATIVE_RECORDING_ROOT")
-            .filter(|root| !root.is_empty())
-            .map(|root| {
-                LocalHost::new(
-                    &PathBuf::from(root),
-                    tool_path("OBS_MCP_NATIVE_FFMPEG", "ffmpeg").as_deref(),
-                    tool_path("OBS_MCP_NATIVE_FFPROBE", "ffprobe").as_deref(),
+        let profile = NativeProfile::parse(std::env::var("OBS_MCP_NATIVE_PROFILE").ok().as_deref())
+            .map_err(|_| {
+                io::Error::other(
+                    "Native profile must be production or advanced; no runtime was started",
                 )
-                .map(Arc::new)
-                .map_err(|_| {
-                    io::Error::other(
-                        "Explicit native recording root or media tool binding is unavailable",
+            })?;
+        let host = if profile == NativeProfile::Advanced {
+            None
+        } else {
+            std::env::var_os("OBS_MCP_NATIVE_RECORDING_ROOT")
+                .filter(|root| !root.is_empty())
+                .map(|root| {
+                    LocalHost::new(
+                        &PathBuf::from(root),
+                        tool_path("OBS_MCP_NATIVE_FFMPEG", "ffmpeg").as_deref(),
+                        tool_path("OBS_MCP_NATIVE_FFPROBE", "ffprobe").as_deref(),
                     )
+                    .map(Arc::new)
+                    .map_err(|_| {
+                        io::Error::other(
+                            "Explicit native recording root or media tool binding is unavailable",
+                        )
+                    })
                 })
-            })
-            .transpose()?;
+                .transpose()?
+        };
         let clock = admitted_clock(clock::snapshot)?;
-        let preparation=Some(PreparationOwners::new(&root).map_err(|_|io::Error::other("Native demo qualification requires an existing approved OBS_MCP_STATE_DIR with safe snapshot/journal storage"))?);
+        let preparation = if profile == NativeProfile::Advanced {
+            None
+        } else {
+            Some(PreparationOwners::new(&root).map_err(|_|io::Error::other("Native demo qualification requires an existing approved OBS_MCP_STATE_DIR with safe snapshot/journal storage"))?)
+        };
         let (media, media_work) = if host.is_some() {
             match (
                 std::env::var_os("OBS_MCP_NATIVE_RECORDING_ROOT"),
@@ -406,7 +466,12 @@ impl Runtime {
             (None, None)
         };
         Ok(Self {
+            profile,
+            notifications: obs_mcp_native::resource_events::Owner::new(dynamic_requested),
             owner: None,
+            initialization: None,
+            initialization_broken: false,
+            network: None,
             url,
             password: resolved.password().map(str::to_owned),
             root,
@@ -416,6 +481,7 @@ impl Runtime {
             preparation,
             media,
             media_work,
+            confirm_live: enabled("OBS_MCP_CONFIRM_LIVE"),
             screenshot_limit: ScreenshotLimit::parse(
                 std::env::var("OBS_MCP_MAX_SCREENSHOT_BYTES")
                     .ok()
@@ -423,32 +489,149 @@ impl Runtime {
             ),
         })
     }
-    async fn connect(&mut self) -> Result<obs_mcp_native::service::ServiceHandle, Value> {
-        if let Some(owner) = &self.owner {
-            return Ok(owner.handle());
+    fn service_source(&mut self) -> ServiceSource {
+        if let Some(attempt) = &self.initialization {
+            return ServiceSource::Waiting(attempt.receiver());
         }
-        let store = OperationStore::new(&self.root, &self.url).map_err(|_| {
-            error("Native operation receipt namespace is unavailable; no OBS effect was dispatched")
-        })?;
-        let (session, events) = ObsSession::connect(
-            &self.url,
-            self.password.as_deref(),
-            SessionOptions {
-                event_subscriptions: obs_mcp_native::service::REQUIRED_SUBSCRIPTIONS,
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(|_| {
-            error("Native OBS connection is unavailable; no compatibility runtime was started")
-        })?;
-        let bridge = match ObservationBridge::bind(session.handle(), events, None) {
-            Ok(bridge) => bridge,
+        if let Some(owner) = &self.owner {
+            return ServiceSource::Ready(Ok(Some(owner.handle())));
+        }
+        if self.initialization_broken {
+            return ServiceSource::Ready(Err(error(
+                "Native connection cleanup is unconfirmed; no new initialization was admitted",
+            )));
+        }
+        // Preserve the existing pre-network receipt guard. A future resolver
+        // Owner::resolve may register work only after this guard succeeds.
+        let store = match OperationStore::new(&self.root, &self.url) {
+            Ok(store) => store,
             Err(_) => {
-                let _ = session.shutdown().await;
-                return Err(error("Native observation ownership is unavailable"));
+                return ServiceSource::Ready(Err(error(
+                    "Native operation receipt namespace is unavailable; no OBS effect was dispatched",
+                )));
             }
         };
+        if self.profile == NativeProfile::Production {
+            match store.read_view().guarded_reentry_allowed() {
+                Ok(true) => {}
+                Ok(false) => {
+                    return ServiceSource::Ready(Err(service_error(ServiceError::Profile)));
+                }
+                Err(_) => {
+                    return ServiceSource::Ready(Err(error(
+                        "Native operation receipt history is unavailable; inspect retained evidence before another change",
+                    )));
+                }
+            }
+        }
+        // Reentry guard above precedes all helper/DNS admission. Retain the
+        // sole owner here; the static bootstrap carries only its Connector.
+        if self.network.is_none() {
+            match obs_mcp_native::network_transport::Owner::new() {
+                Ok(owner) => self.network = Some(owner),
+                Err(_) => {
+                    return ServiceSource::Ready(Err(error(
+                        "Native network ownership is unavailable",
+                    )));
+                }
+            }
+        }
+        let connector = self.network.as_ref().unwrap().connector();
+        let url = self.url.clone();
+        let password = self.password.clone();
+        // A future platform transport supplies its establishment-only Connector
+        // here. Its non-Clone TLS Owner remains in Runtime through global join.
+        let mut options = SessionOptions {
+            event_subscriptions: obs_mcp_native::service::REQUIRED_SUBSCRIPTIONS,
+            ..Default::default()
+        };
+        let deadline = tokio::time::Instant::now() + options.connect_timeout;
+        let establish = Box::pin(async move {
+            options.connect_timeout =
+                deadline.saturating_duration_since(tokio::time::Instant::now());
+            if options.connect_timeout.is_zero() {
+                return Err(obs_mcp_native::session::ConnectError::Deadline);
+            }
+            ObsSession::connect_with_network_connector(
+                &url,
+                password.as_deref(),
+                options,
+                connector,
+                deadline,
+            )
+            .await
+        });
+        let attempt = ConnectAttempt::start(
+            native_connect::Inputs {
+                store,
+                control: self.control.clone(),
+                clock: self.clock.clone(),
+                publisher: self.notifications.publisher(),
+                deadline,
+            },
+            establish,
+        );
+        let source = ServiceSource::Waiting(attempt.receiver());
+        self.initialization = Some(attempt);
+        source
+    }
+    fn initializing(&self) -> bool {
+        self.initialization.is_some()
+    }
+    async fn progress_initialization(&mut self) -> io::Result<()> {
+        let Some(attempt) = self.initialization.as_mut() else {
+            return Ok(());
+        };
+        // The JoinSet owns the actual attempt; this borrowed wait is safe to
+        // drop when a peer frame/catalog request wins the server's select.
+        let result = attempt.join_next().await;
+        self.accept_initialization(result)
+    }
+    fn accept_initialization(
+        &mut self,
+        result: Option<Result<native_connect::Outcome, tokio::task::JoinError>>,
+    ) -> io::Result<()> {
+        let mut attempt = self.initialization.take().expect("retained initialization");
+        match result {
+            Some(Ok(native_connect::Outcome::Ready(resources))) => {
+                match self.adopt_connection(*resources) {
+                    Ok(handle) => attempt.publish(Ok(handle)),
+                    Err(resources) => {
+                        attempt.cleanup(resources);
+                        self.initialization = Some(attempt);
+                    }
+                }
+            }
+            Some(Ok(native_connect::Outcome::Failed { value, joined })) => {
+                self.initialization_broken |= !joined;
+                attempt.publish(Err(value));
+            }
+            _ => {
+                self.initialization_broken = true;
+                attempt.publish(Err(error(
+                    "Native initialization worker failed; cleanup is unconfirmed",
+                )));
+            }
+        }
+        Ok(())
+    }
+    #[cfg(test)]
+    async fn connect(&mut self) -> Result<obs_mcp_native::service::ServiceHandle, Value> {
+        let source = self.service_source();
+        while self.initializing() {
+            self.progress_initialization()
+                .await
+                .map_err(|_| error("Native initialization could not join"))?;
+        }
+        source
+            .resolve(Cancellation::new())
+            .await?
+            .ok_or_else(|| error("Native connection is unavailable"))
+    }
+    fn adopt_connection(
+        &mut self,
+        resources: obs_mcp_native::service::BootstrappedResources,
+    ) -> Result<obs_mcp_native::service::ServiceHandle, Box<Resources>> {
         let take = self.host.as_ref().map(|host| TakeServices {
             host: host.clone(),
             exact_endpoint: self.url.clone(),
@@ -456,17 +639,7 @@ impl Runtime {
             bounds: Bounds::default(),
             limits: Limits::default(),
         });
-        let resources = Resources {
-            session,
-            bridge,
-            store,
-            control: self.control.clone(),
-            clock: self.clock.clone(),
-            identities: Box::new(|| {
-                obs_mcp_native::runtime_identity::uuid_v4().unwrap_or_default()
-            }),
-        };
-        let owner = match Service::spawn(
+        let owner = match Service::spawn_bootstrapped(
             resources,
             Options {
                 connection: Some(ConnectionDescriptor {
@@ -485,40 +658,198 @@ impl Runtime {
                 stage_screenshot_error: self.screenshot_limit.as_ref().err().cloned(),
                 ..Default::default()
             },
+            self.profile,
         ) {
             Ok(owner) => owner,
-            Err((_, resources)) => {
-                let _ = resources.bridge.shutdown().await;
-                let _ = resources.session.shutdown().await;
-                return Err(error("Native persistent ownership admission failed"));
-            }
+            Err((_, resources)) => return Err(resources),
         };
         let handle = owner.handle();
         self.owner = Some(owner);
-        // Source connect caches GetVersion before any public request. Persist
-        // this same owner's capabilities; no extra fast/workflow socket exists.
-        let _ = handle
-            .read(ReadRequest::Version, Value::Null, Duration::from_secs(10))
-            .await;
         Ok(handle)
     }
     async fn shutdown(&mut self) -> io::Result<()> {
-        if let Some(owner) = self.owner.as_mut() {
-            let receipt = owner.shutdown().await.map_err(|_| {
-                io::Error::other("Native owner could not establish joined shutdown")
-            })?;
-            if !receipt.joined {
-                return Err(io::Error::other(
-                    "Native cleanup is unconfirmed; no SDK runtime was started",
-                ));
+        let mut failure = None;
+        while self.initializing() {
+            if let Err(error) = self.progress_initialization().await {
+                failure.get_or_insert(error);
+                break;
             }
         }
-        if let Some(work) = &self.media_work {
-            work.cleanup()
-                .map_err(|_| io::Error::other("Native media work cleanup is unconfirmed"))?;
+        if self.initialization_broken {
+            failure.get_or_insert_with(|| {
+                io::Error::other("Native initialization cleanup is unconfirmed")
+            });
         }
-        Ok(())
+        let mut backend_joined = !self.initialization_broken;
+        if let Some(owner) = self.owner.as_mut() {
+            match owner.shutdown().await {
+                Ok(receipt) if receipt.joined => {}
+                _ => {
+                    backend_joined = false;
+                    failure.get_or_insert_with(|| {
+                        io::Error::other("Native owner could not establish joined shutdown")
+                    });
+                }
+            }
+        }
+        // Do not return a backend error before draining both independent
+        // outer owners. The aggregate retains the backend/TLS/resolver failures.
+        if let Some(network) = self.network.as_mut() {
+            let backend = failure.take().map_or(Ok(()), Err);
+            failure = network.shutdown_after_backend(backend).await.err();
+        }
+        if let Some(work) = self.media_work.as_mut() {
+            if !backend_joined {
+                work.cleanup_allowed = false;
+            } else if work.cleanup().is_err() {
+                failure.get_or_insert_with(|| {
+                    io::Error::other("Native media work cleanup is unconfirmed")
+                });
+            }
+        }
+        failure.map_or(Ok(()), Err)
     }
+}
+// These are already-admitted Source routes, not a new raw/output capability.
+enum ConfirmedCommand {
+    Generic(obs_mcp_native::generic_requests::Call),
+    TakeScene(String),
+    TakeStop,
+    RecordStop,
+}
+impl ConfirmedCommand {
+    fn parse(name: &str, args: &Value) -> Option<Self> {
+        Some(match name {
+            "obs-take-scene" => Self::TakeScene(args["stageId"].as_str()?.into()),
+            "obs-take-stop" => Self::TakeStop,
+            "obs-stop-record" => Self::RecordStop,
+            "obs-start-record" | "obs-toggle-record" | "obs-start-output" | "obs-stop-output"
+            | "obs-toggle-output" | "obs-start-stream" | "obs-stop-stream"
+            | "obs-toggle-stream" | "obs-call-request" | "obs-batch" => {
+                Self::Generic(obs_mcp_native::generic_requests::Call::parse(name, args)?)
+            }
+            _ => return None,
+        })
+    }
+    fn retained_bytes(&self) -> Option<usize> {
+        match self {
+            Self::Generic(call) => call.retained_bytes(),
+            Self::TakeScene(id) => Some(id.len()),
+            Self::TakeStop | Self::RecordStop => Some(0),
+        }
+    }
+    async fn execute(
+        self,
+        service: &obs_mcp_native::service::ServiceHandle,
+        caller: String,
+        binding: CallerBinding,
+        cancel: Cancellation,
+    ) -> Value {
+        let take_stop = matches!(&self, Self::TakeStop);
+        let result = match self {
+            Self::Generic(call) => service.generic(call, caller, cancel).await,
+            Self::TakeScene(id) => service.take_scene(id, binding, cancel).await,
+            Self::TakeStop => {
+                service
+                    .stop_take(
+                        None,
+                        Policy {
+                            caller,
+                            ..Default::default()
+                        },
+                    )
+                    .await
+            }
+            Self::RecordStop => {
+                service
+                    .manual_record_stop(
+                        Policy {
+                            caller,
+                            ..Default::default()
+                        },
+                        cancel,
+                    )
+                    .await
+            }
+        };
+        match result {
+            Ok(value) => value,
+            Err(ServiceError::Unsupported) if take_stop => no_take(),
+            Err(error) => service_error(error),
+        }
+    }
+}
+struct PreparedCall {
+    frontend: FrontendId,
+    reply: OwnedReplyContext,
+    name: String,
+    args: Value,
+    resource: bool,
+    controller: bool,
+    read: Option<ReadRequest>,
+    binding: CallerBinding,
+    caller: String,
+    apply_request: Option<obs_mcp_native::apply_scene::Request>,
+    capture_request: Option<obs_mcp_native::capture_window::Request>,
+    confirmed_command: Option<ConfirmedCommand>,
+    consent_binding: [u8; 32],
+    explicit_confirm: Option<bool>,
+    can_elicit: bool,
+    form_capable: bool,
+}
+impl PreparedCall {
+    // Logical retained JSON/string accounting, not an RSS bound. All waiting
+    // commands are the closed variants above, with no opaque body/observer.
+    fn initialization_bytes(&self) -> Option<usize> {
+        let mut bytes = self.retained_bytes()?;
+        if let Some(request) = &self.apply_request {
+            bytes = bytes.checked_add(
+                serde_json::to_vec(&request.arguments())
+                    .ok()?
+                    .len()
+                    .checked_mul(2)?,
+            )?;
+        }
+        if let Some(request) = &self.capture_request {
+            bytes = bytes.checked_add(
+                serde_json::to_vec(&request.arguments())
+                    .ok()?
+                    .len()
+                    .checked_mul(2)?,
+            )?;
+        }
+        Some(bytes)
+    }
+    fn retained_bytes(&self) -> Option<usize> {
+        serde_json::to_vec(&self.args)
+            .ok()?
+            .len()
+            .checked_add(
+                serde_json::to_vec(self.reply.id())
+                    .ok()?
+                    .len()
+                    .checked_mul(2)?,
+            )?
+            .checked_add(self.caller.len().checked_mul(4)?)?
+            .checked_add(
+                self.confirmed_command
+                    .as_ref()
+                    .map_or(Some(0), ConfirmedCommand::retained_bytes)?,
+            )?
+            .checked_add(512)
+    }
+}
+fn confirmed_manifest(mut manifest: Value, enabled: bool) -> Value {
+    if enabled && let Some(tools) = manifest["tools"].as_array_mut() {
+        for tool in tools {
+            tool["inputSchema"] = confirmation::input_schema(
+                tool["name"].as_str().unwrap_or(""),
+                &tool["inputSchema"],
+                true,
+            );
+        }
+    }
+    manifest
 }
 struct Pending {
     cancel: Cancellation,
@@ -533,25 +864,18 @@ struct ResourceFailure {
     message: String,
 }
 type Completed = (
-    String,
+    ExchangeId,
     OwnedReplyContext,
     Result<Value, ResourceFailure>,
     Arc<AtomicBool>,
     bool,
 );
 
-type LocalReply = (String, Arc<AtomicBool>, crate::stdio_output::Reservation);
-/// Count retained ownership, independent of stdin read chunking or pipe flush.
-fn ordinary_frontend_jobs(
-    jobs: &JoinSet<Completed>,
-    local_replies: &VecDeque<LocalReply>,
-    reserved_stop: bool,
-    reserved_safety_stop: bool,
-) -> usize {
-    (jobs.len() + local_replies.len())
-        .saturating_sub(usize::from(reserved_stop) + usize::from(reserved_safety_stop))
-}
-
+type LocalReply = (
+    ExchangeId,
+    Arc<AtomicBool>,
+    crate::stdio_output::Reservation,
+);
 // Encoded URI-template variables undergo exactly one decodeURIComponent pass.
 fn resource_request(uri: &str) -> Result<(ReadRequest, Value, String), ResourceFailure> {
     let missing = || ResourceFailure {
@@ -656,9 +980,25 @@ async fn read_resource(
 }
 
 pub(crate) async fn run() -> io::Result<()> {
-    let mut runtime = Runtime::configure()?;
+    let http = http_startup::Configuration::environment()?;
     let dynamic_requested =
         std::env::var("OBS_MCP_DYNAMIC_TOOLSETS").is_ok_and(|value| config::enabled(&value));
+    let runtime = Runtime::configure(dynamic_requested && http.is_none())?;
+    if let Some(configuration) = http {
+        if dynamic_requested {
+            eprintln!(
+                "OBS_MCP_DYNAMIC_TOOLSETS is ignored over HTTP; registering the OBS_MCP_TOOLSETS groups instead"
+            );
+        }
+        let filter = ToolFilter::parse(|name| std::env::var(name).ok(), schema::catalog())
+            .map_err(io::Error::other)?;
+        return http_bridge::run(runtime, filter, configuration.port, configuration.token).await;
+    }
+    let mut host = Host::from_runtime(runtime, true)?;
+    let frontend_guard = host
+        .frontend()
+        .map_err(|_| io::Error::other("Native frontend identity unavailable"))?;
+    let frontend = frontend_guard.id();
     let filter = ToolFilter::parse(
         |name| {
             if dynamic_requested {
@@ -670,19 +1010,34 @@ pub(crate) async fn run() -> io::Result<()> {
         schema::catalog(),
     )
     .map_err(io::Error::other)?;
-    let manifest = inventory(&filter, runtime.host.is_some(), runtime.media.is_some());
+    let manifest = confirmed_manifest(
+        inventory(
+            &filter,
+            host.runtime.host.is_some(),
+            host.runtime.media.is_some(),
+            host.runtime.profile,
+        ),
+        host.runtime.confirm_live,
+    );
     let mut dynamic = if dynamic_requested {
         let available = schema::catalog()["tools"]
             .as_array()
             .unwrap()
             .iter()
             .filter_map(|tool| tool["name"].as_str())
-            .filter(|name| owned(name, runtime.host.is_some(), runtime.media.is_some()))
+            .filter(|name| {
+                owned(
+                    name,
+                    host.runtime.host.is_some(),
+                    host.runtime.media.is_some(),
+                    host.runtime.profile,
+                )
+            })
             .map(str::to_owned)
             .collect();
         Some(DynamicTools::new(
             available,
-            runtime.host.is_some() || runtime.media.is_some(),
+            host.runtime.host.is_some() || host.runtime.media.is_some(),
             |name| std::env::var(name).ok(),
         )?)
     } else {
@@ -693,156 +1048,122 @@ pub(crate) async fn run() -> io::Result<()> {
     } else {
         ProtocolSession::native_service()
     };
+    protocol.enable_confirmation(host.runtime.confirm_live);
     let mut input = Frames::new(BufReader::new(tokio::io::stdin()));
     let (output, mut output_worker) = crate::stdio_output::Output::spawn(tokio::io::stdout());
     let mut output_result = None;
     let stop = crate::shutdown_signal();
     tokio::pin!(stop);
-    let mut jobs: JoinSet<Completed> = JoinSet::new();
-    let mut pending = HashMap::<String, Pending>::new();
     let mut local_replies = VecDeque::<LocalReply>::with_capacity(ORDINARY_FRONTEND_JOBS);
     let mut fatal = None;
     'frontend: loop {
         macro_rules! send_reply {
-            ($target:expr,$response:expr $(,)?) => {
+            ($target:expr,$response:expr $(,)?) => {{
+                if let Err(error) =
+                    crate::resource_notifications::flush(&mut host.runtime.notifications, $target)
+                {
+                    fatal = Some(error);
+                    break 'frontend;
+                }
                 if let Err(error) = $target.try_send($response) {
                     fatal = Some(error);
                     break 'frontend;
                 }
-            };
+            }};
         }
+        let confirmation_deadline = host.confirmations.next_deadline();
         tokio::select! {
             biased;
             ()=&mut stop=>break,
-            result=&mut output_worker=>{output_result=Some(result);break;},
-            result=jobs.join_next(),if !jobs.is_empty()=>{
-                match result {Some(Ok((key,reply,result,cancelled,cacheable)))=>{pending.remove(&key);if !cancelled.load(Ordering::Acquire) && let Err(error)=output.try_send(&match result {Ok(result)=>reply.complete(result,cacheable),Err(reason)=>reply.error(reason.code,&reason.message)}) {fatal=Some(error);break;}},_=>{fatal=Some(io::Error::other("Native frontend worker failed; state was not handed off"));break;}}
+            ()=async {if let Some(at)=confirmation_deadline {tokio::time::sleep_until(at).await;}},if confirmation_deadline.is_some()=>{
+                for expired in host.confirmations.expire(tokio::time::Instant::now()) {
+                    if let confirmation::Challenge::Legacy(id)=expired.challenge {send_reply!(&output,&confirmation::legacy_cancel(id));send_reply!(&output,&expired.call.reply.complete(error("Confirmation expired; nothing was changed"),false));}
+                }
             },
+            result=&mut output_worker=>{output_result=Some(result);break;},
             next=input.next()=>{
                 let frame=match next {Ok(Some(frame))=>frame,Ok(None)=>break,Err(error)=>{fatal=Some(error);break;}};
                 if frame.iter().all(u8::is_ascii_whitespace){continue;}
                 let value:Value=match serde_json::from_slice(&frame){Ok(value)=>value,Err(_)=>{send_reply!(&output,&rpc_error(Value::Null,-32700,"Parse error"));continue;}};
                 if value["jsonrpc"]=="2.0" && value.get("id").is_none() && value["method"]=="notifications/cancelled" {
-                    if let Some(id)=value.pointer("/params/requestId") {if dynamic.as_mut().is_some_and(|state|state.cancel_subscription(id)){continue;}let key=id.to_string();if let Some(pending)=pending.get(&key){pending.frontend_cancelled.store(true,Ordering::Release);pending.cancel.cancel();if let Some(media)=&pending.media {media.cancel();}}}
+                    if let Some(id)=value.pointer("/params/requestId") {for removed in host.confirmations.cancel(&Admissions::continuation_key(frontend,id)){if let confirmation::Challenge::Legacy(server_id)=removed.challenge{send_reply!(&output,&confirmation::legacy_cancel(server_id));}}match host.runtime.notifications.cancel(id){Ok(true)=>continue,Ok(false)=>{},Err(reason)=>{fatal=Some(io::Error::other(reason));break;}}host.admissions.cancel(frontend,id);}
                     continue;
                 }
-                let (reply,name,args,resource)=match protocol.admit(&value,&frame) {
-                    Admission::Reply(response)=>{send_reply!(&output,&response);continue;},
-                    Admission::Initialized=>continue,
-                    Admission::List(reply)=>{let current=dynamic.as_ref().map_or(&manifest,DynamicTools::manifest);send_reply!(&output,&reply.complete(current.clone(),true));continue;},
-                    Admission::Listen{reply,notifications,valid_filter}=>{if let Some(state)=dynamic.as_mut(){match state.listen(&reply.owned(),notifications,valid_filter,&output){Ok(Some(result))=>send_reply!(&output,&result),Ok(None)=>{},Err(error)=>{fatal=Some(error);break;}}}continue;},
+                let legacy_response=host.runtime.confirm_live && value.get("method").is_none() && value.get("id").is_some() && (value.get("result").is_some()||value.get("error").is_some());
+                let (prepared,answers)=if legacy_response {
+                    match host.confirmations.take_legacy_for(&value,tokio::time::Instant::now(),|call|call.frontend==frontend){Some((call,answer))=>(call,Some(answer)),None=>continue}
+                }else{ 'prepare:{
+                let admitted=protocol.admit(&value,&frame);
+                if let Err(reason)=host.resource_scope(frontend,protocol.is_legacy()){fatal=Some(io::Error::other(reason));break 'frontend;}
+                let (reply,name,args,resource)=match admitted {
+                    Admission::Reply(response)=>{send_reply!(&output,&response);continue 'frontend;},
+                    Admission::Initialized=>continue 'frontend,
+                    Admission::List(reply)=>{let current=dynamic.as_ref().map_or_else(||manifest.clone(),|state|confirmed_manifest(state.manifest().clone(),host.runtime.confirm_live));send_reply!(&output,&reply.complete(current,true));continue 'frontend;},
+                    Admission::Listen{reply,notifications,valid_filter}=>{if let Err(error)=crate::resource_notifications::flush(&mut host.runtime.notifications,&output){fatal=Some(error);break 'frontend;}match crate::resource_notifications::listen(&host.runtime.notifications,&reply.owned(),notifications,valid_filter,&output){Ok(Some(result))=>send_reply!(&output,&result),Ok(None)=>{},Err(error)=>{fatal=Some(error);break 'frontend;}}continue 'frontend;},
+                    Admission::ResourceSubscription{reply,uri,add}=>{
+                        if host.admissions.check(frontend,&value["id"],Class::Ordinary).is_err(){send_reply!(&output,&rpc_error(value["id"].clone(),-32000,"Native request admission unavailable; live state retained"));continue 'frontend;}
+                        if let Err(error)=crate::resource_notifications::flush(&mut host.runtime.notifications,&output){fatal=Some(error);break 'frontend;}
+                        let reserved=match crate::resource_notifications::uri(&host.runtime.notifications,&reply.owned(),uri.as_deref().map_err(String::as_str),add,&output){Ok(reserved)=>reserved,Err(error)=>{fatal=Some(error);break 'frontend;}};
+                        let cancelled=Arc::new(AtomicBool::new(false));let key=host.admissions.admit(frontend,&value["id"],Class::Ordinary,Pending{cancel:Cancellation::new(),frontend_cancelled:cancelled.clone(),media:None,reserved_stop:false,reserved_safety_stop:false}).expect("checked local admission without yield");local_replies.push_back((key,cancelled,reserved));continue 'frontend;
+                    },
                     Admission::ResourceList(reply)=>(reply.owned(),"native-resource-list".to_owned(),json!({}),true),
                     Admission::ResourceCompletion {reply,prefix}=>(reply.owned(),"native-resource-completion".to_owned(),json!({"prefix":prefix}),true),
                     Admission::ResourceRead {reply,uri:"obs://take/current"}=>{
-                        if runtime.owner.is_none(){send_reply!(&output,&reply.complete(json!({"contents":[{"uri":"obs://take/current","mimeType":"application/json","text":"{\n  \"running\": false\n}"}]}),true));continue;}
+                        if host.runtime.owner.is_none(){send_reply!(&output,&reply.complete(json!({"contents":[{"uri":"obs://take/current","mimeType":"application/json","text":"{\n  \"running\": false\n}"}]}),true));continue 'frontend;}
                         (reply.owned(),"native-take-resource".to_owned(),json!({}),true)
                     },
                     Admission::ResourceRead {reply,uri:"obs://status"}=>(reply.owned(),"obs-observe".to_owned(),json!({}),true),
-                    Admission::ResourceRead {reply,uri}=>{if let Err(reason)=resource_request(uri) {send_reply!(&output,&reply.owned().error(reason.code,&reason.message));continue;} (reply.owned(),"native-resource".to_owned(),json!({"uri":uri}),true)},
+                    Admission::ResourceRead {reply,uri}=>{if let Err(reason)=resource_request(uri) {send_reply!(&output,&reply.owned().error(reason.code,&reason.message));continue 'frontend;} (reply.owned(),"native-resource".to_owned(),json!({"uri":uri}),true)},
                     Admission::Call {reply,name,arguments}=>(reply.owned(),name.to_owned(),arguments,false),
-                    Admission::Compatibility=>{if let Some(id)=value.get("id"){send_reply!(&output,&rpc_error(id.clone(),-32601,"Native capability unavailable; session state retained and SDK handoff disabled"));}continue;},
+                    Admission::Compatibility=>{if let Some(id)=value.get("id"){send_reply!(&output,&rpc_error(id.clone(),-32601,"Native capability unavailable; session state retained and SDK handoff disabled"));}continue 'frontend;},
                 };
-                let key=value["id"].to_string();
-                // The owned Take and the four closed public Stops each have
-                // one extra slot beyond ordinary work. Neither can consume
-                // the other's reservation; transport and journal guards remain.
-                let reserved_active=pending.values().any(|job|job.reserved_stop);
-                let safety_reserved_active=pending.values().any(|job|job.reserved_safety_stop);
-                let ordinary_jobs=ordinary_frontend_jobs(&jobs,&local_replies,reserved_active,safety_reserved_active);
-                let reserved_stop=ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !reserved_active && !resource && name=="obs-take-stop";
-                let reserved_safety_stop=ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !safety_reserved_active && !resource && matches!(name.as_str(),"obs-stop-stream"|"obs-stop-virtual-cam"|"obs-stop-replay-buffer"|"obs-stop-record");
-                if pending.contains_key(&key)||(ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !reserved_stop && !reserved_safety_stop) {send_reply!(&output,&rpc_error(value["id"].clone(),-32000,"Native request admission unavailable; live state retained"));continue;}
-                if !resource && let Some((code,message))=dynamic.as_ref().and_then(|state|state.refusal(&name)){send_reply!(&output,&rpc_error(value["id"].clone(),code,&message));continue;}
+                // A retry never reconstructs its original typed command. Verify
+                // only its envelope binding, consume once, then reconcile fresh
+                // visibility/capacity/policy on the retained original below.
+                if host.runtime.confirm_live && (value.pointer("/params/requestState").is_some()||value.pointer("/params/inputResponses").is_some()) {
+                    match host.resume(frontend,reply,&name,&value,protocol.legacy_name()) {Ok((original,response))=>break 'prepare (original,Some(response)),Err(response)=>{send_reply!(&output,&response);continue 'frontend;}}
+
+                }
+                // Both reserved Stop lanes belong to the server, not each client.
+                if host.admissions.check(frontend,&value["id"],Class::for_tool(&name,resource)).is_err() {send_reply!(&output,&rpc_error(value["id"].clone(),-32000,"Native request admission unavailable; live state retained"));continue 'frontend;}
+                if !resource && let Some((code,message))=dynamic.as_ref().and_then(|state|state.refusal(&name)){send_reply!(&output,&rpc_error(value["id"].clone(),code,&message));continue 'frontend;}
                 let controller=dynamic.is_some()&&dynamic_tools::controller(&name);
                 let selected=dynamic.as_ref().map_or_else(||filter.includes(&name),|state|state.includes(&name));
-                if !resource && (!selected||(!controller&&!owned(&name,runtime.host.is_some(),runtime.media.is_some()))) {send_reply!(&output,&rpc_error(value["id"].clone(),-32601,"Tool is unavailable in the native-only qualification lane"));continue;}
-                let read=read_definition(&name);
-                let apply_request=if !resource && name=="obs-apply-scene" {schema::apply_scene_request(value.pointer("/params/arguments").unwrap_or(&json!({})),&frame)}else{None};
-                let args=if name=="obs-apply-scene" {apply_request.as_ref().map(obs_mcp_native::apply_scene::Request::arguments)}else if resource {Some(args)}else if controller{schema::dynamic_arguments(&name,&args)}else if name=="obs-record-clip" {validated_clip_arguments(args)}else if read.is_some(){schema::native_request(&name,&args).ok().flatten().map(|(_,data)|data)}else if name=="obs-describe-request" {schema::validated_local_arguments(&name,"describe-request",&args)}else{schema::service_arguments(&name,&args)};
-                let Some(args)=args else {
-                    let tool=schema::tool(&name).unwrap();
-                    let validation=if name=="obs-set-input-audio-tracks" {obs_mcp_native::tool_validation::tool_error_from_frame(&name,&tool["inputSchema"],value.pointer("/params/arguments").unwrap_or(&json!({})),&frame)}else{obs_mcp_native::tool_validation::tool_error(&name,&tool["inputSchema"],value.pointer("/params/arguments").unwrap_or(&json!({})))};
-                    match validation {
-                        Ok(result)=>send_reply!(&output,&reply.complete(result,false)),
-                        Err(_)=>send_reply!(&output,&rpc_error(value["id"].clone(),-32602,"Native argument validation projection unavailable; no dispatch or SDK fallback")),
-                    }
-                    continue;
-                };
-                let envelope=value.pointer("/params/_meta");
-                let caller=caller_name(CallerContext {envelope,legacy_name:protocol.legacy_name(),..Default::default()});
-                let binding=CallerBinding::resolve(CallerContext {envelope,legacy_name:protocol.legacy_name(),..Default::default()},None,false,None,None);
-                let control=runtime.control.clone();let clock=runtime.clock.clone();
-                let read_only=resource||schema::tool(&name).is_some_and(|tool|tool["annotations"]["readOnlyHint"]==true);
-                let refusal=control.lock().unwrap().evaluate(GateRequest {tool_name:&name,arguments:&args,read_only_hint:read_only,caller:&caller,confirmation:Default::default()},(clock)().epoch_ms).tool_result();
-                if let Some(result)=refusal {send_reply!(&output,&reply.complete(result,false));continue;}
-                if controller {
-                    let cancelled=Arc::new(AtomicBool::new(false));
-                    let reserved=match dynamic.as_mut().unwrap().call(&name,&args,&reply,&output){Ok(reserved)=>reserved,Err(error)=>{fatal=Some(error);break;}};
-                    pending.insert(key.clone(),Pending{cancel:Cancellation::new(),frontend_cancelled:cancelled.clone(),media:None,reserved_stop:false,reserved_safety_stop:false});
-                    local_replies.push_back((key,cancelled,reserved));continue;
+                if !resource && !host.runtime.profile.allows(&name) {send_reply!(&output,&rpc_error(value["id"].clone(),-32601,if host.runtime.profile==NativeProfile::Advanced{"Tool is unavailable in the native advanced profile: this profile never constructs Take, media, Stage or recovery owners"}else{"Tool is unavailable in the native production profile: explicit advanced profile is required for manual recording starts/toggles and arbitrary named outputs"}));continue 'frontend;}
+                if !resource && !selected {send_reply!(&output,&rpc_error(value["id"].clone(),-32602,&format!("Tool {name} not found")));continue 'frontend;}
+                if !resource && !controller&&!owned(&name,host.runtime.host.is_some(),host.runtime.media.is_some(),host.runtime.profile) {send_reply!(&output,&rpc_error(value["id"].clone(),-32601,"Tool is unavailable in the native-only qualification lane"));continue 'frontend;}
+                match host.prepare(frontend,native_host::Incoming{reply,name,args,resource,controller,value:&value,frame:&frame,legacy_name:protocol.legacy_name(),legacy_capabilities:protocol.legacy_capabilities()}){Ok(prepared)=>(prepared,None),Err(response)=>{send_reply!(&output,&response);continue 'frontend;}}
+                }};
+                // Reconcile capacity/visibility after waiting without borrowing an effect owner.
+                if host.admissions.check(frontend,prepared.reply.id(),Class::for_tool(&prepared.name,prepared.resource)).is_err(){send_reply!(&output,&prepared.reply.error(-32000,"Native request admission unavailable; live state retained"));continue;}
+                if !prepared.resource && let Some((code,message))=dynamic.as_ref().and_then(|state|state.refusal(&prepared.name)){send_reply!(&output,&prepared.reply.error(code,&message));continue;}
+                let selected=dynamic.as_ref().map_or_else(||filter.includes(&prepared.name),|state|state.includes(&prepared.name));
+                if !prepared.resource&&!selected {send_reply!(&output,&prepared.reply.error(-32602,&format!("Tool {} not found",prepared.name)));continue;}
+                if !prepared.resource&&!prepared.controller&&!owned(&prepared.name,host.runtime.host.is_some(),host.runtime.media.is_some(),host.runtime.profile){send_reply!(&output,&prepared.reply.error(-32601,"Tool is unavailable in the native-only qualification lane"));continue;}
+                let invocation=match host.authorize(prepared,answers.as_ref()) {native_host::Authorization::Ok(invocation)=>invocation,native_host::Authorization::Err(response)=>{send_reply!(&output,&response);continue;}};
+                if invocation.is_controller() {
+                        let (reply,name,args)=invocation.into_controller();
+                        if let Err(error)=crate::resource_notifications::flush(&mut host.runtime.notifications,&output){fatal=Some(error);break;}
+                        let targets=match host.runtime.notifications.tool_targets(){Ok(targets)=>targets,Err(reason)=>{fatal=Some(io::Error::other(reason));break;}};
+                        let cancelled=Arc::new(AtomicBool::new(false));
+                        let reserved=match dynamic.as_mut().unwrap().call(&name,&args,&reply,&output,&targets){Ok(reserved)=>reserved,Err(error)=>{fatal=Some(error);break;}};
+                        let key=host.admissions.admit(frontend,reply.id(),Class::Ordinary,Pending{cancel:Cancellation::new(),frontend_cancelled:cancelled.clone(),media:None,reserved_stop:false,reserved_safety_stop:false}).expect("checked controller admission without yield");
+                        local_replies.push_back((key,cancelled,reserved));continue;
                 }
-                // Volume's missing-value callback can finish without OBS.
-                // Other literal callbacks have no early business refusal, so
-                // avoid re-cloning/counting their validated opaque arguments.
-                if !resource && name=="obs-set-input-volume" && let Some(result)=obs_mcp_native::generic_requests::Call::parse(&name,&args).and_then(|call|call.business_refusal()) {send_reply!(&output,&reply.complete(result,false));continue;}
-                // Source performs late-chapter business validation before any
-                // connection/preflight, after the common caller-control policy.
-                if name=="obs-record-clip" && let Some(result)=record_clip::Request::parse(&args).expect("validated clip").refusal() {send_reply!(&output,&reply.complete(result,false));continue;}
-                if name=="obs-stage-scene" && let Err(reason)=runtime.screenshot_limit.as_ref(){send_reply!(&output,&reply.complete(error(reason.message.clone()),false));continue;}
-                if name=="obs-snapshot" && args["list"]==true && runtime.owner.is_none() {
-                    let Some(mut owners)=runtime.preparation.take() else {send_reply!(&output,&reply.complete(service_error(ServiceError::Unsupported),false));continue;};
-                    let endpoint=runtime.url.clone();
-                    let (owners,result)=match tokio::task::spawn_blocking(move || {let result=owners.snapshot_list(&endpoint);(owners,result)}).await {Ok(result)=>result,Err(_)=>{fatal=Some(io::Error::other("Snapshot listing worker failed to join"));break;}};
-                    runtime.preparation=Some(owners);send_reply!(&output,&reply.complete(result,false));continue;
-                }
-                if name=="obs-restore" && runtime.owner.is_none() {
-                    let Some(mut owners)=runtime.preparation.take() else {send_reply!(&output,&reply.complete(service_error(ServiceError::Unsupported),false));continue;};
-                    let endpoint=runtime.url.clone();let request=restore_workflow::Request::parse(&args).expect("validated restore");
-                    // Borrow the SAME offline file owner, after caller policy.
-                    // A valid selection grants no authority; Service reselects
-                    // and checks policy again after lazy physical connection.
-                    let (owners,refusal)=match tokio::task::spawn_blocking(move || {let refusal=owners.local_restore_refusal(&endpoint,&request);(owners,refusal)}).await {Ok(result)=>result,Err(_)=>{fatal=Some(io::Error::other("Restore lookup worker failed to join"));break;}};
-                    runtime.preparation=Some(owners);
-                    if let Some(result)=refusal {send_reply!(&output,&reply.complete(result,false));continue;}
-                }
-                let sleep=if name=="obs-sleep" {ReadToolRequest::parse(&name,&args).ok()}else{None};
-                let local_sleep=matches!(&sleep,Some(ReadToolRequest::Sleep{frames:None,..})|Some(ReadToolRequest::Sleep{millis:Some(_),frames:Some(_)}));
-                let status=name=="obs-get-status";
-                let local=status||local_sleep||matches!(name.as_str(),"obs-describe-request"|"obs-claim-control"|"obs-release-control"|"obs-control-status");
-                if name=="obs-recover-demo" && runtime.owner.is_none() && let Some(result)=runtime.preparation.as_mut().and_then(|owners|owners.local_recovery_refusal(&runtime.url,args["operationId"].as_str().unwrap())) {send_reply!(&output,&reply.complete(result,false));continue;}
-                let service=if status {runtime.owner.as_ref().map(Service::handle)}else if local {None}else {match runtime.connect().await {Ok(handle)=>Some(handle),Err(result)=>{send_reply!(&output,&reply.complete(result,false));continue;}}};
-                let descriptor=ConnectionDescriptor{url:runtime.url.clone(),has_password:runtime.password.is_some()};let screenshot_limit=runtime.screenshot_limit.clone();
-                let cancel=Cancellation::new();let media_cancel=matches!(name.as_str(),"obs-contact-sheet"|"obs-trim-take").then(MediaCancellation::default);let cancelled=Arc::new(AtomicBool::new(false));pending.insert(key.clone(),Pending {cancel:cancel.clone(),frontend_cancelled:cancelled.clone(),media:media_cancel.clone(),reserved_stop,reserved_safety_stop});
-                jobs.spawn(async move {
-                    if name=="native-take-resource" {
-                        let result=service.as_ref().unwrap().take_resource().await.map(|summary|json!({"contents":[{"uri":"obs://take/current","mimeType":"application/json","text":serde_json::to_string_pretty(&summary).unwrap()}]})).map_err(|_|ResourceFailure{code:-32603,message:"Native current-take resource is unavailable".into()});
-                        return (key,reply,result,cancelled,true);
-                    }
-                    if name=="native-resource-list"||name=="native-resource-completion" {
-                        let result=match service.as_ref().unwrap().read(ReadRequest::SceneList,Value::Null,Duration::from_secs(10)).await {
-                            Ok(scenes)=>if name=="native-resource-list"{crate::resource_catalog::listing(&scenes)}else{crate::resource_catalog::complete_scenes(&scenes,args["prefix"].as_str().unwrap())}.ok_or_else(||ResourceFailure{code:-32603,message:"Native resource inventory limit exceeded; live state retained".into()}),
-                            Err(reason)=>Err(ResourceFailure {code:reason.request_code().and_then(|code|i64::try_from(code).ok()).unwrap_or(-32603),message:reason.message}),
-                        };
-                        return (key,reply,result,cancelled,name=="native-resource-list");
-                    }
-                    if name=="native-resource" {let result=read_resource(service.as_ref().unwrap(),args["uri"].as_str().unwrap(),screenshot_limit).await;return (key,reply,result,cancelled,true);}
-                    let mut result=match name.as_str() {
-                        "obs-get-status"=>if let Some(service)=service.as_ref(){service.read_tool(ReadToolRequest::Status,screenshot_limit,cancel).await.unwrap_or_else(service_error)}else{service_read_tools::status(StatusMetadata {connection:descriptor,connected:false,identified:false},clock.clone()).unwrap_or_else(|reason|error(reason.message))},
-                        "obs-sleep" if local_sleep=>match sleep.unwrap(){ReadToolRequest::Sleep{millis:Some(millis),frames:None}=>service_read_tools::sleep_millis(millis,cancel,tokio::time::Instant::now()+Duration::from_secs(60)).await,_=>service_read_tools::sleep_selection_error()},
-                        "obs-apply-scene"=>service.as_ref().unwrap().apply_scene(apply_request.expect("validated original Apply request"),caller,cancel).await.unwrap_or_else(service_error),
-                        "obs-describe-request"=>crate::protocol_catalog::describe(&args),
-                        "obs-claim-control"=>control.lock().unwrap().claim(&caller,args["minutes"].as_u64().unwrap_or(30) as u16,args["reason"].as_str().unwrap_or(""),(clock)().epoch_ms).map(|result|result.tool_result()).unwrap_or_else(|_|error("Invalid control lease arguments")),
-                        "obs-release-control"=>control.lock().unwrap().release(&caller,(clock)().epoch_ms).tool_result(),
-                        "obs-control-status"=>control.lock().unwrap().status_result(&caller,(clock)().epoch_ms),
-                        _=>dispatch(service.as_ref().unwrap(),&name,args,read,binding,caller,cancel,media_cancel,resource,screenshot_limit).await,
-                    };
-                    if !resource {result=ensure_structured(result);}
-                    if resource && !result.get("isError").is_some_and(|value|value==true) {let report=result["structuredContent"].clone();result=json!({"contents":[{"uri":"obs://status","mimeType":"application/json","text":serde_json::to_string_pretty(&report).unwrap()}]});}
-                    (key,reply,Ok(result),cancelled,resource)
-                });
+                match host.dispatch(invocation).await {Ok(Some(response))=>send_reply!(&output,&response),Ok(None)=>{},Err(error)=>{fatal=Some(error);break;}}
+
+            },
+            event=host.runtime.notifications.next()=>{
+                match event{Some(Ok(batch))=>if let Err(error)=crate::resource_notifications::publish(batch,&output){fatal=Some(error);break;},Some(Err(reason))=>{fatal=Some(io::Error::other(reason));break;},None=>{fatal=Some(io::Error::other("Native resource notification owner ended"));break;}}
+            },
+            result=async{host.runtime.initialization.as_mut().expect("checked initialization").join_next().await},if host.runtime.initialization.is_some()=>{
+                if let Err(error)=host.runtime.accept_initialization(result){fatal=Some(error);break;}
+            },
+            result=host.jobs.join_next(),if !host.jobs.is_empty()=>{
+                match result {Some(Ok(completed))=>{let finished=host.complete(completed).expect("retained completion admission");debug_assert_eq!(finished.frontend,frontend);if let Some(response)=finished.response && let Err(error)=output.try_send(&response){fatal=Some(error);break;}},_=>{fatal=Some(io::Error::other("Native frontend worker failed; state was not handed off"));break;}}
             },
             ()=tokio::task::yield_now(),if !local_replies.is_empty()=>{
-                let (key,cancelled,reserved)=local_replies.pop_front().unwrap();pending.remove(&key);
+                let (key,cancelled,reserved)=local_replies.pop_front().unwrap();host.admissions.retire(key);
                 if !cancelled.load(Ordering::Acquire){let ticket=reserved.commit();if matches!(ticket.progress().stage,crate::stdio_output::Stage::Failed(_)){fatal=Some(io::Error::other("Dynamic controller reply writer failed"));break;}}
             },
         }
@@ -853,39 +1174,23 @@ pub(crate) async fn run() -> io::Result<()> {
     // Actual Source stdin EOF closes the registry without synthetic listener
     // completion frames. Committed notification cursors remain with the writer.
     drop(dynamic.take());
-    // EOF, cancellation, signals and write failures cannot drop jobs or the loan.
-    // Frontend replies may be gone; actual Service work remains owned until join.
-    for pending in pending.values() {
-        pending.cancel.cancel();
-        if let Some(media) = &pending.media {
-            media.cancel();
-        }
+    host.runtime.notifications.close();
+    if let Err(error) =
+        crate::resource_notifications::flush(&mut host.runtime.notifications, &output)
+    {
+        fatal.get_or_insert(error);
     }
-    // Signal the owning Service while retained frontend work drains. Waiting
-    // for an unrelated reply first would postpone its reserved owned Stop.
-    // Both futures still settle before either owner is released.
-    drop(output); // Close admission; the retained writer drains already-owned frames.
-    let (frontend_joined, shutdown, output_joined) = tokio::join!(
-        async {
-            let mut joined = true;
-            while let Some(result) = jobs.join_next().await {
-                joined &= result.is_ok();
-            }
-            joined
-        },
-        runtime.shutdown(),
-        async {
-            match output_result {
-                Some(result) => result,
-                None => output_worker.await,
-            }
+
+    // Only the server lifetime shuts down the shared Service. A transport
+    // frontend departure itself cancels/suppresses its own retained responses.
+    host.disconnect(frontend);
+    drop(output);
+    let (shutdown, output_joined) = tokio::join!(host.shutdown(), async {
+        match output_result {
+            Some(result) => result,
+            None => output_worker.await,
         }
-    );
-    if !frontend_joined {
-        fatal.get_or_insert_with(|| {
-            io::Error::other("Native frontend worker did not join successfully")
-        });
-    }
+    });
     match output_joined {
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
@@ -1045,49 +1350,93 @@ async fn dispatch(
 mod tests {
     use super::*;
     #[tokio::test]
+    async fn unconfirmed_initialization_retains_media_namespace_through_runtime_drop() {
+        let dir = native_host::support::Dir::new();
+        let work = MediaWork::new(&dir.0).unwrap();
+        let path = work.path.clone();
+        let mut runtime = Runtime {
+            profile: NativeProfile::Production,
+            notifications: obs_mcp_native::resource_events::Owner::new(false),
+            owner: None,
+            initialization: None,
+            initialization_broken: true,
+            network: None,
+            url: "ws://unused-fixture.invalid:4455".into(),
+            password: None,
+            root: dir.0.clone(),
+            host: None,
+            control: Arc::new(Mutex::new(Default::default())),
+            clock: native_host::support::clock(),
+            preparation: None,
+            media: None,
+            media_work: Some(work),
+            screenshot_limit: Ok(ScreenshotLimit::default()),
+            confirm_live: false,
+        };
+        assert!(runtime.shutdown().await.is_err());
+        assert!(path.is_dir());
+        drop(runtime);
+        assert!(path.is_dir());
+        let normal = MediaWork::new(&dir.0).unwrap();
+        let normal_path = normal.path.clone();
+        drop(normal);
+        assert!(!normal_path.exists());
+    }
+    #[tokio::test]
     async fn retained_controller_reply_ownership_consumes_ordinary_admission_until_retired() {
         use crate::stdio_output::{Cycle, Output};
         let (output, worker) = Output::spawn(tokio::io::sink());
-        let mut jobs = JoinSet::<Completed>::new();
+        let mut ledger = Admissions::for_test();
+        let frontend = ledger.frontend().unwrap();
         let mut replies = VecDeque::<LocalReply>::new();
         let frame = json!({"jsonrpc":"2.0","id":1,"result":{}});
+        let pending = || Pending {
+            cancel: Cancellation::new(),
+            frontend_cancelled: Arc::new(AtomicBool::new(false)),
+            media: None,
+            reserved_stop: false,
+            reserved_safety_stop: false,
+        };
         for n in 0..ORDINARY_FRONTEND_JOBS {
-            assert!(ordinary_frontend_jobs(&jobs, &replies, false, false) < ORDINARY_FRONTEND_JOBS);
+            let state = pending();
+            let cancelled = state.frontend_cancelled.clone();
+            let id = ledger
+                .admit(frontend, &json!(n), Class::Ordinary, state)
+                .unwrap();
             let reserved = output
                 .reserve_publication(&[Cycle {
                     values: std::slice::from_ref(&frame),
                     repetitions: 1,
                 }])
                 .unwrap();
-            replies.push_back((n.to_string(), Arc::new(AtomicBool::new(false)), reserved));
+            replies.push_back((id, cancelled, reserved));
         }
-        assert_eq!(
-            ordinary_frontend_jobs(&jobs, &replies, false, false),
-            ORDINARY_FRONTEND_JOBS
+        assert_eq!(ledger.ordinary(), ORDINARY_FRONTEND_JOBS);
+        ledger.cancel(frontend, &json!(0));
+        assert!(replies.front().unwrap().1.load(Ordering::Acquire));
+        assert!(
+            ledger
+                .check(frontend, &json!(100), Class::Ordinary)
+                .is_err()
         );
-        // Cancellation suppresses delivery; its retained reservation still owns
-        // admission until the frontend actually retires it.
-        replies.front().unwrap().1.store(true, Ordering::Release);
-        assert_eq!(
-            ordinary_frontend_jobs(&jobs, &replies, false, false),
-            ORDINARY_FRONTEND_JOBS
-        );
-        // Already-admitted safety work does not consume ordinary capacity.
-        jobs.spawn(std::future::pending::<Completed>());
-        jobs.spawn(std::future::pending::<Completed>());
-        assert_eq!(
-            ordinary_frontend_jobs(&jobs, &replies, true, true),
-            ORDINARY_FRONTEND_JOBS
-        );
-        drop(replies.pop_front());
-        assert_eq!(
-            ordinary_frontend_jobs(&jobs, &replies, true, true),
-            ORDINARY_FRONTEND_JOBS - 1
-        );
-        replies.clear();
-        jobs.abort_all();
-        while jobs.join_next().await.is_some() {}
-        assert_eq!(ordinary_frontend_jobs(&jobs, &replies, false, false), 0);
+        let stop = ledger
+            .admit(frontend, &json!(101), Class::TakeStop, pending())
+            .unwrap();
+        let safety = ledger
+            .admit(frontend, &json!(102), Class::SafetyStop, pending())
+            .unwrap();
+        assert_eq!(ledger.ordinary(), ORDINARY_FRONTEND_JOBS);
+        let (id, _, reservation) = replies.pop_front().unwrap();
+        drop(reservation);
+        ledger.retire(id);
+        assert_eq!(ledger.ordinary(), ORDINARY_FRONTEND_JOBS - 1);
+        for (id, _, reservation) in replies {
+            drop(reservation);
+            ledger.retire(id);
+        }
+        ledger.retire(stop);
+        ledger.retire(safety);
+        assert_eq!(ledger.ordinary(), 0);
         drop(output);
         assert!(worker.await.unwrap().is_ok());
     }

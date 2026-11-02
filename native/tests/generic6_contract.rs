@@ -3,6 +3,8 @@
 use obs_mcp_native::{
     generic_requests::Call,
     js_json::{self, Limits},
+    native_profile::NativeProfile,
+    operation_store::GenericKind,
 };
 use serde_json::{Value, json};
 
@@ -51,12 +53,22 @@ fn opaque_six_keep_fixed_request_identities_and_redacted_debug() {
             js_json::encoded_len(&call.arguments(), Limits::default()).ok()
         );
     }
-    for name in [
-        "obs-call-request",
-        "obs-call-vendor-request",
-        "obs-start-record",
-        "SaveSourceScreenshot",
+    for (name, kind) in [
+        ("obs-call-request", GenericKind::OpaqueRequest),
+        ("obs-start-record", GenericKind::ManualRecordStart),
     ] {
+        let call = Call::parse(
+            name,
+            &json!({"requestType":"SaveSourceScreenshot","eventData":{}}),
+        )
+        .unwrap();
+        assert_eq!(call.kind(), kind);
+        assert_ne!(call.kind().request_type(), "SaveSourceScreenshot");
+        assert!(call.kind().advanced_only());
+        assert!(!NativeProfile::Production.allows(name));
+        assert!(NativeProfile::Advanced.allows(name));
+    }
+    for name in ["obs-call-vendor-request", "SaveSourceScreenshot"] {
         assert!(
             Call::parse(
                 name,

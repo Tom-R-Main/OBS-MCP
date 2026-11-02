@@ -30,10 +30,7 @@ pub(crate) fn dynamic_arguments(name: &str, args: &Value) -> Option<Value> {
     validate(tool(name)?.get("inputSchema")?, args, true)
 }
 
-pub(crate) fn workflow_declared(name: &str, handler: &str) -> bool {
-    workflow_declaration(asset(), name, handler)
-}
-
+#[cfg(test)]
 fn workflow_declaration(catalog: &Value, name: &str, handler: &str) -> bool {
     let Some(definition) = catalog["workflows"].get(name) else {
         return false;
@@ -75,7 +72,7 @@ fn local_arguments(catalog: &Value, name: &str, handler: &str, arguments: &Value
 
 pub(crate) fn service_handler(name: &str) -> Option<&'static str> {
     let service = &asset()["service"];
-    if service["activation"] != "OBS_MCP_NATIVE_STATEFUL" {
+    if service["activation"] != "native-default" {
         return None;
     }
     let definition = service["handlers"].get(name)?;
@@ -103,10 +100,22 @@ pub(crate) fn apply_scene_request(
     obs_mcp_native::apply_scene::Request::parse(original, &order).ok()
 }
 
+/// The typed request retains original Source defaults/selectors and native
+/// resource admission before frontend policy or lazy physical connection.
+pub(crate) fn capture_window_request(
+    original: &Value,
+) -> Option<obs_mcp_native::capture_window::Request> {
+    if service_handler("obs-capture-window") != Some("capture-window") {
+        return None;
+    }
+    obs_mcp_native::capture_window::Request::parse(original).ok()
+}
+
 pub(crate) fn service_arguments(name: &str, args: &Value) -> Option<Value> {
     service_handler(name)?;
-    if name == "obs-apply-scene" {
-        // A normalized Value alone cannot retain JavaScript record-key order.
+    if name == "obs-apply-scene" || name == "obs-capture-window" {
+        // Typed admission must retain original arguments: Apply needs record-key
+        // order and Capture must preserve its bounded selector request.
         return None;
     }
     if name == "obs-snapshot" {
@@ -119,7 +128,12 @@ pub(crate) fn service_arguments(name: &str, args: &Value) -> Option<Value> {
     }
     if matches!(
         service_handler(name),
-        Some("literal-setter" | "confirmed-output-start")
+        Some(
+            "literal-setter"
+                | "confirmed-output-start"
+                | "advanced-manual-command"
+                | "advanced-opaque-command"
+        )
     ) {
         // A refused closed parser must not fall through to generic normalization:
         // doing so could erase an opaque record or bypass its resource limits.

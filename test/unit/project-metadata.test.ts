@@ -18,7 +18,8 @@ type ManifestMetadata = {
   version: string;
   description: string;
   long_description: string;
-  compatibility: { runtimes: { node: string } };
+  server: { type: string };
+  compatibility: { runtimes?: { node: string } };
 };
 
 type PackageLockMetadata = {
@@ -67,19 +68,21 @@ describe("project metadata", () => {
     expect(packageLock.packages[""].version).toBe(packageMetadata.version);
   });
 
-  it("keeps the Node 20.19 floor aligned across published surfaces and CI", async () => {
+  it("keeps the pinned development Node range aligned without imposing it on the native bundle", async () => {
     const packageMetadata = JSON.parse(await readProjectFile("package.json")) as PackageMetadata;
     const packageLock = JSON.parse(await readProjectFile("package-lock.json")) as PackageLockMetadata;
     const manifest = JSON.parse(await readProjectFile("manifest.json")) as ManifestMetadata;
     const readme = await readProjectFile("README.md");
     const workflow = await readProjectFile(".github/workflows/ci.yml");
 
-    expect(packageMetadata.engines.node).toBe(">=20.19");
+    const testRunner = JSON.parse(await readProjectFile("node_modules/vitest/package.json")) as PackageMetadata;
+    expect(packageMetadata.engines.node).toBe(testRunner.engines.node);
     expect(packageLock.packages[""].engines.node).toBe(packageMetadata.engines.node);
-    expect(manifest.compatibility.runtimes.node).toBe(">=20.19.0");
-    expect(manifest.long_description).toContain("Node.js 20.19 or newer");
-    expect(readme).toContain("Node.js 20.19 or newer");
-    expect(workflow).toMatch(/node:\s*\[20\.19\.0,\s*22\.x,\s*24\.x\]/);
+    expect(manifest.server.type).toBe("binary");
+    expect(manifest.compatibility.runtimes).toBeUndefined();
+    expect(manifest.long_description).toContain("Node.js and the JavaScript MCP SDK are not installed or run");
+    expect(readme).toContain("installed native runtime, which requires no Node");
+    expect(workflow).toMatch(/node:\s*\[22\.12\.0,\s*24\.x,\s*26\.x\]/);
   });
 });
 

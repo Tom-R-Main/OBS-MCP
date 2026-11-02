@@ -221,12 +221,13 @@ fn fixed_timeline_identity_optional_chapter_and_no_private_followup_contract() {
     )
     .unwrap();
     assert!(!format!("{private:?}").contains("PRIVATE CHAPTER"));
-    for name in [
-        "obs-stop-record",
-        "obs-start-record",
-        "obs-call-request",
-        "PauseRecord",
-    ] {
+    let manual_start = Call::parse("obs-start-record", &json!({})).unwrap();
+    assert_eq!(
+        manual_start.kind(),
+        obs_mcp_native::operation_store::GenericKind::ManualRecordStart
+    );
+    assert!(manual_start.kind().advanced_only());
+    for name in ["obs-stop-record", "obs-call-request", "PauseRecord"] {
         assert!(Call::parse(name, &json!({})).is_none());
     }
 }

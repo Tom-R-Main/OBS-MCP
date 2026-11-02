@@ -1,0 +1,642 @@
+Native dependency notice inventory
+
+Scope:66-package isolated TLS/resolver all-feature/all-target Cargo graph, before separate HTTP8 addition.
+Default Mac-host projection:54 packages. These projections do not prove linked artifact contents.
+All63 registry packages are listed. Existing license/notice/author files are preserved unchanged.
+The selected branch is the reviewed metadata choice; preserving alternative texts does not relicense OBS MCP.
+
+OBS MCP root and private resolver/platform-tls crates retain GPL-2.0-only under the root LICENSE.
+The private0.0.0 path crates are project source, not new third-party registry packages.
+Previous project authorship remains in NOTICE.md.
+
+base64@0.22.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6
+Manifest SHA256: 52bee6a418e14918d37058fd15fccfd0f417a06fe4f9668b6f97866bf7f991e3
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Marshall Pierce <marshall@mpierce.org>
+licenses/native/registry/base64-0.22.1/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/base64-0.22.1/LICENSE-MIT.txt: SHA256 0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7
+
+block-buffer@0.10.4
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71
+Manifest SHA256: c76e4bd298cd6223882238449e31939d75613e82757ca87e249df843decf5f9a
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: RustCrypto Developers
+licenses/native/registry/block-buffer-0.10.4/LICENSE-APACHE.txt: SHA256 a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5
+licenses/native/registry/block-buffer-0.10.4/LICENSE-MIT.txt: SHA256 d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef
+
+block2@0.6.2
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5
+Manifest SHA256: e325c51f01145af3e11f2ee5ce7c47f10697d936c1d90b9ee81a0cf4f700f6d7
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Mads Marquart <mads@marquart.dk>
+Standalone archive notice absent; see objc2-bindings exact declarations, author metadata and MIT grant.
+
+bytes@1.12.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04
+Manifest SHA256: dc260d0d04b58aea819f8d6762c2feb51e66f8edd77e4e64cc1eac6f447a8143
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Carl Lerche <me@carllerche.com>; Sean McArthur <sean@seanmonstar.com>
+licenses/native/registry/bytes-1.12.1/LICENSE.txt: SHA256 45f522cacecb1023856e46df79ca625dfc550c94910078bd8aec6e02880b3d42
+
+cfg-if@1.0.5
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600
+Manifest SHA256: d646663ec1bd4e8e795bd6a386cff9c374880d6237bbfa36bbac08b7f26ce65c
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Alex Crichton <alex@alexcrichton.com>
+licenses/native/registry/cfg-if-1.0.5/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/cfg-if-1.0.5/LICENSE-MIT.txt: SHA256 378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397
+
+cpufeatures@0.2.17
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280
+Manifest SHA256: 25160ea4dfa195721d352d42827b882a41f18f4c55fff58e5c3878ecae84ca44
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: RustCrypto Developers
+licenses/native/registry/cpufeatures-0.2.17/LICENSE-APACHE.txt: SHA256 a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5
+licenses/native/registry/cpufeatures-0.2.17/LICENSE-MIT.txt: SHA256 ae9baa7beea910273c2f384c2a6b721fb7bd02bda3436074a1072e4ee689f985
+
+crypto-common@0.1.7
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a
+Manifest SHA256: 303682a6a66fdc98de8a011ac275e18c523f1535ed8de2a291a4fcad91de8348
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: RustCrypto Developers
+licenses/native/registry/crypto-common-0.1.7/LICENSE-APACHE.txt: SHA256 a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5
+licenses/native/registry/crypto-common-0.1.7/LICENSE-MIT.txt: SHA256 3521672491a3479422d5fe1aca6645dd2984090f85da6e5205abfb18fb7a6897
+
+data-encoding@2.11.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06
+Manifest SHA256: d024c81d5919502c1c69e48a6325da1091521c95622057bea10d8963b7be5344
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/data-encoding-2.11.1/LICENSE.txt: SHA256 b68ad1a3367b825447089e1f8d6829b97f47a89eb78d2f4ebaef4672f5606186
+
+digest@0.10.7
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292
+Manifest SHA256: f0cc2fc18c6e7f3533658b9e59d71b55e641e7d8226e5d1b915a5e7c0a1d3f36
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: RustCrypto Developers
+licenses/native/registry/digest-0.10.7/LICENSE-APACHE.txt: SHA256 a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5
+licenses/native/registry/digest-0.10.7/LICENSE-MIT.txt: SHA256 9e0dfd2dd4173a530e238cb6adb37aa78c34c6bc7444e0e10c1ab5d8881f63ba
+
+errno@0.3.14
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb
+Manifest SHA256: a25f16ccaa127602fc0cc9d1c80186619a0b8f42331a27b6f04b6bfa4aa29de2
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Chris Wong <lambda.fairy@gmail.com>; Dan Gohman <dev@sunfishcode.online>
+licenses/native/registry/errno-0.3.14/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/errno-0.3.14/LICENSE-MIT.txt: SHA256 8764a597675778ddfd4e25f81b08a05dbcf089ac05662df7613fe67f150e3aa2
+
+futures-core@0.3.34
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e
+Manifest SHA256: fa88cec6d0c527df4ff51ad034de09d3c552f6174ab8e4aa83cfaeacc36c4c7d
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/futures-core-0.3.34/LICENSE-APACHE.txt: SHA256 275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427
+licenses/native/registry/futures-core-0.3.34/LICENSE-MIT.txt: SHA256 6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd
+
+futures-macro@0.3.34
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44
+Manifest SHA256: fdb87996803b9b64594a0849d2b396f2581d79451adb8f1b91ed56da8c9421c3
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/futures-macro-0.3.34/LICENSE-APACHE.txt: SHA256 275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427
+licenses/native/registry/futures-macro-0.3.34/LICENSE-MIT.txt: SHA256 6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd
+
+futures-sink@0.3.34
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d
+Manifest SHA256: 8f691b72a0ca88fbb82e626de2df8ae2d71a1c384da2dff9b47424d955ab258e
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/futures-sink-0.3.34/LICENSE-APACHE.txt: SHA256 275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427
+licenses/native/registry/futures-sink-0.3.34/LICENSE-MIT.txt: SHA256 6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd
+
+futures-task@0.3.34
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd
+Manifest SHA256: 7d9159735fa6a29df379bfff623f6cece41584334ca022ebd34ef56152637fa8
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/futures-task-0.3.34/LICENSE-APACHE.txt: SHA256 275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427
+licenses/native/registry/futures-task-0.3.34/LICENSE-MIT.txt: SHA256 6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd
+
+futures-util@0.3.34
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc
+Manifest SHA256: 7e672d306e8de25359ed9c452e7cdc115121dc7e985008af31c85a36b70ac835
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/futures-util-0.3.34/LICENSE-APACHE.txt: SHA256 275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427
+licenses/native/registry/futures-util-0.3.34/LICENSE-MIT.txt: SHA256 6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd
+
+generic-array@0.14.7
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a
+Manifest SHA256: 4b5daed75505275d11f4854dd9172f910da61d9856ca2936d95e2e6e0c9040e4
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Bartłomiej Kamiński <fizyk20@gmail.com>; Aaron Trent <novacrazy@gmail.com>
+licenses/native/registry/generic-array-0.14.7/LICENSE.txt: SHA256 c09aae9d3c77b531f56351a9947bc7446511d6b025b3255312d3e3442a9a7583
+
+getrandom@0.3.4
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd
+Manifest SHA256: 5fd1d61c342777480822b8f8259a7bd8cbf6c2486a3d389b2d5b235f667a7952
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: The Rand Project Developers
+licenses/native/registry/getrandom-0.3.4/LICENSE-APACHE.txt: SHA256 aaff376532ea30a0cd5330b9502ad4a4c8bf769c539c87ffe78819d188a18ebf
+licenses/native/registry/getrandom-0.3.4/LICENSE-MIT.txt: SHA256 29e9fe5074bd27e0e5d5d110394fbbcd841baee2651a3c4b4560a632702cede4
+
+http@1.5.0
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0
+Manifest SHA256: a949b1afc8b7fe334e9f6038b88d987e6a83b41b10cc852ad11dad1ead3c296d
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Alex Crichton <alex@alexcrichton.com>; Carl Lerche <me@carllerche.com>; Sean McArthur <sean@seanmonstar.com>
+licenses/native/registry/http-1.5.0/LICENSE-APACHE.txt: SHA256 8bb1b50b0e5c9399ae33bd35fab2769010fa6c14e8860c729a52295d84896b7a
+licenses/native/registry/http-1.5.0/LICENSE-MIT.txt: SHA256 dc91f8200e4b2a1f9261035d4c18c33c246911a6c0f7b543d75347e61b249cff
+
+httparse@1.10.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87
+Manifest SHA256: 067da5f6334526ce5f080909e5c271dd0968ab4198a65eea51d93b242febb48a
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Sean McArthur <sean@seanmonstar.com>
+licenses/native/registry/httparse-1.10.1/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/httparse-1.10.1/LICENSE-MIT.txt: SHA256 391a5396cec6230bfabd4ef4eb2350eb895bc5efce377a2218f5702ed020d3e3
+
+itoa@1.0.18
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682
+Manifest SHA256: 894c215e4e7e973b556b0e9627bf9b6a719a043fac9b5af9838660816392a09f
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/itoa-1.0.18/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/itoa-1.0.18/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+libc@0.2.191
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a
+Manifest SHA256: c8e45fe04427917e1bbadf4b628353571c9a0f2574971231814bb71dc6a86f1f
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/libc-0.2.191/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/libc-0.2.191/LICENSE-MIT.txt: SHA256 123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e
+
+log@0.4.34
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6
+Manifest SHA256: a6b553a374b237960e65d91de04e102a1755a7a20ff21f2c1ef6ba74b9d0ab76
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: The Rust Project Developers
+licenses/native/registry/log-0.4.34/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/log-0.4.34/LICENSE-MIT.txt: SHA256 6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb
+
+memchr@2.8.3
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98
+Manifest SHA256: a14f68b8fa55f15fd03b15dced37bcf66a0a628f568eedc82817cdb7f9281951
+Declared: Unlicense OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Andrew Gallant <jamslam@gmail.com>; bluss
+licenses/native/registry/memchr-2.8.3/COPYING.txt: SHA256 01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f
+licenses/native/registry/memchr-2.8.3/LICENSE-MIT.txt: SHA256 0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f
+
+mio@1.2.4
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee
+Manifest SHA256: a8842f7fd53967d0f6b3faa359c4354c60ad6fd2927a5e0c4894933fdca55768
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Carl Lerche <me@carllerche.com>; Thomas de Zeeuw <thomasdezeeuw@gmail.com>; Tokio Contributors <team@tokio.rs>
+licenses/native/registry/mio-1.2.4/LICENSE.txt: SHA256 07919255c7e04793d8ea760d6c2ce32d19f9ff02bdbdde3ce90b1e1880929a9b
+
+objc2@0.6.5
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8
+Manifest SHA256: 5556dba493fc18e98ebf82f587011f76df6c8c26532613e4c8f904ee586d7cf0
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Mads Marquart <mads@marquart.dk>
+Standalone archive notice absent; see objc2-bindings exact declarations, author metadata and MIT grant.
+
+objc2-encode@4.1.0
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33
+Manifest SHA256: cf9a8cc812710344d7fe618a5e615530baeeceae5c2826b9d5bb557dc419f159
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Mads Marquart <mads@marquart.dk>
+Standalone archive notice absent; see objc2-bindings exact declarations, author metadata and MIT grant.
+
+pin-project-lite@0.2.17
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd
+Manifest SHA256: 473f9cfe9738986d0d1c46e306bd11ad3e36bca8f1eab5bbe9f7297313fb33f4
+Declared: Apache-2.0 OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/pin-project-lite-0.2.17/LICENSE-APACHE.txt: SHA256 0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594
+licenses/native/registry/pin-project-lite-0.2.17/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+ppv-lite86@0.2.21
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9
+Manifest SHA256: aa9337145bd03a6e76fd42c2ee5f07c5c23ff6b2eb73cfc35c3070d76c5bacb8
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: The CryptoCorrosion Contributors
+licenses/native/registry/ppv-lite86-0.2.21/LICENSE-APACHE.txt: SHA256 0218327e7a480793ffdd4eb792379a9709e5c135c7ba267f709d6f6d4d70af0a
+licenses/native/registry/ppv-lite86-0.2.21/LICENSE-MIT.txt: SHA256 4cada0bd02ea3692eee6f16400d86c6508bbd3bafb2b65fed0419f36d4f83e8f
+
+proc-macro2@1.0.107
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9
+Manifest SHA256: 6bdbe54a7f052e552dcfca90351764476e2767237ec3f954df8bd9f602861056
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>; Alex Crichton <alex@alexcrichton.com>
+licenses/native/registry/proc-macro2-1.0.107/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/proc-macro2-1.0.107/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+quote@1.0.47
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001
+Manifest SHA256: 13d8c50837f14aff48cd622349f98fb2c46350b7a0c08fd574cf7de4def27d06
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/quote-1.0.47/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/quote-1.0.47/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+r-efi@5.3.0
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f
+Manifest SHA256: dba000c0173b09b1e3b69afa42a715b5ab64355e6502ce6d9d1767c7845cf402
+Declared: MIT OR Apache-2.0 OR LGPL-2.1-or-later
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/r-efi-5.3.0/AUTHORS.txt: SHA256 ff92bed461f50338dd703a9ba9aee496a425957873df1d91192776e4bdf5dda7
+
+rand@0.9.5
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41
+Manifest SHA256: d2d5147bd54a734362612e553b13e29344e7264c6f8dcf85ed1556bf274b5cd2
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: The Rand Project Developers; The Rust Project Developers
+licenses/native/registry/rand-0.9.5/COPYRIGHT.txt: SHA256 90eb64f0279b0d9432accfa6023ff803bc4965212383697eee27a0f426d5f8d5
+licenses/native/registry/rand-0.9.5/LICENSE-APACHE.txt: SHA256 35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab
+licenses/native/registry/rand-0.9.5/LICENSE-MIT.txt: SHA256 209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b
+
+rand_chacha@0.9.0
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb
+Manifest SHA256: f413a8d1156cb6c7271427e5f406ed65e3056e2422224ad5d13f7d40a0c35803
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: The Rand Project Developers; The Rust Project Developers; The CryptoCorrosion Contributors
+licenses/native/registry/rand_chacha-0.9.0/COPYRIGHT.txt: SHA256 90eb64f0279b0d9432accfa6023ff803bc4965212383697eee27a0f426d5f8d5
+licenses/native/registry/rand_chacha-0.9.0/LICENSE-APACHE.txt: SHA256 35242e7a83f69875e6edeff02291e688c97caafe2f8902e4e19b49d3e78b4cab
+licenses/native/registry/rand_chacha-0.9.0/LICENSE-MIT.txt: SHA256 209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b
+
+rand_core@0.9.5
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c
+Manifest SHA256: e5fe39a2caf72988fae221f41b825ad42ad19dc2a55486d9c7d740a67a2bf599
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: The Rand Project Developers; The Rust Project Developers
+licenses/native/registry/rand_core-0.9.5/COPYRIGHT.txt: SHA256 90eb64f0279b0d9432accfa6023ff803bc4965212383697eee27a0f426d5f8d5
+licenses/native/registry/rand_core-0.9.5/LICENSE-APACHE.txt: SHA256 6df43f6f4b5d4587f3d8d71e45532c688fd168afa5fe89d571cb32fa09c4ef51
+licenses/native/registry/rand_core-0.9.5/LICENSE-MIT.txt: SHA256 209fbbe0ad52d9235e37badf9cadfe4dbdc87203179c0899e738b39ade42177b
+
+serde@1.0.229
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba
+Manifest SHA256: 6883caefd46e86eb15d22d3a6d274ad304c5e7934ab70eb58d81b7c4a29ef9db
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Erick Tryzelaar <erick.tryzelaar@gmail.com>; David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/serde-1.0.229/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/serde-1.0.229/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+serde_core@1.0.229
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48
+Manifest SHA256: c6049e170e4f7c2b48749fefab59db583bfac4e466cde6d0c53e4f49bc5044f7
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Erick Tryzelaar <erick.tryzelaar@gmail.com>; David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/serde_core-1.0.229/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/serde_core-1.0.229/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+serde_derive@1.0.229
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348
+Manifest SHA256: d2581160ffa61baa386f882e08b0db20051dc3c782a82268d6473998b61c926e
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Erick Tryzelaar <erick.tryzelaar@gmail.com>; David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/serde_derive-1.0.229/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/serde_derive-1.0.229/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+serde_json@1.0.154
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6
+Manifest SHA256: 548aafeb7c702b69b9de950033f10b59f70baf38592d275d8ca8cff19f7750c3
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/serde_json-1.0.154/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/serde_json-1.0.154/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+sha1@0.10.7
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8
+Manifest SHA256: 7f38a965e5393b7592755ffa510749c0b1eb94923f57693c51a448967b6e3934
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: RustCrypto Developers
+licenses/native/registry/sha1-0.10.7/LICENSE-APACHE.txt: SHA256 a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5
+licenses/native/registry/sha1-0.10.7/LICENSE-MIT.txt: SHA256 b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1
+
+sha2@0.10.9
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283
+Manifest SHA256: f5b86209df69360114aaee67a66c3fcd31d8c840b8f34b9ad383aacd63cd15da
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: RustCrypto Developers
+licenses/native/registry/sha2-0.10.9/LICENSE-APACHE.txt: SHA256 a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5
+licenses/native/registry/sha2-0.10.9/LICENSE-MIT.txt: SHA256 b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1
+
+signal-hook-registry@1.4.8
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b
+Manifest SHA256: 54bcf376404635b6cfc7e20474cc84a756ef5c8b54e2954d3186e44b68854fac
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Michal 'vorner' Vaner <vorner@vorner.cz>; Masaki Hara <ackie.h.gmai@gmail.com>
+licenses/native/registry/signal-hook-registry-1.4.8/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/signal-hook-registry-1.4.8/LICENSE-MIT.txt: SHA256 503558bfefe66ca15e4e3f7955b3cb0ec87fd52f29bf24b336af7bd00e946d5c
+
+slab@0.4.12
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5
+Manifest SHA256: 11f31284be0c30b612f4e2c2e46aa14494a81639b12661f01f07394e270c0070
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Carl Lerche <me@carllerche.com>
+licenses/native/registry/slab-0.4.12/LICENSE.txt: SHA256 8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18
+
+socket2@0.6.5
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4
+Manifest SHA256: e66848b959431828ed8acf12d5232c586bb6fe044f55d6f14ab7705ea3fff7a4
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Alex Crichton <alex@alexcrichton.com>; Thomas de Zeeuw <thomasdezeeuw@gmail.com>
+licenses/native/registry/socket2-0.6.5/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/socket2-0.6.5/LICENSE-MIT.txt: SHA256 378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397
+
+syn@2.0.119
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297
+Manifest SHA256: da8b83ac2c66a7b404dc55d88ae42592f70714823251f51b620ae349b246a18f
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/syn-2.0.119/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/syn-2.0.119/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+syn@3.0.9
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b
+Manifest SHA256: b6f7f6069d92142d3e294f84855a68049bebc5b886c557ed4ae980ddbc866e1c
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/syn-3.0.9/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/syn-3.0.9/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+thiserror@2.0.21
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e
+Manifest SHA256: 4ab1fdd3cba041dbaa5b813dff268978a93b1542dcc31935fb903772cc700a47
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/thiserror-2.0.21/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/thiserror-2.0.21/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+thiserror-impl@2.0.21
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524
+Manifest SHA256: cc5e3660d65270da1302d5b24cbefb50b4993b258d344a9ac9b4b69a612aa27f
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/thiserror-impl-2.0.21/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/thiserror-impl-2.0.21/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+tokio@1.54.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3
+Manifest SHA256: 9a8189f0dc5320ae7c66786d6414b5650fcf1b1deab634135d2306bdc28d34ec
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Tokio Contributors <team@tokio.rs>
+licenses/native/registry/tokio-1.54.1/LICENSE.txt: SHA256 253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552
+
+tokio-macros@2.7.2
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e
+Manifest SHA256: 45090e160854dda1c61bc9d39f62a869be6ede2a9b3554e63917788349193d7c
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Tokio Contributors <team@tokio.rs>
+licenses/native/registry/tokio-macros-2.7.2/LICENSE.txt: SHA256 0b83dc40cba89b9922bb84b0a9c7d2768ce37c1d7e138b7424fd4549915778c9
+
+tokio-tungstenite@0.26.2
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 7a9daff607c6d2bf6c16fd681ccb7eecc83e4e2cdc1ca067ffaadfca5de7f084
+Manifest SHA256: 1818fa9b5c220a266853e9903fcb95a4c6cc9977c1cecc3d10a66b6009a17b60
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Daniel Abramov <dabramov@snapview.de>; Alexey Galakhov <agalakhov@snapview.de>
+licenses/native/registry/tokio-tungstenite-0.26.2/LICENSE.txt: SHA256 fdd55e2b2da854b0fbdc1e607df7c2ba1e1ebf91ecb77c515511ebeef972bc8f
+
+tungstenite@0.26.2
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13
+Manifest SHA256: 98fcd0bc29ac342c91f821213b7ca4e0c825345b9e14443122c25d8e6c8f2abd
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Alexey Galakhov; Daniel Abramov
+licenses/native/registry/tungstenite-0.26.2/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/tungstenite-0.26.2/LICENSE-MIT.txt: SHA256 7fea0ee51a4ca5d5cea7464135fd55e8b09caf3a61da3d451ac8a22af95c033f
+
+typenum@1.20.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20
+Manifest SHA256: 00785a81eae34b3298dfdde78a6bd96fe3ec000de46edd509bd13b7cab7a9870
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/typenum-1.20.1/LICENSE.txt: SHA256 db11fec9946737df39ca3898d9cd8c10ec6f6c3a884a6802b0ad0b81b4e8f23a
+licenses/native/registry/typenum-1.20.1/LICENSE-APACHE.txt: SHA256 516b24e051bf5630880ebbd55c40a25ce9552ebaf8970a53e8976eb70e522406
+licenses/native/registry/typenum-1.20.1/LICENSE-MIT.txt: SHA256 a825bd853ab71619a4923d7b4311221427848070ff44d990da39b0b274c1683f
+
+unicode-ident@1.0.27
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563
+Manifest SHA256: c0e96a9c7ee62f5f9ab12de69e0ad44826ad753911d47638f605c936f7ea2c1c
+Declared: (MIT OR Apache-2.0) AND Unicode-3.0
+Reviewed selected choice: MIT AND Unicode-3.0
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/unicode-ident-1.0.27/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/unicode-ident-1.0.27/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+licenses/native/registry/unicode-ident-1.0.27/LICENSE-UNICODE.txt: SHA256 f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1
+
+utf-8@0.7.6
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9
+Manifest SHA256: e0009dd2e366cbb98b75dbadb9de9e5662c5f3fe971e99dd98eaa9adb7ecb648
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Simon Sapin <simon.sapin@exyr.org>
+licenses/native/registry/utf-8-0.7.6/LICENSE-APACHE.txt: SHA256 62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a
+licenses/native/registry/utf-8-0.7.6/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+version_check@0.9.5
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a
+Manifest SHA256: 399ea74400a173c02eabe91cb9487d0cf351117857a5d2ebc6231f0efde67681
+Declared: MIT/Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: Sergio Benitez <sb@sergio.bz>
+licenses/native/registry/version_check-0.9.5/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/version_check-0.9.5/LICENSE-MIT.txt: SHA256 b7e650f3fce5c53249d1cdc608b54df156a97edd636cf9d23498d0cfe7aec63e
+
+wasi@0.11.1+wasi-snapshot-preview1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b
+Manifest SHA256: 25915be68a3057b798a4a6d4e5ceef36047e03bf0353d3f2a99236cd23e410db
+Declared: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: The Cranelift Project Developers
+licenses/native/registry/wasi-0.11.1+wasi-snapshot-preview1/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/wasi-0.11.1+wasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception.txt: SHA256 268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5
+licenses/native/registry/wasi-0.11.1+wasi-snapshot-preview1/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+wasip2@1.0.4+wasi-0.2.12
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487
+Manifest SHA256: a4cf47d49115ca7543113c3c4c136e0cdd3dfff344eefa0f64ee8c5200e99fa9
+Declared: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/wasip2-1.0.4+wasi-0.2.12/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/wasip2-1.0.4+wasi-0.2.12/LICENSE-Apache-2.0_WITH_LLVM-exception.txt: SHA256 268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5
+licenses/native/registry/wasip2-1.0.4+wasi-0.2.12/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+windows-link@0.2.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5
+Manifest SHA256: abf0b74b168ec7d7c600f44eb90502c47e44480a199b9adc9ec74ea990605707
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/windows-link-0.2.1/license-apache-2.0.txt: SHA256 c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b
+licenses/native/registry/windows-link-0.2.1/license-mit.txt: SHA256 c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383
+
+windows-sys@0.61.2
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc
+Manifest SHA256: 1adbc955d5460fa64dc16e6c8198b25672e8d4b97d45ecfb262eb2693ce08422
+Declared: MIT OR Apache-2.0
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/windows-sys-0.61.2/license-apache-2.0.txt: SHA256 c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b
+licenses/native/registry/windows-sys-0.61.2/license-mit.txt: SHA256 c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383
+
+wit-bindgen@0.57.1
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e
+Manifest SHA256: bb7fe08cf7f552712e29c7373c058d5fe74d650f954c2462e523e40fee273f9f
+Declared: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: Alex Crichton <alex@alexcrichton.com>
+licenses/native/registry/wit-bindgen-0.57.1/LICENSE-APACHE.txt: SHA256 a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2
+licenses/native/registry/wit-bindgen-0.57.1/LICENSE-Apache-2.0_WITH_LLVM-exception.txt: SHA256 268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5
+licenses/native/registry/wit-bindgen-0.57.1/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+zerocopy@0.8.63
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: e5fe1f8f1b06191a00962174c61aa5005e0bb391a6d80d07e24d115c01a92ed8
+Manifest SHA256: 73182670f07c89a4b463e6369da7a6b8f87bf5a838627103bb606bd7b4e0a88d
+Declared: BSD-2-Clause OR Apache-2.0 OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/zerocopy-0.8.63/LICENSE-APACHE.txt: SHA256 9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3
+licenses/native/registry/zerocopy-0.8.63/LICENSE-BSD.txt: SHA256 83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32
+licenses/native/registry/zerocopy-0.8.63/LICENSE-MIT.txt: SHA256 1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df
+
+zerocopy-derive@0.8.63
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f
+Manifest SHA256: f8b9128d66324adf3b6af5542fae833e3d370533f5a782ca785874f706209d16
+Declared: BSD-2-Clause OR Apache-2.0 OR MIT
+Reviewed selected choice: MIT
+Cargo author metadata: (not declared)
+licenses/native/registry/zerocopy-derive-0.8.63/LICENSE-APACHE.txt: SHA256 9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3
+licenses/native/registry/zerocopy-derive-0.8.63/LICENSE-BSD.txt: SHA256 83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32
+licenses/native/registry/zerocopy-derive-0.8.63/LICENSE-MIT.txt: SHA256 1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df
+
+zmij@1.0.23
+Source: registry+https://github.com/rust-lang/crates.io-index
+Archive SHA256: 29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b
+Manifest SHA256: b31420c7a806fae5b9ea2438dd4cbb99dcb3a22da67697fdf2776cc44a69527e
+Declared: MIT
+Reviewed selected choice: MIT
+Cargo author metadata: David Tolnay <dtolnay@gmail.com>
+licenses/native/registry/zmij-1.0.23/LICENSE-MIT.txt: SHA256 23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3
+
+System prerequisites are separate from Cargo inventory.
+Mac evaluation links Apple system frameworks/libraries; these notices bundle no Apple SDK/runtime.
+GnuTLS3.8.12 evaluation text is retained separately; actual Linux ELF/transitive closure remains unqualified.
+The separate HTTP8 dependency/notice overlay must be merged before final package verification.

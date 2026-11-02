@@ -1,0 +1,18 @@
+HTTP proposal addition only — 2 November 2026
+
+This additive list covers exactly8 packages added by the isolated HTTP graph.
+It does not replace the separately scoped TLS/full inventory or activate HTTP.
+All package licenses/versions and archives are frozen in the dependency review.
+
+atomic-waker-1.1.2 | Apache-2.0 OR MIT | choice MIT | registry archive SHA256 1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0
+futures-channel-0.3.34 | MIT OR Apache-2.0 | choice MIT | registry archive SHA256 b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4
+http-body-1.1.0 | MIT | choice MIT | registry archive SHA256 ca2a8f2913ee65f60facd6a5905613afaa448497a0230cc41ce022d93290bc2c
+http-body-util-0.1.5 | MIT | choice MIT | registry archive SHA256 23169fe34a5fbcdd3f3862e78fb9b6fccd5f02a6dc6f732547005d45631ce71c
+httpdate-1.0.3 | MIT OR Apache-2.0 | choice MIT | registry archive SHA256 df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9
+hyper-1.11.1 | MIT | choice MIT | registry archive SHA256 27b501faa50e7a26c3d3560ca625132f4078a17771f4810baf70475ae48cbe43
+hyper-util-0.1.20 | MIT | choice MIT | registry archive SHA256 96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0
+smallvec-1.16.4 | MIT OR Apache-2.0 | choice MIT | registry archive SHA256 d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8
+
+Direct httparse1.10.1 is an already-reviewed existing version, with no added
+package/version/feature beyond the approved graph. Full upstream license texts
+are copied under registry/<crate>-<version>/ without deleting existing notices.

@@ -1,5 +1,12 @@
 # Native dependency decision — 31 October 2026
 
+This preserves the dependency decision and earlier-artifact evidence from that
+date. The native-default source proposal removes the compatibility child;
+unsupported encrypted transport refuses until a native TLS backend is separately
+adopted and qualified. References below to selecting the TypeScript TLS runtime
+are historical, not fallback behavior in the native-only proposal. See
+[native distribution](native-distribution.md) for current proposal boundaries.
+
 OBS MCP remains `GPL-2.0-only`. This tranche does not relicense the project or
 copy code from the official Rust MCP SDK. The local SDK declares `Apache-2.0`;
 it is not admitted as a linked dependency. GNU's
@@ -85,3 +92,104 @@ artifacts show no active ring edge. Both findings require resolution under the
 existing policy; neither is waived by successful handshakes. This candidate is
 **not admitted**. File-level source and notice inspection remains necessary in
 addition to the current metadata gate.
+
+
+## Native resolver and platform TLS proposal — 2 November 2026
+
+The earlier counts and compatibility-runtime discussion above describe historical
+artifacts. The native-only proposal has no TypeScript TLS fallback. Its default
+feature set keeps `platform-tls-evaluation` off: unavailable `wss:` connections
+refuse instead of downgrading or starting another runtime. Enabling an evaluation
+feature is not release admission.
+
+The reviewed source adds two private project crates, both version `0.0.0` and
+`GPL-2.0-only`: `native/crates/resolver` and `native/crates/platform-tls`. They
+retain the root [GPLv2 text](../LICENSE) and [project authorship notices](../NOTICE.md).
+Only their exact canonical manifests and source identities are admitted; a local
+path or `source=null` alone grants no license-policy exception. Resolver source
+uses the existing Tokio dependency. The TLS crate gates Objective-C dependencies
+to macOS and has no automatic Windows TLS backend.
+
+The macOS evaluation uses these exact registry packages:
+
+| Package | Declared license | Cargo author metadata |
+| --- | --- | --- |
+| `block2 0.6.2` | MIT | Mads Marquart |
+| `objc2 0.6.5` | MIT | Mads Marquart |
+| `objc2-encode 4.1.0` | MIT | Mads Marquart |
+
+Their [attribution and pinned upstream declarations](../licenses/native/objc2-bindings/ATTRIBUTION.txt)
+are preserved alongside the [standard MIT grant, conditions and disclaimer](../licenses/native/objc2-bindings/MIT-GRANT.txt).
+The declarations designate MIT by reference. The author field is preserved as
+metadata; no copyright holder or year has been invented, and another package's
+copyright line has not been reassigned to these bindings. The upstream Apple
+SDK discussion is preserved verbatim. These notices do not verify or grant Apple
+SDK redistribution rights.
+
+[The native notice inventory](../licenses/native/INVENTORY.txt) records exact
+versions, archive/manifest hashes, selected expression choices and preserved
+license, copyright, notice and author text. It covers the isolated 66-package
+TLS/resolver graph before the separate HTTP dependency addition: 63 registry
+packages, with 120 existing upstream text files from 60 packages; the three
+bindings use their exact upstream declarations and accompanying MIT text.
+Alternative license texts are retained where supplied; the inventory records
+which expression branch the checker reviewed. Final combined packaging must
+merge the HTTP notices and verify every retained file against its source seal.
+
+The checker follow-on requests `cargo metadata --locked --offline --all-features`
+without a target filter for its full inventory, then separately projects default
+features onto the host. Packages outside that default-host projection include
+both other targets and optional features disabled on this same host. A successful
+metadata gate is not proof of a linked or distributed artifact.
+
+### System build and runtime prerequisites
+
+The macOS evaluation dynamically links system `Network`, `Security` and
+`Foundation` frameworks, the Objective-C runtime, and normal macOS libraries.
+The block implementation comes from the Apple system runtime in the selected
+feature set; no separate compiler-rt BlocksRuntime is bundled. A suitable Apple
+SDK/linker is a build prerequisite. The notice overlay bundles no Apple SDK or
+system framework. The observed Mac build does not establish a minimum supported
+macOS version or qualify another architecture/OS release.
+
+The proposed Linux TLS backend dynamically links system GnuTLS. Building that
+backend requires native `pkg-config` metadata and linker/development files for
+GnuTLS; the current API/protocol floor is `3.6.4`, not a security-version
+recommendation. No dependency is installed automatically. An eventual Linux
+artifact requires an actual ELF/runtime and transitive-library inventory,
+certificate-store checks and target qualification before packaging. The local
+GnuTLS `3.8.12` probe runs on macOS and is not Linux acceptance.
+
+The installed GnuTLS evaluation README distinguishes its main LGPL-2.1-or-later
+libraries from GPL-3.0-or-later applications and other components. Its complete
+[upstream README, authors and LGPL text](../licenses/native/GnuTLS-3.8.12-evaluation/UPSTREAM-README.txt)
+are retained as evaluation provenance, including the upstream discussion of
+Nettle/GMP. This does not admit an unreviewed transitive binary closure or bundle
+GnuTLS command-line tools. Final native backend admission, extracted-package
+notice verification, and platform/runtime qualification remain separate gates.
+
+## Isolated HTTP1 proposal — 2 November 2026
+
+User-approved exact HTTP dependencies were fetched into a project-owned Cargo
+home. Hyper1.11.1 (`server,http1`, defaults off), hyper-util0.1.20 (`tokio`,
+defaults off), http-body1.1.0 and http-body-util0.1.5 use the existing
+bytes1.12.1/Tokio1.54.1 versions. The graph adds8 package names/versions and
+changes no existing version; direct httparse1.10.1 reuses its reviewed package.
+The prototype's all-target graph is69 packages including the application,
+61 active on this Mac and8 target-only. This precedes later TLS composition.
+
+All26 registry packages in the dependency qualification match Cargo.lock archive
+checksums and extracted source payloads. Exact graph/features/source/VCS/license
+receipts live in the isolated dependency review; full added license texts and an
+additive inventory are checked in under `licenses/native/`. The strict package
+inventory admits only these8 exact new tuples; existing choices remain intact.
+This is a source/provenance/metadata review, not an external advisory scan or
+permission to remove existing project notices.
+
+The test-only TCP proposal uses mature httparse first-head facts and exact byte
+replay into Hyper. It explicitly chooses one exchange per connection plus
+`Connection: close`, refuses all Expect forms with417 pending a qualified interim
+response API, and fails closed on unqualified URL/authority canonicalization.
+It does not claim complete Node/WHATWG equivalence or product activation.
+Root-owned startup wiring, composed platform TLS, final packaging and live
+qualification remain separate gates.

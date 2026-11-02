@@ -2,7 +2,7 @@
 //! Admission and response context for the qualified native wire surface.
 //! Unsupported semantics transfer the whole session to the SDK, never an
 //! individual stateful call. A session cannot change eras while native-owned.
-use crate::compat::MAX_FRAME_BYTES;
+use crate::stdio_input::MAX_FRAME_BYTES;
 use serde_json::{Value, json};
 
 const MODERN: &str = "2026-07-28";
@@ -27,7 +27,9 @@ pub(crate) struct ProtocolSession {
     replay_bytes: usize,
     native_service: bool,
     dynamic_tools: bool,
+    native_confirmation: bool,
     legacy_name: Option<String>,
+    legacy_capabilities: Option<Value>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,6 +51,20 @@ pub(crate) struct OwnedReplyContext {
     era: Era,
 }
 impl OwnedReplyContext {
+    pub(crate) fn id(&self) -> &Value {
+        &self.id
+    }
+    pub(crate) fn legacy(&self) -> bool {
+        self.era == Era::Legacy
+    }
+    pub(crate) fn input_required(&self, mut result: Value) -> Value {
+        debug_assert!(self.era == Era::Modern);
+        result["_meta"] = json!({"io.modelcontextprotocol/serverInfo":server_info()});
+        json!({"jsonrpc":"2.0","id":self.id,"result":result})
+    }
+    pub(crate) fn error_data(&self, code: i64, message: &str, data: Value) -> Value {
+        json!({"jsonrpc":"2.0","id":self.id,"error":{"code":code,"message":message,"data":data}})
+    }
     pub(crate) fn error(&self, code: i64, message: &str) -> Value {
         json!({"jsonrpc":"2.0","id":self.id,"error":{"code":code,"message":message}})
     }
@@ -100,13 +116,18 @@ pub(crate) enum Admission<'a> {
         notifications: &'a Value,
         valid_filter: bool,
     },
+    ResourceSubscription {
+        reply: ReplyContext<'a>,
+        uri: Result<&'a str, String>,
+        add: bool,
+    },
     Initialized,
     Compatibility,
 }
 
 fn capabilities(native_service: bool, dynamic: bool) -> Value {
     if native_service {
-        return json!({"tools":{"listChanged":dynamic},"resources":{"listChanged":false},"completions":{},"prompts":{"listChanged":false}});
+        return json!({"tools":{"listChanged":dynamic},"resources":{"listChanged":true,"subscribe":true},"completions":{},"prompts":{"listChanged":false}});
     }
     json!({"tools":{"listChanged":true},"resources":{"listChanged":true,"subscribe":true},"completions":{},"prompts":{"listChanged":true}})
 }
@@ -181,10 +202,9 @@ fn object_record(value: &Value) -> bool {
 }
 
 /// These are recognized client OFFERS, not server capabilities or invocation
-/// permissions. Runtime admits this mode only with live confirmation/dynamic
-/// features disabled. No client request or input_required is enabled by this
-/// parser. Legacy tasks and unknown vocabulary remain outside this deliberately
-/// bounded admission slice.
+/// permissions. Live confirmation requires its separate retained native owner;
+/// this offer parser alone enables no client request or input_required result.
+/// Legacy tasks and unknown vocabulary remain outside this bounded admission.
 fn native_client_offers(caps: &Value) -> bool {
     only_keys(
         caps,
@@ -275,6 +295,7 @@ impl ReplyContext<'_> {
         json!({"jsonrpc":"2.0","id":self.id,"result":result})
     }
 
+    #[cfg(test)]
     pub(crate) fn cancelled_by(&self, frame: &[u8]) -> bool {
         serde_json::from_slice::<Value>(frame)
             .ok()
@@ -287,6 +308,58 @@ impl ReplyContext<'_> {
     }
 }
 
+/// The HTTP classifier has already qualified era/header/body agreement. This
+/// ephemeral adapter has no retained handshake, client capabilities or history.
+pub(crate) fn admit_http<'a>(
+    exchange: &'a obs_mcp_native::http_protocol::Exchange,
+    confirmation: bool,
+) -> Admission<'a> {
+    use obs_mcp_native::http_protocol::{Era as HttpEra, ResponseMode};
+    let value = exchange.message();
+    if exchange.response_mode() == ResponseMode::Empty {
+        return Admission::Initialized;
+    }
+    let era = match exchange.era() {
+        HttpEra::Modern => Era::Modern,
+        HttpEra::Legacy => Era::Legacy,
+    };
+    if value["method"] == "initialize" && era == Era::Legacy {
+        let Some(id) = value
+            .get("id")
+            .filter(|id| id.is_string() || id.is_i64() || id.is_u64())
+        else {
+            return Admission::Compatibility;
+        };
+        let params = &value["params"];
+        if !only_keys(params, &["protocolVersion", "clientInfo", "capabilities"])
+            || !params["protocolVersion"]
+                .as_str()
+                .is_some_and(|version| LEGACY.contains(&version))
+            || !admitted_client_info(&params["clientInfo"], true)
+            || !admitted_client_offers(&params["capabilities"], true)
+        {
+            return Admission::Compatibility;
+        }
+        return Admission::Reply(ReplyContext{id,era}.complete(json!({"protocolVersion":value.pointer("/params/protocolVersion"),"capabilities":capabilities(true,false),"serverInfo":server_info()}),false));
+    }
+    let mut protocol = ProtocolSession {
+        state: if era == Era::Modern {
+            State::Modern
+        } else {
+            State::LegacyReady
+        },
+        native_service: true,
+        native_confirmation: confirmation,
+        ..Default::default()
+    };
+    let Some(id) = value
+        .get("id")
+        .filter(|id| id.is_string() || id.is_i64() || id.is_u64())
+    else {
+        return Admission::Compatibility;
+    };
+    protocol.admit_ready(value, value.get("params").unwrap_or(&Value::Null), id, era)
+}
 impl ProtocolSession {
     pub(crate) fn native_service() -> Self {
         Self {
@@ -300,9 +373,19 @@ impl ProtocolSession {
             ..Self::native_service()
         }
     }
+    pub(crate) fn enable_confirmation(&mut self, enabled: bool) {
+        self.native_confirmation = self.native_service && enabled;
+    }
+    pub(crate) fn legacy_capabilities(&self) -> Option<&Value> {
+        self.legacy_capabilities.as_ref()
+    }
+    pub(crate) fn is_legacy(&self) -> bool {
+        matches!(self.state, State::LegacyInitializing | State::LegacyReady)
+    }
     pub(crate) fn legacy_name(&self) -> Option<&str> {
         self.legacy_name.as_deref()
     }
+    #[cfg(test)]
     pub(crate) fn history(&self) -> &[Vec<u8>] {
         &self.history
     }
@@ -372,6 +455,9 @@ impl ProtocolSession {
             && self.retain_handshake(frame)
         {
             self.state = State::LegacyInitializing;
+            if self.native_confirmation {
+                self.legacy_capabilities = Some(params["capabilities"].clone());
+            }
             self.legacy_name = params
                 .pointer("/clientInfo/name")
                 .and_then(Value::as_str)
@@ -396,6 +482,16 @@ impl ProtocolSession {
         } else {
             return Admission::Compatibility;
         };
+        self.admit_ready(value, params, id, era)
+    }
+    fn admit_ready<'a>(
+        &mut self,
+        value: &'a Value,
+        params: &'a Value,
+        id: &'a Value,
+        era: Era,
+    ) -> Admission<'a> {
+        let method = value["method"].as_str().expect("qualified method");
         let reply = ReplyContext { id, era };
         if method == "server/discover" && era == Era::Modern && only_keys(params, &["_meta"]) {
             self.state = State::Modern;
@@ -404,7 +500,7 @@ impl ProtocolSession {
                 true,
             ));
         }
-        if self.dynamic_tools && method == "subscriptions/listen" && era == Era::Modern {
+        if self.native_service && method == "subscriptions/listen" && era == Era::Modern {
             self.state = State::Modern;
             if !crate::dynamic_tools::bounded_identity(id)
                 || !crate::dynamic_tools::bounded_context(
@@ -443,13 +539,53 @@ impl ProtocolSession {
                         uris.len() <= 1024
                             && uris
                                 .iter()
-                                .all(|uri| uri.as_str().is_some_and(|u| u.len() <= 1024))
+                                .all(|uri| uri.as_str().is_some_and(|u| u.len() <= 256 * 1024))
                     })
                 });
             return Admission::Listen {
                 reply,
                 notifications,
                 valid_filter: valid,
+            };
+        }
+        if self.native_service && matches!(method, "resources/subscribe" | "resources/unsubscribe")
+        {
+            if era == Era::Modern {
+                return Admission::Reply(reply.owned().error(-32601, "Method not found"));
+            }
+            if !crate::dynamic_tools::bounded_identity(id)
+                || !crate::dynamic_tools::bounded_context(
+                    params.get("_meta").unwrap_or(&Value::Null),
+                )
+            {
+                return Admission::Reply(reply.owned().error(
+                    -32000,
+                    "Native resource subscription identity capacity exceeded",
+                ));
+            }
+            let uri = params.get("uri");
+            if let Some(uri) = uri.and_then(Value::as_str) {
+                return Admission::ResourceSubscription {
+                    reply,
+                    uri: Ok(uri),
+                    add: method == "resources/subscribe",
+                };
+            }
+            let received = match uri {
+                None => "undefined",
+                Some(Value::Null) => "null",
+                Some(Value::Bool(_)) => "boolean",
+                Some(Value::Number(_)) => "number",
+                Some(Value::Array(_)) => "array",
+                _ => "object",
+            };
+            let message = format!(
+                "[\n  {{\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"params\",\n      \"uri\"\n    ],\n    \"message\": \"Invalid input: expected string, received {received}\"\n  }}\n]"
+            );
+            return Admission::ResourceSubscription {
+                reply,
+                uri: Err(message),
+                add: method == "resources/subscribe",
             };
         }
         if method == "prompts/list" && (empty_params(params) || only_keys(params, &["_meta"])) {
@@ -513,7 +649,10 @@ impl ProtocolSession {
             if era == Era::Modern {
                 self.state = State::Modern;
             }
-            return Admission::Reply(reply.complete(result, false));
+            return Admission::Reply(match result {
+                Ok(result) => reply.complete(result, false),
+                Err((code, message)) => reply.owned().error(code, &message),
+            });
         }
         if method == "tools/list" && (empty_params(params) || only_keys(params, &["_meta"])) {
             if era == Era::Modern {
@@ -524,7 +663,21 @@ impl ProtocolSession {
         if method == "ping" && era == Era::Legacy && empty_params(params) {
             return Admission::Reply(reply.complete(json!({}), false));
         }
-        if method != "tools/call" || !only_keys(params, &["name", "arguments", "_meta"]) {
+        if method != "tools/call"
+            || !(only_keys(params, &["name", "arguments", "_meta"])
+                || (self.native_confirmation
+                    && era == Era::Modern
+                    && only_keys(
+                        params,
+                        &[
+                            "name",
+                            "arguments",
+                            "_meta",
+                            "inputResponses",
+                            "requestState",
+                        ],
+                    )))
+        {
             return Admission::Compatibility;
         }
         let Some(name) = params.get("name").and_then(Value::as_str) else {
@@ -572,6 +725,73 @@ mod tests {
 
     fn admit<'a>(session: &mut ProtocolSession, message: &'a Value) -> Admission<'a> {
         session.admit(message, &serde_json::to_vec(message).unwrap())
+    }
+
+    #[test]
+    fn invalid_prompts_keep_exact_source_errors_and_the_admitted_session() {
+        for legacy in [true, false] {
+            let mut session = ProtocolSession::native_service();
+            if legacy {
+                assert!(matches!(
+                    admit(&mut session, &initialize()),
+                    Admission::Reply(_)
+                ));
+                assert!(matches!(
+                    admit(
+                        &mut session,
+                        &json!({"jsonrpc":"2.0","method":"notifications/initialized"})
+                    ),
+                    Admission::Initialized
+                ));
+            }
+            for (name, arguments, code, message) in [
+                (
+                    "unknown-prompt",
+                    json!({}),
+                    -32602,
+                    "Prompt unknown-prompt not found",
+                ),
+                (
+                    "software-demo",
+                    json!({}),
+                    -32602,
+                    "Invalid arguments for prompt software-demo: sceneCollection: Invalid input: expected string, received undefined, sceneName: Invalid input: expected string, received undefined, inputName: Invalid input: expected string, received undefined",
+                ),
+                (
+                    "software-demo",
+                    json!({"sceneCollection":"C","sceneName":"S","inputName":"I","maxDurationSeconds":"0"}),
+                    -32603,
+                    "maxDurationSeconds must be an integer from 1 to 3600",
+                ),
+                (
+                    "software-demo",
+                    json!({"sceneCollection":"C","sceneName":"S","inputName":"I","maxDurationSeconds":"0x+10"}),
+                    -32603,
+                    "maxDurationSeconds must be an integer from 1 to 3600",
+                ),
+            ] {
+                let mut request = if legacy {
+                    json!({"jsonrpc":"2.0","id":0,"method":"prompts/get","params":{}})
+                } else {
+                    modern("prompts/get")
+                };
+                request["params"]["name"] = json!(name);
+                request["params"]["arguments"] = arguments;
+                let Admission::Reply(response) = admit(&mut session, &request) else {
+                    panic!("invalid prompt must retain its exact native error");
+                };
+                assert_eq!(
+                    response,
+                    json!({"jsonrpc":"2.0","id":0,"error":{"code":code,"message":message}})
+                );
+            }
+            let list = if legacy {
+                json!({"jsonrpc":"2.0","id":9,"method":"prompts/list"})
+            } else {
+                modern("prompts/list")
+            };
+            assert!(matches!(admit(&mut session, &list), Admission::Reply(_)));
+        }
     }
 
     #[test]
@@ -911,5 +1131,30 @@ mod tests {
         ));
         assert!(bounded.history().is_empty());
         assert!(bounded.legacy_name().is_none());
+    }
+}
+
+#[cfg(test)]
+mod confirmation_controls {
+    use super::*;
+    #[test]
+    fn retry_envelope_is_opt_in_modern_and_required_reply_never_becomes_complete() {
+        let value = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"obs-stop-record","arguments":{},"inputResponses":{"confirm":{"action":"accept","content":{"confirm":true}}},"requestState":"opaque","_meta":{"io.modelcontextprotocol/protocolVersion":MODERN,"io.modelcontextprotocol/clientInfo":{"name":"fixture","version":"1"},"io.modelcontextprotocol/clientCapabilities":{"elicitation":{"form":{}}}}}});
+        let bytes = serde_json::to_vec(&value).unwrap();
+        assert!(matches!(
+            ProtocolSession::native_service().admit(&value, &bytes),
+            Admission::Compatibility
+        ));
+        let mut enabled = ProtocolSession::native_service();
+        enabled.enable_confirmation(true);
+        let Admission::Call { reply, .. } = enabled.admit(&value, &bytes) else {
+            panic!("enabled bounded retry");
+        };
+        let result = reply
+            .owned()
+            .input_required(json!({"resultType":"input_required","requestState":"opaque"}));
+        assert_eq!(result["result"]["resultType"], "input_required");
+        assert!(result["result"].get("ttlMs").is_none());
+        assert_eq!(result["id"], 2);
     }
 }

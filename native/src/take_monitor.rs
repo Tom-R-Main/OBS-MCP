@@ -182,6 +182,7 @@ pub struct TakeMonitorCore {
     phase: Phase,
     stop_expected: bool,
     warnings: Vec<Warning>,
+    resources: Option<crate::resource_events::Publisher>,
     events: Vec<Event>,
     chapters: Vec<Chapter>,
     levels: Vec<InputLevel>,
@@ -219,6 +220,7 @@ impl TakeMonitorCore {
             phase: Phase::Starting,
             stop_expected: false,
             warnings: vec![],
+            resources: None,
             events: vec![],
             chapters: vec![],
             levels: vec![],
@@ -265,6 +267,17 @@ impl TakeMonitorCore {
             SampleKind::Picture => self.options.sample_interval_ms,
         }
     }
+    pub(crate) fn bind_resource_events(
+        &mut self,
+        publisher: Option<crate::resource_events::Publisher>,
+    ) {
+        self.resources = publisher;
+    }
+    fn resource_changed(&self) {
+        if let Some(publisher) = &self.resources {
+            publisher.take_changed();
+        }
+    }
     fn listening(&self) -> bool {
         matches!(self.phase, Phase::Starting | Phase::Running)
     }
@@ -307,6 +320,7 @@ impl TakeMonitorCore {
                 Some("OBS cannot return PPM screenshots".into()),
             );
         }
+        self.resource_changed();
         true
     }
     pub fn mark(&mut self, now_ms: i64, name: String) {
@@ -314,6 +328,7 @@ impl TakeMonitorCore {
             at_seconds: self.now(now_ms),
             name,
         });
+        self.resource_changed();
     }
     pub fn expect_stop(&mut self) {
         self.stop_expected = true;
@@ -363,6 +378,7 @@ impl TakeMonitorCore {
         self.close_still(end);
         self.close_blank(end);
         self.phase = Phase::Stopped;
+        self.resource_changed();
         Ok(())
     }
     pub fn begin_sample(&mut self, kind: SampleKind) -> Option<SampleTicket> {
@@ -708,6 +724,7 @@ impl TakeMonitorCore {
                 kind,
                 message,
             });
+            self.resource_changed();
         }
     }
     fn close_still(&mut self, at: f64) {

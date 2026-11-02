@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture, recordDefaultOracle } from "../support/native-default-fixture.js";
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -43,7 +44,7 @@ async function start(native: boolean, legacy: boolean, fixture: Fixture = () => 
   const transport = new StdioClientTransport({ command: native ? binary : process.execPath, args: native ? [] : [compatibility], cwd: root, env: {
     ...getDefaultEnvironment(), OBS_WEBSOCKET_URL: fake.url, OBS_MCP_STATE_DIR: directory,
     OBS_MCP_COMPAT_ENTRY: compatibility, OBS_MCP_COMPAT_NODE: process.execPath,
-    OBS_MCP_TOOLSETS: "all", OBS_MCP_TOOLS: "", OBS_MCP_READ_ONLY: "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false", OBS_MCP_READ_OBS_CONFIG: "false", ...env,
+    OBS_MCP_TOOLSETS: "all", OBS_MCP_TOOLS: "", OBS_MCP_READ_ONLY: "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false", OBS_MCP_READ_OBS_CONFIG: "false", ...env, ...(native ? nativeDefaultFixture(root) : {}),
   }, stderr: "pipe" });
   transport.stderr?.on("data", () => undefined);
   const session = { client, transport, fake, state };
@@ -63,10 +64,10 @@ function normalizedReport(value: unknown): Record<string, unknown> {
 }
 
 function semanticResult(result: Awaited<ReturnType<Client["callTool"]>>) {
-  return { ...result, structuredContent: normalizedReport(result.structuredContent), content: result.content.map(block => {
+  return { ...result, structuredContent: result.structuredContent ? normalizedReport(result.structuredContent) : undefined, content: result.content.map(block => {
     if (block.type !== "text") return block;
     const { text, ...metadata } = block;
-    return { ...metadata, jsonValue: normalizedReport(JSON.parse(text)) };
+    try { return { ...metadata, jsonValue: normalizedReport(JSON.parse(text)) }; } catch { return block; }
   }) };
 }
 
@@ -79,8 +80,8 @@ function noWrites(session: Session) {
   expect(session.fake.history().some(record => record.frame.op === 8)).toBe(false);
 }
 
-async function closedNative(session: Session) {
-  await vi.waitFor(() => expect(session.fake.openConnectionCount).toBe(0), { timeout: 2_000 });
+async function retainedNative(session: Session) {
+  expect(session.fake.openConnectionCount).toBe(1);
   expect(children(session.transport.pid!)).toEqual([]);
   noWrites(session);
 }
@@ -88,15 +89,15 @@ async function closedNative(session: Session) {
 afterEach(async () => {
   for (const session of sessions.splice(0)) {
     try { await session.client.close(); }
-    finally { try { await session.transport.close(); } finally { await session.fake.close(); } }
+    finally { try { await session.transport.close(); await vi.waitFor(() => expect(session.fake.openConnectionCount).toBe(0), { timeout: 4_000 }); } finally { await session.fake.close(); } }
   }
 });
 
-describe("planner deadline compatibility", () => {
-  it("joins interrupted native reads before asking the SDK to project a timeout", async () => {
+describe("retained planner deadline", () => {
+  it("preserves the Source timeout report on one retained read owner", async () => {
     const fixture: Fixture = fake => {
-      // Persistent delay covers both the native attempt and the SDK's later
-      // read-only attempt. A one-shot fault would disappear during handoff.
+      // Apply the same persistent fault schedule to both independent processes;
+      // the native operation must not retry it through another owner.
       for (let index = 0; index < 3; index++) fake.queueSuccess("GetVideoSettings", { baseWidth: 1920, baseHeight: 1080 }, 3_000);
     };
     const oracle = await start(false, false, fixture);
@@ -104,11 +105,12 @@ describe("planner deadline compatibility", () => {
     const call = { name: "obs-plan-scene-template", arguments: argumentsForPlan() };
     const expected = await oracle.client.callTool(call);
     const actual = await native.client.callTool(call);
+    recordDefaultOracle("plan-peer-or-timeout", false, call, expected, actual);
     expect(semanticResult(actual)).toEqual(semanticResult(expected));
     expect(actual.structuredContent).toMatchObject({ status: "unknown", applied: false });
-    expect(native.fake.connectionCount).toBe(2);
+    expect(native.fake.connectionCount).toBe(1);
     expect(native.fake.openConnectionCount).toBe(1);
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
     noWrites(native); noWrites(oracle);
   });
 });
@@ -125,8 +127,8 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     expect(trace(native)).toEqual(trace(oracle));
     expect(native.fake.connectionCount).toBe(1);
     expect(native.fake.history().filter(record => record.frame.d.requestType === "GetVersion")).toHaveLength(1);
-    expect(native.fake.eventSubscriptions()).toBe(4095);
-    noWrites(oracle); await closedNative(native);
+    expect(native.fake.eventSubscriptions()).toBe(4095 | (1 << 16) | (1 << 19));
+    noWrites(oracle); await retainedNative(native);
   });
 
   const variants: { name: string; fixture?: Fixture; adjust?: (args: PlanArguments) => void; status: string; reason?: string }[] = [
@@ -152,7 +154,7 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     if (reason) expect(actual.structuredContent).toMatchObject({ blockers: expect.arrayContaining([expect.objectContaining({ reason })]) });
     expect(semanticResult(actual)).toEqual(semanticResult(expected));
     expect(trace(native)).toEqual(trace(oracle));
-    noWrites(oracle); await closedNative(native);
+    noWrites(oracle); await retainedNative(native);
   });
 
   it("matches SDK invalid-argument refusal without scene reads", async () => {
@@ -160,7 +162,7 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     const native = await start(true, legacy);
     const args = argumentsForPlan(); args.template.canvas.width = 0;
     const call = { name: "obs-plan-scene-template", arguments: args };
-    const expected = await oracle.client.callTool(call);
+    const expected = await oracle.client.callTool(call); recordDefaultOracle("plan-invalid-schema", legacy, call, expected);
     const actual = await native.client.callTool(call);
     expect(actual).toEqual(expected);
     expect(actual.isError).toBe(true);
@@ -168,7 +170,7 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     noWrites(native); noWrites(oracle);
   });
 
-  it("retires native owners before retaining the SDK's explicit OBS error projection", async () => {
+  it("retains the native owner and exact Source explicit OBS error projection", async () => {
     const fixture: Fixture = fake => { fake.respondWith("GetVideoSettings", () => { throw new FakeOBSRequestError(500, "fixture unavailable"); }); };
     const oracle = await start(false, legacy, fixture);
     const native = await start(true, legacy, fixture);
@@ -177,16 +179,19 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     const actual = await native.client.callTool(call);
     expect(semanticResult(actual)).toEqual(semanticResult(expected));
     expect(actual.structuredContent).toMatchObject({ status: "unknown", applied: false });
-    expect(native.fake.connectionCount).toBe(2);
+    expect(native.fake.connectionCount).toBe(1);
     expect(native.fake.openConnectionCount).toBe(1);
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
     noWrites(native); noWrites(oracle);
   });
 
   it("validates arguments before opening any native OBS connection", async () => {
     const native = await start(true, legacy, undefined, { OBS_MCP_COMPAT_NODE: join(root, "native/target/nonexistent-scene-plan-test-node") });
     const args = argumentsForPlan(); args.template.canvas.width = 0;
-    await expect(native.client.callTool({ name: "obs-plan-scene-template", arguments: args })).rejects.toThrow();
+    const oracle = await start(false, legacy);
+    const call = { name: "obs-plan-scene-template", arguments: args };
+    const expected = await oracle.client.callTool(call); expect(expected.isError).toBe(true);
+    expect(await native.client.callTool(call)).toEqual(expected);
     expect(native.fake.connectionCount).toBe(0); expect(native.fake.history()).toEqual([]);
   });
 
@@ -196,39 +201,41 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     expect(native.fake.connectionCount).toBe(0); expect(native.fake.history()).toEqual([]);
   });
 
-  it("joins the actor and observer before concurrent-request SDK handoff", async () => {
-    // Keep the first native read unanswered throughout this15s test; the
-    // handoff must cancel/join it before the replacement SDK socket opens.
+  it("retains the original actor and observer through a concurrent read on one socket", async () => {
+    const oracle = await start(false, legacy);
+    const expected = await oracle.client.callTool({ name: "obs-plan-scene-template", arguments: argumentsForPlan() });
     const native = await start(true, legacy, fake => { fake.queueSuccess("GetSceneCollectionList", { currentSceneCollectionName: "Audit collection" }, 60_000); });
-    const firstReadWait = native.fake.waitForRequest("GetSceneCollectionList", { timeoutMs: 10_000 });
     const plan = native.client.callTool({ name: "obs-plan-scene-template", arguments: argumentsForPlan() });
     void plan.catch(() => undefined);
-    const firstRead = await Promise.race([firstReadWait, plan.then(() => { throw new Error("Plan completed before its held fixture read was observed"); })]);
-    const nextConnection = native.fake.waitForConnectionCount(2, 10_000).then(() => { expect(native.fake.openConnectionCount).toBe(1); });
+    const held = await native.fake.waitForRequest("GetSceneCollectionList");
     const version = native.client.callTool({ name: "obs-get-version", arguments: {} });
-    const [report] = await Promise.all([plan, version, nextConnection]);
+    void version.catch(() => undefined);
+    expect(native.fake.connectionCount).toBe(1); expect(children(native.transport.pid!)).toEqual([]);
+    native.fake.sendRaw({ op: 7, d: { requestType: "GetSceneCollectionList", requestId: held.frame.d.requestId,
+      requestStatus: { result: true, code: 100 }, responseData: { currentSceneCollectionName: "Audit collection" } } }, held.connectionId);
+    const [report, fresh] = await Promise.all([plan, version]);
     expect(report.structuredContent).toMatchObject({ status: "resolved", applied: false });
-    expect(native.fake.history().filter(record => record.connectionId === firstRead.connectionId && record.frame.op === 6).map(record => record.frame.d.requestType)).toEqual(["GetVersion", "GetSceneCollectionList"]);
-    expect(native.fake.connectionCount).toBe(2);
-    expect(children(native.transport.pid!)).toHaveLength(1);
-    noWrites(native);
+    expect(fresh.isError).not.toBe(true);
+    expect(semanticResult(report)).toEqual(semanticResult(expected)); expect(trace(native)).toEqual(trace(oracle));
+    expect(native.fake.connectionCount).toBe(1); await retainedNative(native);
   });
 
-  it("cancels native work and joins cleanup before starting the sole SDK owner", async () => {
+  it("retains a cancelled frontend read until its original ACK without replay or replacement", async () => {
     const native = await start(true, legacy, fake => { fake.queueSuccess("GetSceneCollectionList", { currentSceneCollectionName: "Audit collection" }, 60_000); });
     const controller = new AbortController();
-    const firstReadWait = native.fake.waitForRequest("GetSceneCollectionList", { timeoutMs: 10_000 });
     const pending = native.client.callTool({ name: "obs-plan-scene-template", arguments: argumentsForPlan() }, { signal: controller.signal }).then(value => ({ value }), error => ({ error: String(error) }));
-    await Promise.race([firstReadWait, pending.then(() => { throw new Error("Plan settled before its held fixture read was observed"); })]);
-    const nextConnection = native.fake.waitForConnectionCount(2, 10_000).then(() => { expect(native.fake.openConnectionCount).toBe(1); });
-    const settled = Promise.all([pending, nextConnection]);
-    controller.abort();
-    const [outcome] = await settled;
-    expect(outcome).toHaveProperty("error");
-    await native.client.callTool({ name: "obs-get-version", arguments: {} });
+    const held = await native.fake.waitForRequest("GetSceneCollectionList");
+    controller.abort(); expect(await pending).toHaveProperty("error");
+    const before = trace(native);
+    // A new request neither cancels the physical observer nor starts another backend.
+    const fresh = native.client.callTool({ name: "obs-get-version", arguments: {} }); void fresh.catch(() => undefined);
+    expect(native.fake.connectionCount).toBe(1);
+    native.fake.sendRaw({ op: 7, d: { requestType: "GetSceneCollectionList", requestId: held.frame.d.requestId,
+      requestStatus: { result: true, code: 100 }, responseData: { currentSceneCollectionName: "Audit collection" } } }, held.connectionId);
+    expect((await fresh).isError).not.toBe(true);
     expect(native.fake.history().filter(record => record.frame.d.requestType === "GetSceneCollectionList")).toHaveLength(1);
-    expect(children(native.transport.pid!)).toHaveLength(1);
-    noWrites(native);
+    expect(trace(native).slice(0, before.length)).toEqual(before);
+    expect(native.fake.connectionCount).toBe(1); await retainedNative(native);
   });
 
   it("joins the native workflow on transport EOF without leaving an OBS socket", async () => {
@@ -242,7 +249,7 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     expect(native.fake.connectionCount).toBe(1); noWrites(native);
   });
 
-  it("retires the fast read socket before the workflow and keeps later fallback exclusive", async () => {
+  it("keeps initial reads, workflow and later local state on one retained owner", async () => {
     const native = await start(true, legacy);
     native.fake.respondWith("GetSceneCollectionList", () => {
       expect(native.fake.openConnectionCount).toBe(1);
@@ -252,10 +259,10 @@ describe.each([false, true])("public native scene planner (legacy=%s)", legacy =
     expect(native.fake.connectionCount).toBe(1);
     const plan = await native.client.callTool({ name: "obs-plan-scene-template", arguments: argumentsForPlan() });
     expect(plan.structuredContent).toMatchObject({ status: "resolved" });
-    expect(native.fake.connectionCount).toBe(2); await closedNative(native);
+    expect(native.fake.connectionCount).toBe(1); await retainedNative(native);
     const status = await native.client.callTool({ name: "obs-control-status", arguments: {} });
     expect(status.isError).not.toBe(true);
-    expect(children(native.transport.pid!)).toHaveLength(1);
-    noWrites(native);
+    expect(children(native.transport.pid!)).toHaveLength(0);
+    expect(native.fake.connectionCount).toBe(1); noWrites(native);
   });
 });

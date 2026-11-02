@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "scope": "Reviewed composition166 candidate: ordinary static union167 and hosted164 plus three conditional dynamic controllers; public Apply Scene joins two-stage V4 custody to the retained Service, and session-local dynamic visibility retains immutable availability and bounded notification ownership. Capture Window pure domain remains unadmitted. Default178/compatibility116 unchanged. Upstream SDK2.4 dependency updates preserved; full composed, package, live and CI evidence are separate.",
+  "scope": "Unqualified combined full-cutover worktree over checked core170r. Native default source and zero runtime compatibility routes are staged; actual HTTP/TLS/platform qualification and final publication remain pending. Original core candidate/release remain intact.",
   "policy": {
-    "sourceFiles": "Every src/**/*.ts file is explicitly classified below. Production and tests are hashed separately by role; tests do not establish native runtime ownership.",
+    "sourceFiles": "Every src/**/*.ts file remains explicitly dev-oracle-owned and hash-bound. Its production/test role distinguishes Source implementation from oracle tests, not native runtime authority. Production and test hashes remain separate; neither grants runtime ownership.",
     "nativeFiles": "Every project-owned native/src/**/*.rs, native/tests/**/*.rs and optional native/build.rs plus Cargo.toml, Cargo.lock and rust-toolchain.toml is hash-bound at seal. Dependency .cargo-home caches and target output are excluded. Inline cfg(test) modules are hashed but excluded from the narrow production placeholder check.",
-    "routing": "Each manifest tool is explicitly native-readonly, native-local, native-readonly-workflow or compat. Requests and closed implemented-handler maps define admission; adopting route changes requires --update --adopt-manifest-routes after review. TS remains compatibility authority even where native read-only request execution duplicates a narrow slice.",
+    "routing": "Each manifest tool is explicitly native-readonly, native-local, native-readonly-workflow, native-service or unimplemented. Fixed checked maps and exact schemas define declaration; immutable runtime profiles still restrict discovery/admission. Route changes require explicit --update --adopt-manifest-routes after review. The retained TypeScript Source is a development oracle only; native refusal never transfers to it.",
     "evidence": "A seal detects drift and inventory omissions; it does not prove semantic parity, absence of all stubs, performance, delivered packaging, or native OBS behavior. Required differential and package checks remain separate.",
     "manualSnapshots": "Opt-in LIST/CAPTURE and manual RESTORE; caller policy precedes snapshot selection including dryRun, missing selection stays offline, and valid selection is rechecked by the combined Service. Manual restore uses only the eight closed legacy snapshot mutations, one SerialRealtime nonhalting batch, strict complete-vector v3 receipts and no lifecycle/file/Stop authority. Unknown outcomes never authorize replay. The sole snapshot history owner is retained through actual publication and admitted restore planning/settlement. Snapshots are ordered observations, not an atomic OBS transaction or Stage receipt. Missing/replaced established history, corrupt JSON, unproven locks, unsafe paths, byte capacity and publication uncertainty refuse explicitly. Native never renames corrupt history away or steals an old lock based on age; these are conservative differences from the predecessor. Source read-only classification permits capture during a take; snapshot file publication borrows no recording receipt writer. The default owner caps history at 8 MiB and concrete capture at 4096 requests per batch, with the Service absolute deadline. Blocking filesystem calls are joined; a deadline does not prove a hard kernel-I/O latency bound.",
     "propertyEnumeration": "Dedicated guarded adapter only; absent from RawReadRequest. Reported source kind governs the exact predecessor guard; ScreenCaptureKit display_uuid/application always refuse and XComposite capture_window requires a nonempty string, while integer window properties skip the unsafe settings probe. Native additionally refuses changed canonical evidence at actual dispatch/result publication, without retry. Optional nullable arrays of record items preserve every valid response field; malformed shapes reproduce Source SDK output-validation messages within a 32 KiB diagnostic limit, above which native refuses explicitly.",
@@ -15,7 +15,7 @@
   },
   "contractManifest": {
     "path": "native/assets/tools.json",
-    "sha256": "91d4263794efe82dbb5e65150a225efb77cdd5a9c9092d2b90eacaadc3eba346"
+    "sha256": "f7390c16acb6ca0426dc3edebc2e193b0cacb74f314bb0b0fcc8476af5353912"
   },
   "protocolRoutes": {
     "server/discover": "native-readonly",
@@ -24,379 +24,380 @@
     "prompts/list": "native-local",
     "prompts/get": "native-local-qualified-arguments",
     "resources/templates/list": "native-local",
-    "other-methods": "compat-exclusive-handoff",
-    "resources/list": "native-readonly-qualified-inventory"
+    "other-methods": "native-or-explicit-refusal",
+    "resources/list": "native-readonly-qualified-inventory",
+    "tools/call": "native-profile-admission"
   },
   "sourceOwnership": {
     "src/client.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/client.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/http.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/index.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/logger.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/logger.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/obs-config.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/obs-config.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/obs-protocol.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/obs-protocol.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/server.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/state-dir.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/after-change.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/after-change.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/apply-scene.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/apply-scene.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/audio-only.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/audio-only.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/batch.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/capture-backend.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/config.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/confirm.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/confirm.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/demo.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/demo.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/filters.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/frame-sample.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/frame-sample.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/general.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/guards.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/index.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/inputs.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/lease.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/lease.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/media-inputs.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/media-verification.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/observation.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/observe.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/operation-receipts.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/operation-receipts.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/output-schema.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/output-schema.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/output-start.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/output-start.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/outputs.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/preflight.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/preflight.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/production.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/prompts.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/protocol-extensions.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/protocol.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/record.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/request-tool.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/resources.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/resources.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/results.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/results.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/scene-audit.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/scene-audit.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/scene-identity.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/scene-items.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/scene-template.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/scenes.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/screenshot.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/snapshots.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/snapshots.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/sources.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/stage.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/streaming.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/take-monitor.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/take-monitor.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/takes.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/takes.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/tool-inventory.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/tools.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/toolset-tools.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/toolset-tools.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/toolsets.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/toolsets.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/transitions.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/trim.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/trim.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/ui.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/workflows.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/workflows.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/version.ts": {
       "role": "production",
-      "owner": "compat"
+      "owner": "dev-oracle"
     },
     "src/tools/media-verification.test.ts": {
       "role": "test",
-      "owner": "compat"
+      "owner": "dev-oracle"
     }
   },
   "toolRoutes": {
-    "obs-apply-scene": "compat",
+    "obs-apply-scene": "native-service",
     "obs-audit-scene": "native-readonly-workflow",
-    "obs-batch": "compat",
-    "obs-broadcast-custom-event": "compat",
-    "obs-call-request": "compat",
-    "obs-call-vendor-request": "compat",
-    "obs-capture-window": "compat",
-    "obs-claim-control": "compat",
-    "obs-contact-sheet": "compat",
-    "obs-control-status": "compat",
-    "obs-create-input": "compat",
-    "obs-create-profile": "compat",
-    "obs-create-record-chapter": "compat",
-    "obs-create-scene": "compat",
-    "obs-create-scene-collection": "compat",
-    "obs-create-scene-item": "compat",
-    "obs-create-source-filter": "compat",
+    "obs-batch": "native-service",
+    "obs-broadcast-custom-event": "native-service",
+    "obs-call-request": "native-service",
+    "obs-call-vendor-request": "native-service",
+    "obs-capture-window": "native-service",
+    "obs-claim-control": "native-service",
+    "obs-contact-sheet": "native-service",
+    "obs-control-status": "native-service",
+    "obs-create-input": "native-service",
+    "obs-create-profile": "native-service",
+    "obs-create-record-chapter": "native-service",
+    "obs-create-scene": "native-service",
+    "obs-create-scene-collection": "native-service",
+    "obs-create-scene-item": "native-service",
+    "obs-create-source-filter": "native-service",
     "obs-describe-request": "native-local",
-    "obs-duplicate-scene-item": "compat",
+    "obs-duplicate-scene-item": "native-service",
     "obs-get-canvas-list": "native-readonly",
     "obs-get-current-scene": "native-readonly",
     "obs-get-current-transition": "native-readonly",
@@ -412,10 +413,10 @@
     "obs-get-input-default-settings": "native-readonly",
     "obs-get-input-deinterlace-field-order": "native-readonly",
     "obs-get-input-deinterlace-mode": "native-readonly",
-    "obs-get-input-kind-list": "compat",
-    "obs-get-input-list": "compat",
+    "obs-get-input-kind-list": "native-service",
+    "obs-get-input-list": "native-service",
     "obs-get-input-mute": "native-readonly",
-    "obs-get-input-property-list-items": "compat",
+    "obs-get-input-property-list-items": "native-service",
     "obs-get-input-settings": "native-readonly",
     "obs-get-input-volume": "native-readonly",
     "obs-get-last-replay-buffer-replay": "native-readonly",
@@ -445,10 +446,10 @@
     "obs-get-source-active": "native-readonly",
     "obs-get-source-filter": "native-readonly",
     "obs-get-source-filter-list": "native-readonly",
-    "obs-get-source-screenshot": "compat",
+    "obs-get-source-screenshot": "native-service",
     "obs-get-special-inputs": "native-readonly",
     "obs-get-stats": "native-readonly",
-    "obs-get-status": "compat",
+    "obs-get-status": "native-service",
     "obs-get-stream-service-settings": "native-readonly",
     "obs-get-stream-status": "native-readonly",
     "obs-get-studio-mode": "native-readonly",
@@ -461,105 +462,105 @@
     "obs-get-version": "native-readonly",
     "obs-get-video-settings": "native-readonly",
     "obs-get-virtual-cam-status": "native-readonly",
-    "obs-observe": "compat",
-    "obs-offset-media-input-cursor": "compat",
-    "obs-open-input-filters": "compat",
-    "obs-open-input-interact": "compat",
-    "obs-open-input-properties": "compat",
-    "obs-open-source-projector": "compat",
-    "obs-open-video-mix-projector": "compat",
-    "obs-pause-record": "compat",
+    "obs-observe": "native-service",
+    "obs-offset-media-input-cursor": "native-service",
+    "obs-open-input-filters": "native-service",
+    "obs-open-input-interact": "native-service",
+    "obs-open-input-properties": "native-service",
+    "obs-open-source-projector": "native-service",
+    "obs-open-video-mix-projector": "native-service",
+    "obs-pause-record": "native-service",
     "obs-plan-scene-template": "native-readonly-workflow",
-    "obs-preflight": "compat",
-    "obs-prepare-demo": "compat",
-    "obs-press-input-property-button": "compat",
-    "obs-record-clip": "compat",
-    "obs-recover-demo": "compat",
-    "obs-release-control": "compat",
-    "obs-remove-input": "compat",
-    "obs-remove-profile": "compat",
-    "obs-remove-scene": "compat",
-    "obs-remove-scene-item": "compat",
-    "obs-remove-source-filter": "compat",
-    "obs-restore": "compat",
-    "obs-resume-record": "compat",
-    "obs-save-replay-buffer": "compat",
-    "obs-save-source-screenshot": "compat",
-    "obs-send-stream-caption": "compat",
-    "obs-set-current-profile": "compat",
-    "obs-set-current-scene": "compat",
-    "obs-set-current-scene-collection": "compat",
-    "obs-set-current-transition": "compat",
-    "obs-set-input-audio-balance": "compat",
-    "obs-set-input-audio-monitor-type": "compat",
-    "obs-set-input-audio-sync-offset": "compat",
-    "obs-set-input-audio-tracks": "compat",
-    "obs-set-input-deinterlace-field-order": "compat",
-    "obs-set-input-deinterlace-mode": "compat",
-    "obs-set-input-mute": "compat",
-    "obs-set-input-name": "compat",
-    "obs-set-input-settings": "compat",
-    "obs-set-input-volume": "compat",
-    "obs-set-media-input-cursor": "compat",
-    "obs-set-output-settings": "compat",
-    "obs-set-persistent-data": "compat",
-    "obs-set-preview-scene": "compat",
-    "obs-set-profile-parameter": "compat",
-    "obs-set-record-directory": "compat",
-    "obs-set-scene-item-blend-mode": "compat",
-    "obs-set-scene-item-enabled": "compat",
-    "obs-set-scene-item-index": "compat",
-    "obs-set-scene-item-locked": "compat",
-    "obs-set-scene-item-transform": "compat",
-    "obs-set-scene-name": "compat",
-    "obs-set-scene-transition-override": "compat",
-    "obs-set-source-filter-enabled": "compat",
-    "obs-set-source-filter-index": "compat",
-    "obs-set-source-filter-name": "compat",
-    "obs-set-source-filter-settings": "compat",
-    "obs-set-stream-service-settings": "compat",
-    "obs-set-studio-mode": "compat",
-    "obs-set-tbar-position": "compat",
-    "obs-set-transition-duration": "compat",
-    "obs-set-transition-settings": "compat",
-    "obs-set-video-settings": "compat",
-    "obs-sleep": "compat",
-    "obs-snapshot": "compat",
-    "obs-split-record-file": "compat",
-    "obs-stage-scene": "compat",
-    "obs-start-output": "compat",
-    "obs-start-record": "compat",
-    "obs-start-replay-buffer": "compat",
-    "obs-start-stream": "compat",
-    "obs-start-virtual-cam": "compat",
-    "obs-stop-output": "compat",
-    "obs-stop-record": "compat",
-    "obs-stop-replay-buffer": "compat",
-    "obs-stop-stream": "compat",
-    "obs-stop-virtual-cam": "compat",
-    "obs-take-mark": "compat",
-    "obs-take-scene": "compat",
-    "obs-take-start": "compat",
-    "obs-take-status": "compat",
-    "obs-take-stop": "compat",
-    "obs-test-connection": "compat",
-    "obs-toggle-input-mute": "compat",
-    "obs-toggle-output": "compat",
-    "obs-toggle-record": "compat",
-    "obs-toggle-record-pause": "compat",
-    "obs-toggle-replay-buffer": "compat",
-    "obs-toggle-stream": "compat",
-    "obs-toggle-virtual-cam": "compat",
-    "obs-trigger-hotkey-by-key-sequence": "compat",
-    "obs-trigger-hotkey-by-name": "compat",
-    "obs-trigger-media-input-action": "compat",
-    "obs-trigger-studio-transition": "compat",
-    "obs-trigger-transition": "compat",
-    "obs-trim-take": "compat"
+    "obs-preflight": "native-service",
+    "obs-prepare-demo": "native-service",
+    "obs-press-input-property-button": "native-service",
+    "obs-record-clip": "native-service",
+    "obs-recover-demo": "native-service",
+    "obs-release-control": "native-service",
+    "obs-remove-input": "native-service",
+    "obs-remove-profile": "native-service",
+    "obs-remove-scene": "native-service",
+    "obs-remove-scene-item": "native-service",
+    "obs-remove-source-filter": "native-service",
+    "obs-restore": "native-service",
+    "obs-resume-record": "native-service",
+    "obs-save-replay-buffer": "native-service",
+    "obs-save-source-screenshot": "native-service",
+    "obs-send-stream-caption": "native-service",
+    "obs-set-current-profile": "native-service",
+    "obs-set-current-scene": "native-service",
+    "obs-set-current-scene-collection": "native-service",
+    "obs-set-current-transition": "native-service",
+    "obs-set-input-audio-balance": "native-service",
+    "obs-set-input-audio-monitor-type": "native-service",
+    "obs-set-input-audio-sync-offset": "native-service",
+    "obs-set-input-audio-tracks": "native-service",
+    "obs-set-input-deinterlace-field-order": "native-service",
+    "obs-set-input-deinterlace-mode": "native-service",
+    "obs-set-input-mute": "native-service",
+    "obs-set-input-name": "native-service",
+    "obs-set-input-settings": "native-service",
+    "obs-set-input-volume": "native-service",
+    "obs-set-media-input-cursor": "native-service",
+    "obs-set-output-settings": "native-service",
+    "obs-set-persistent-data": "native-service",
+    "obs-set-preview-scene": "native-service",
+    "obs-set-profile-parameter": "native-service",
+    "obs-set-record-directory": "native-service",
+    "obs-set-scene-item-blend-mode": "native-service",
+    "obs-set-scene-item-enabled": "native-service",
+    "obs-set-scene-item-index": "native-service",
+    "obs-set-scene-item-locked": "native-service",
+    "obs-set-scene-item-transform": "native-service",
+    "obs-set-scene-name": "native-service",
+    "obs-set-scene-transition-override": "native-service",
+    "obs-set-source-filter-enabled": "native-service",
+    "obs-set-source-filter-index": "native-service",
+    "obs-set-source-filter-name": "native-service",
+    "obs-set-source-filter-settings": "native-service",
+    "obs-set-stream-service-settings": "native-service",
+    "obs-set-studio-mode": "native-service",
+    "obs-set-tbar-position": "native-service",
+    "obs-set-transition-duration": "native-service",
+    "obs-set-transition-settings": "native-service",
+    "obs-set-video-settings": "native-service",
+    "obs-sleep": "native-service",
+    "obs-snapshot": "native-service",
+    "obs-split-record-file": "native-service",
+    "obs-stage-scene": "native-service",
+    "obs-start-output": "native-service",
+    "obs-start-record": "native-service",
+    "obs-start-replay-buffer": "native-service",
+    "obs-start-stream": "native-service",
+    "obs-start-virtual-cam": "native-service",
+    "obs-stop-output": "native-service",
+    "obs-stop-record": "native-service",
+    "obs-stop-replay-buffer": "native-service",
+    "obs-stop-stream": "native-service",
+    "obs-stop-virtual-cam": "native-service",
+    "obs-take-mark": "native-service",
+    "obs-take-scene": "native-service",
+    "obs-take-start": "native-service",
+    "obs-take-status": "native-service",
+    "obs-take-stop": "native-service",
+    "obs-test-connection": "native-service",
+    "obs-toggle-input-mute": "native-service",
+    "obs-toggle-output": "native-service",
+    "obs-toggle-record": "native-service",
+    "obs-toggle-record-pause": "native-service",
+    "obs-toggle-replay-buffer": "native-service",
+    "obs-toggle-stream": "native-service",
+    "obs-toggle-virtual-cam": "native-service",
+    "obs-trigger-hotkey-by-key-sequence": "native-service",
+    "obs-trigger-hotkey-by-name": "native-service",
+    "obs-trigger-media-input-action": "native-service",
+    "obs-trigger-studio-transition": "native-service",
+    "obs-trigger-transition": "native-service",
+    "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-02T10:29:12.747Z",
-    "sourceRevision": "82c78ad6acb14318be3163bc9508010a235b2116",
+    "at": "2026-11-02T19:44:13.976Z",
+    "sourceRevision": "8757dbad7b3d477adf61ef609afe5104e4e5fe8c",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -650,81 +651,127 @@
       "src/version.ts": "bbef8732b48ecc26610a319093df0a3c6d12f59d1f1c89f0f636c5918d0a53b3"
     },
     "nativeHashes": {
+      "docs/protocol.json": "042e8c42da2dfd6d78fa0f695b2b59495d8254d5fe718b0f20d0e2e6f58a6993",
+      "native/Cargo.lock": "9f064df1717c4b7db7f3b675b246a22f9c1669bd625f2e9d926944541ebc988e",
+      "native/Cargo.toml": "877db5341812da66c783d0f522abc477bbbf69db00bf063258ee2fb10f4e92dc",
+      "native/assets/prompts.json": "8e75374c641fce8ef09bd460b02be92ed55034de4faa89155f11eb18d4e580f3",
+      "native/crates/platform-tls/Cargo.lock": "454dbde2ec2855f608b52c5655454bc14ac7995645e6b878802f57b0ebd32eac",
+      "native/crates/platform-tls/Cargo.toml": "69eca37dac58dbd7e815bccf961815dce1b7e630b85aa9a075919859bb8a3188",
+      "native/crates/platform-tls/build.rs": "bc4adfe0ef8bdf1bb3c2b9069e70f586a9709fcf92b0b605e77a02eec929a362",
+      "native/crates/platform-tls/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
+      "native/crates/platform-tls/src/ffi.rs": "d947e3bfc095e4159da928ef2c11ca2973e5053f51aba897ce06877bb4546055",
+      "native/crates/platform-tls/src/gnutls.rs": "239de081d227404979e61503a73a60051531056f108bb72e7b3fd51aa6c4b963",
+      "native/crates/platform-tls/src/gnutls_core.rs": "9a86f1507f87e12511ed07e0bbf0aa81f23ea4406ecffe388b34d69d16c4e38d",
+      "native/crates/platform-tls/src/gnutls_ffi.rs": "f979dc8b67091f2927e8ffbdaa8a6497c3bcb03b3df3ce322c6117f7a45b78bf",
+      "native/crates/platform-tls/src/lib.rs": "5a654b6aaf1566f0578d465c7a2a2a5251203fd041ffce03a6a1c3473cc68f5f",
+      "native/crates/platform-tls/src/macos.rs": "c03342d627548d69bc69a5c46c2ede66a93b8d24e649fda43c1b85cbab44c0f4",
+      "native/crates/resolver/Cargo.lock": "d5565893e30158391a515ecdb765f8f55a56fe76ec07fb91ffbddaecc35e71a8",
+      "native/crates/resolver/Cargo.toml": "cffba41fe19fc597c2bef0ca2454ba497c0f5c65a2cfa4f7ae6a3c2320ad65b2",
+      "native/crates/resolver/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
+      "native/crates/resolver/src/helper.rs": "fb34dcd088945660e413a35816f22607b291247e15e9714df2d6b4b4daf18ab1",
+      "native/crates/resolver/src/lib.rs": "96f3298cae7c854caeba10dda7a4473bd53a6571de0cf9ac13c1c1ebc58c97ce",
+      "native/crates/resolver/src/protocol.rs": "e8b1085fdd8be7737af47ce99eb31ef5b15c38edb02f6115b6d7e498845dfa68",
+      "native/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
+      "native/src/advanced_commands.rs": "3e7552782bdacf190a47119dee981a65e95d12b253dbcb1207ac771fc54e365d",
       "native/src/apply_scene.rs": "95691be3557a70e80b4a177bd0987ad5fb2a051fafc561e14e9e554c42ebe8f7",
       "native/src/apply_scene_transport.rs": "de63a911f97e56ec74518fd443e7c0adfbd7f9fc8475cd1774d37f8d694c4fcf",
       "native/src/apply_scene_workflow.rs": "031b3f567013fdce7ecce9a0b2390c786e46f9ae64c48ecd93649f128c0b4371",
       "native/src/capture_backend.rs": "6cb5f7338576f37e5323e21df34492e0dff8e0b47ac5058fd2096c2ad4728e66",
-      "native/src/capture_window.rs": "cc2c87d854efa91fdc52f93b134f1e1d5d3ee1e1b2e56eda85f8b47339690879",
+      "native/src/capture_window.rs": "cd527b6274c8284ee4920282402ece996d8ce43e689715bc0c540a254c5fd74a",
+      "native/src/capture_window_workflow.rs": "4e336e6dc3596e037fe609c0b40d4ecdc1ef4b1a31169ec91d5fc29f4d96ff22",
       "native/src/clock.rs": "49ab4018f32597bf4236ee311285459aec0414c14c19b72b242b196d2cabc2f9",
-      "native/src/compat.rs": "a362d5cdcafe355c15f7b20f372f5db2d4fca4b5547630767a0f22320e599229",
       "native/src/config.rs": "63e6eac77da7c5e1f586e5f6d9987081294d8bdf5475024cca69a1a9596ed0b3",
+      "native/src/confirmation.rs": "7e575e61ba1ebdbfc16d27f6cec1d7bc291aa8ae911a08761b01e6483c478247",
       "native/src/control.rs": "19453537c47d0f8ee390ececb9eb3456ac5d919e621f5ee93344dd6dca4d6677",
       "native/src/custody.rs": "9ebb1004005940e6f6a1b5e036eff08b36611cdd06d7ddcb2f01e781f865daf6",
       "native/src/custom_mutations.rs": "6770b06bead6a0c52ffddf1e6ec3912c676dea6747304a9c3813a279ab00e925",
       "native/src/demo.rs": "bf3f3fee4cabe0232a17c79c1c66a893e33012787f114f63fcff268ea0100e78",
       "native/src/demo_transport.rs": "9ad2ddcb35480e50afab6f889c0e7432d6674bb020181ddb6ad38cc79ddde4a9",
-      "native/src/dynamic_tools.rs": "4acca730eeedd7f350a0b1798073e7f607c355724c3c951f4906d8154217650c",
+      "native/src/dynamic_tools.rs": "ec299aaa43e7e0d9115305dec806943b910ef2eb296fe531e5b8461aa6633ac1",
       "native/src/dynamic_visibility.rs": "0a9a71911a85066f332e4a509cbfca5e46d69f755441aa3dfef9646137321811",
-      "native/src/generic_requests.rs": "e367d164fffc243151077c44a9d7c8dfa620f1a62cbf89e5bafd2151e4bbd1db",
+      "native/src/generic_requests.rs": "e9adbb1f7292932e27893ae0bf901f63751725270d45d3059730ec756452e417",
+      "native/src/http_bridge.rs": "aec82df824d0bc3e4a91cd1d0136a9b8d201f0108e03c33e15c4fe1aac81994e",
+      "native/src/http_ingress.rs": "908382adfdc15e4ce330e5c57704cefd9dfeb6a612bc0ec4c50d442f6ef46906",
+      "native/src/http_protocol.rs": "779f18ac3af2db94f616a2de263a97c8c5d02c239aef3ff4bf3a401c3496f271",
+      "native/src/http_resources.rs": "c0c1815219d731143ad8c02ec0c1281cc30c39fc530a08fe29ce5435c5dd8122",
+      "native/src/http_sink.rs": "0e5f3539a8485fa94317e6df0af49fc8e53747ab6ea00f777d4182f4fe904229",
+      "native/src/http_startup.rs": "e740c2e2cc7daa5ba26de0d86861db9ea93787ff72ab728c085a9f713fa40b6b",
+      "native/src/http_tcp.rs": "2e3f01ac0a70e056eb22859d349ba6846d2c520529b0aa2f9a327a2953442ce7",
+      "native/src/http_tcp_head.rs": "c234362523e2077641d0257c9d71c1d2730c84d6522b1528a9a404a53cf1a076",
+      "native/src/http_tcp_io.rs": "b53226bcc0dcbd8ae7306dbe3395ee8b2c38d6f4281ca98b8ea6e3440c947025",
       "native/src/identity.rs": "c1ae69be0c0542cc93d80f3e8f6989d830fb0cfffb926c84a0b75d9aabe84028",
       "native/src/js_json.rs": "df66ecb286720f06ec24c217cddb704e439c2b8bd0072ce66d964d5340770c48",
-      "native/src/lib.rs": "ae15d08ce0f0522edeff9cbf19b3cbf7f80c7a4ddbdddd8707ef0a4804bd434f",
-      "native/src/main.rs": "58fee36afc191f23eef46a5bf2673ca1a0404ae6233a5d2a187412c5cb249a6d",
+      "native/src/lib.rs": "60f5b83441df60bbe56e37eb5777e27387925eb94d86c7dd9afb5f1dba699260",
+      "native/src/main.rs": "9dce1b4a1a2ce59a8f8932dfe7f7c47506323473e9b4684df6b2a22cce10b945",
       "native/src/media_backend.rs": "91130d9658f0e0337ba9fa51c2fcf387c18da2de42226ebf98d3c9a20775394e",
       "native/src/media_tools.rs": "20ea87a19e994068dae24921cbb912475495d3d747efbc9788fd40b847f30087",
       "native/src/media_verification.rs": "b31e31a5afc4841ee08fe1a7d9b083c47728f1ddf61c473c09e7ed72fdaf04c6",
-      "native/src/native_service.rs": "3468b350b0cb3bb5de9dc1a7f96fd4b8a148561541badd9ebd8890a24f511998",
-      "native/src/obs.rs": "80f0bf6ddcbc01eb99abf1f0048afaf731fd4916e39b465d4246a31f12759ad0",
-      "native/src/observation.rs": "e7708101677c1f682623c863850436e05efc31f1e98175ffc0d10ea02e905058",
-      "native/src/operation_store.rs": "dc189c4fda6a0d51910dcb3aef4d619f5bb531df47b5d8d1a1ccc64cf71ea87a",
+      "native/src/native_connect.rs": "29feecc457d5a40ada7a0186be642c2b46ef570412f3cfc024429c6e4f34973e",
+      "native/src/native_host.rs": "7f4ed76a008872d9da93f92c82be4735b465542a45e79de533de8d7e0c24c32c",
+      "native/src/native_profile.rs": "9d3d33940ed57c7e038d2d0e7346258992f2250017011bdb0a34c48a2bc35675",
+      "native/src/native_service.rs": "e9d20968c373bb9064ba000fe3fb2b33b295fa45527acecbe7de1b465935c785",
+      "native/src/network_transport.rs": "045614c1b66404ed371be5dc1bc0001e81468f9a82c816538a96f50337fa40cb",
+      "native/src/obs.rs": "bb1c513d106eedfe67616743a50437884a5fed1fa2a3ca7589eb221ef941db01",
+      "native/src/observation.rs": "6edb66cdb8954dc6076601f0caa5dcd3107610d41d824472b2f2dcd5212cb114",
+      "native/src/opaque_commands.rs": "98c4b2dd8de81b9468905ca9f36ef15b83618a9c05502529752b155531a4386d",
+      "native/src/operation_store.rs": "e2eea5a065133213cc63037549f4fdb5b9888823ffee0ffc9ec27c3db1fa674e",
       "native/src/ordered_transform.rs": "f05c314e4b8a065768b1bd46aa7dd31c7f995b049be7e88202c8c9c09d9a90c4",
       "native/src/output_events.rs": "cf0841670a57dd8aef64baf124633aec0ba6f8cba38b1f8233639dd7370d0d89",
       "native/src/output_start.rs": "c094ea38816770145fc88f07d7fa8acd271b57863e087d829cb172e840b7d5c1",
       "native/src/output_start_v2.rs": "6e1a96c1abb1f0f0b60e6f5225e98a167043f69927d123b9f600fb7169e47d7d",
       "native/src/output_stop_result.rs": "9f18169a160d3639106ab20558c8f56cb9ebf781c1b235a698bcf31484fbcd99",
-      "native/src/output_transport.rs": "e40054d05ca7a637bdfa7ae5842c275ba405f90d6fc4958672786da2eaef9062",
+      "native/src/output_transport.rs": "1f948fd8e6bab1de24fb28077b25164e2c02375186c79c13001d48aec5a419f1",
+      "native/src/platform_transport.rs": "a3b1efd1c3c8be60f3126a4836ff8d41d4eadcae18f26d0c41e2212081047b9a",
       "native/src/preflight.rs": "007eaeb2bf358a1380bc154a01e04861e4924266c2fc535e4fd4bc8720917342",
       "native/src/preparation_journal.rs": "5124bd642bd8e279c94b0d649f6eef4f98b78860237194559d4b21df8c4c7dc8",
       "native/src/production_observation.rs": "0a1ca3d95a25b80deb7f90fd2ec39956a50cd7301ace402be36fe1f22a7405e8",
-      "native/src/prompt_catalog.rs": "c16a9f1f294882d0e01c2a4dfd6e1b32ee0bb28beeef86689a4731d0294ab3af",
+      "native/src/prompt_catalog.rs": "98cb14324fdfcecfac5ef528544f687a08930cf5d9a21592d8b3d7f1969667f9",
       "native/src/property_list.rs": "76857f023ab0d2659c9018dedd32fc35aa015efe46751b000b8559172d1dc8c1",
-      "native/src/protocol.rs": "f87de27713e36f1bc88002778669484453723e9e92d86c89014f5288ef4349b5",
+      "native/src/protocol.rs": "2f0b8cba018124a86dd92127788bf2877dfa83dc8cc7c5f85082ecae403e99d5",
       "native/src/protocol_catalog.rs": "d1327959ff44345614abc95c413da81a7aba99b0235c0f7949dfbbcbcc3cd52d",
       "native/src/read_workflow.rs": "2fc3a72b0b73255bef8e56aad5212449952a0597d46a903eae222b906eaa193e",
-      "native/src/receipt_broker.rs": "5e4cd40ebf3a2bd8c1a95e21d527dfe8b53aa8b3f61f5dcc8570073837bf36c3",
+      "native/src/receipt_broker.rs": "cc722434dbe193b0f3b364bdd0d273438eaa0460557f9311382416621a681346",
       "native/src/record_clip.rs": "1ab95dc67f2655aa63d59eb6311ac634ac3eb1ce9f6196070739bb85eb8d770f",
       "native/src/record_impact.rs": "b7478c90d2797b4ec1a6e41c6d5d5f164548f1461ba7206b7e199955f133c6b5",
       "native/src/record_stop_transport.rs": "5f798d2ceb19a2ff5a83582ccf6b56378422571456496c882de8d4f3a6081108",
       "native/src/resource_catalog.rs": "dc1493741f67582d09bb3169c2d8fd3220a3c9e86cc57e13292a94455b2669fc",
+      "native/src/resource_events.rs": "bee2e8ea3b98ba420d78fff3e7fab952e006b9ecd5921ef19677dafaee474d61",
+      "native/src/resource_notifications.rs": "4fd3057434b0bd16d409724e92d2733124d99852f39d3f19ca28c3cd376023e6",
       "native/src/restore_transport.rs": "3966af3b59df358adaf2fe32f9800005ab91c52e089be9a51e8b71ea053b0707",
       "native/src/restore_workflow.rs": "8c5713f68e7785353de317fcd91021db1744f04cc9f97fc0bd9c1cd5db339838",
       "native/src/runtime_identity.rs": "7ff71fbd99ec5c5c089e37259641eec3b722fa7815882d0284572a65a211e2e5",
-      "native/src/scene_audit.rs": "bcb5a8b23b26b7d6921b6248d40c8b5588dc703e21361f914134c77a2c125b70",
+      "native/src/scene_audit.rs": "a5792b9bdda085b91d81ae293483839c7bf8427dd799adbb2e62396dba7d6cc0",
       "native/src/scene_item_transform_mutation.rs": "4f404911f9467aec61c6ca6d542cf9a0ae54b5f4ef65dd7b3b3b896190c61270",
       "native/src/scene_plan.rs": "cc990bbc8203bd8f640c3cf9d25e810030ebdb6d1ed2564f640d750040f7f4b9",
-      "native/src/schema.rs": "fb1620861a35ea6a4d825efc30c3b5441ecea299a3905bbca189a99c4d5cbd61",
-      "native/src/service.rs": "98a4cf2b996143a9f7dd4b4fcb39744a4091e5f313b433a94e1a87e2b15f359e",
-      "native/src/service_events.rs": "f09c4da459964f1c3e1792042cad9ae16d28fcb3747382cf1bbab77ee23371a4",
+      "native/src/schema.rs": "7e6def4608a20fca58dc5006cc2c62b9fd3348f562086556ef57ac1523aa2830",
+      "native/src/service.rs": "6bb8f9be7e047673e86a80e5b04a559b98a25c4ca76ef282e6e98bc4618183f5",
+      "native/src/service_events.rs": "bff915c0bc04cfab84f5a4e7e156ff1f8f62d4414a2156b3875837cef0f38a0f",
       "native/src/service_read_tools.rs": "8c9af46e55d4dc8be66e53b058f48b9ce5c51f92c45bd86e163e61f31e783ec0",
       "native/src/service_read_workflows.rs": "7198354957d3e6c75c6143353892b62e1f1de4ea4433782aeed3a47e65baaeba",
-      "native/src/session.rs": "8dce69ec2f53a12e863e02b12507aef9cf72bf15ede2a12ebee0f5208e541e53",
-      "native/src/session_observation.rs": "9273c7387614697db2ead9280484163389c7d9a04e27d7c0ded4786625ab0a1b",
-      "native/src/snapshot_tools.rs": "4d8e1f38cdc8fb5b6b8188e14568674b826aad5ee86ffe9698fb7649036324e6",
+      "native/src/session.rs": "c331a447628d144d6a7713386cc6ef38b2732b8e7bf0b3f840256742074bafa7",
+      "native/src/session_observation.rs": "086261a871ed14e91b16ec41e9a70009e0d38b7ace610c76b04b7f9aa519158e",
+      "native/src/snapshot_tools.rs": "bdd8fe7c803377a0bcf1e8c3acb7da4f24e672081c5b8db01648c2fccece2446",
       "native/src/snapshots.rs": "23f033d021d7d994ea5b59a8960b07cbdc347ff910847a320929b06459e2f987",
       "native/src/stage.rs": "1a3e2ec7628f286790fe56e356cd3641ffa1b208460b08d23c657d7eca784045",
       "native/src/stage_transport.rs": "b72ade1b2516c8b3d3e64393f404d8cac886f569879d58acc35f2b5094c92f65",
+      "native/src/stdio_input.rs": "b134b1cd131c0aa6802d34a959dddabbeb592e3c988d8fe1c85e6585588418f6",
       "native/src/stdio_output.rs": "5e2df71b1b7b8a13cde3637976a0080f0352feefc8df753a15a60bff1b37f98d",
-      "native/src/take_monitor.rs": "7fa83f8de47ec113f968cbc711ad8792ef7dfd0fd9ff626207eee56483fb142b",
+      "native/src/take_monitor.rs": "e3f8a7440a655063ba913513d60e59174d57d9c221265250c7643c25f323b4d0",
       "native/src/take_transport.rs": "2071ef5a853908f636e575201d100e1299fc101d3eb80e70a38afb2afbac60e1",
-      "native/src/takes.rs": "119da85447ec62b43b448a1c7508face254dc794d9b390a419f084242407a1e1",
+      "native/src/takes.rs": "5c7066a1b6929953310de36c35c5440b5dcc7a052522181b1402d3bb746df03c",
       "native/src/tool_filter.rs": "fc3d1d0221e9bf13e137170871026ddadcaf5c3da7e23f146a676d9012b5eb81",
-      "native/src/tool_validation.rs": "e90cced65d35d8cf8c8cc223c8c1c18ecad9dc6103ecc8007cf3041ea3b2d91e",
+      "native/src/tool_validation.rs": "6e2774a491c4555fd1f0c53c3b88d247a38021bbe8781a53b3f513af57e0040a",
       "native/src/trim.rs": "ae9d327c9ba3656e02db0b5748694f643e24ca488599a6c16cd4e86170ccfd8e",
+      "native/tests/advanced_profile_contract.rs": "1a054395d9ab225ea812adb4bc733dc65d3f3255a80eff9ccff7b74cb0ebbad8",
+      "native/tests/advanced_profile_service_contract.rs": "6d088edb4c133d00f2981d90707bce3dc62bfc874dcb43c10441a8fe38d66808",
       "native/tests/apply_scene_batch_contract.rs": "22d1d8eb653fd238055b56e24bb4b027f3a9cead460b22bfe3d70c57640d7359",
       "native/tests/apply_scene_contract.rs": "3dc0963fdc768adb1940d7831d89cd0ed5f313713d6ff27bdabdb46772c0badd",
       "native/tests/apply_scene_service_contract.rs": "e46305c196c08077073d472dcf63927d0d2279df51820f96cff62335afd3c128",
+      "native/tests/bootstrap_resources_contract.rs": "0a679a1e1d2ebe339062f61dca7387047d427fd626bd7ec782a6b364aa459b43",
       "native/tests/cancellation_contract.rs": "bf2a1ad16dc685f91ab3fc901044d0ac4110202adbd401c57f0e10f7cff8bd9e",
       "native/tests/capture_window_contract.rs": "4efb553efd440cb6298841730c58572161f0e433c0d4fbb4ab83d3e299f61212",
+      "native/tests/capture_window_receipt_contract.rs": "4080d8bbe119277a15ecab820f0a1489f591f079f89961c82c56b56ff3444475",
+      "native/tests/capture_window_service_contract.rs": "72c87debbfa2da91f2b8de6531b8d44cc59812602224101c125e6d8846792343",
       "native/tests/clock_contract.rs": "8703ab675f242b44769c4f4d61e163ec40cabd341f063dc845a8a3cfa4470742",
       "native/tests/config_contract.rs": "fb04cd405dc0ffa5c3c648b747cd2bd7904ff1fb787965cb6cf5c203fc48a1a8",
       "native/tests/control_contract.rs": "79b796a1caa629a2de4d1079cda6e45b84eca77466320131bb5f9f2922f6964d",
@@ -737,8 +784,9 @@
       "native/tests/error_projection_contract.rs": "ba4cd63f2bb04cff7835618eca5ebb7791649b3a9847c40d8bb001be82e782fc",
       "native/tests/generic11_contract.rs": "e3e4ec7fa085a0018f37742cbdc1c4fcdd618ccc1db0899dea9f7c330d7b329d",
       "native/tests/generic20_contract.rs": "2f77c2c79060315df742fd45a0f3cb7121d8a4b67d8da226a23d2869f95a1181",
-      "native/tests/generic6_contract.rs": "1906a60f20e0bd8df9d0e70bfbd60cafd9311285a5120931729484fbdeec3959",
+      "native/tests/generic6_contract.rs": "a0e22ff44d771f1c3dcbd0404ced418ab0c61514013693d9de7a8404a2fcb57a",
       "native/tests/generic8_contract.rs": "a3c5efe445094d9931e5b66ccb28f3494a61c96525165a6830251f84673f8ea3",
+      "native/tests/http_protocol_contract.rs": "1ba611389ef8ea824a0000ea1599a1d86421e0f41517b87290d85cd0af1c1772",
       "native/tests/input_receipt_contract.rs": "708d896752c791607e8b6decbc987b078d28fd923104820cfd8fecad7185ba0b",
       "native/tests/json_number_wire_contract.rs": "6728b7df662712b194f47a5261dd44c8119659ef7d5918553b6ac40350e2cb54",
       "native/tests/manual_record_stop_contract.rs": "a7a59276200c9487b95d3f11fb153a6bff1f21032c9af0b0534495ee224064cc",
@@ -770,38 +818,34 @@
       "native/tests/record_impact_contract.rs": "a4546f7df20070c54ac8a8d9483acf791b967d296052501cda0469102db90f27",
       "native/tests/record_impact_take_contract.rs": "3a3c68ce81b8d7efd74294d529a971e3c2442d456a472c48be6890ff80be690f",
       "native/tests/reserved_stop_contract.rs": "a481cd1996cc330cd197256522592789db0e989f0a249cfbd159f5f9ac0c030b",
+      "native/tests/resolver_owner_contract.rs": "3826ceb137795a987fb93c15c2d3afe0f4fbea041dfc22be665b72b6f429b545",
       "native/tests/restore_batch_contract.rs": "99d3f96e1d735ceaf2f3e36b8e460eb33b8a906577f60019917b87e95b0c139b",
       "native/tests/restore_service_contract.rs": "4afeb43c1d2b6b8f40a87e26bf1d8e11640064c1d5c30e6b6332f7fe39664972",
       "native/tests/runtime_state_contract.rs": "daa894eaf2433db7016b545e91bc645f8ed635365d5ef115bacefda3c2ad7679",
-      "native/tests/scene_audit_contract.rs": "e6f36f0aebfb4b390824fdd668cdedf95baa4ee8e7bdcbb687114a616e47fae4",
+      "native/tests/scene_audit_contract.rs": "90cf6fb85d234e3283573e1a5395900f76ba5ec9e5393f3edd94ca5cf24db283",
       "native/tests/scene_item_transform_mutation_contract.rs": "a7b5230b0ef01b33dd857c41c9c5e497bf4e33e3dbbbf6ed82ff3aa331d4673a",
       "native/tests/scene_plan_contract.rs": "ca6d72804c38204c81259090063a495b394c4d4cbfc5ae6cae4d7e6dbef498d4",
       "native/tests/service_contract.rs": "30008b7a7f7cfb172872eae2f7156972f1ae6bdd0da8b672d9191a098869de7d",
       "native/tests/service_media_uncertainty_contract.rs": "9f549df776da228af1374e86ff1aa649f53a648135a0ba0879925935d904c24a",
       "native/tests/service_read_tools_contract.rs": "8201004d01a30f6e0d61e88db7370a4ddeef0ba787558b07bc551adee438e5e0",
-      "native/tests/service_read_workflows_contract.rs": "62e039b36de270a2f8e9efcdd054b32cbd92819c98407e9c71f110a61fef2a9f",
+      "native/tests/service_read_workflows_contract.rs": "d31170b4c05d63204f37f6930246bcecc1d5cccbb6b7f8ad56027748822f6a87",
       "native/tests/session_batch_contract.rs": "736325f39833253b12ad2aad75094d37acef3462bc924b628b4f7e6c723a05c6",
       "native/tests/session_contract.rs": "fa591aa454475c05ab4907cab183f4a287ebfef1e27ae038299e91c280e711d3",
-      "native/tests/session_observation_contract.rs": "e629470b795322cb9e099cf471089aa0a80c3dc7b02819ec0b400d5bf406fa44",
+      "native/tests/session_observation_contract.rs": "437add7f000d7556784aed140dc09a732ec717fc1bf7e95b0618cc846f79fbba",
       "native/tests/snapshot_contract.rs": "e3a6176d0f10993e29e89170e4e96116aba2a67f49cf9f888987887a256511b9",
       "native/tests/snapshot_tools_contract.rs": "f8c59d146538305e66b2861589d33a28aecf9b858c2419fc7c70ce97d36887e9",
       "native/tests/stage_contract.rs": "a9024e362074169ee8b7663209381b9d93de84c5fcf6169b654d7f7e76f2f01c",
       "native/tests/stage_transport_contract.rs": "049ab7b7f63759c167be809963888b2b405250b5c3febd25bd0b0a6089abe42d",
-      "native/tests/stop3_contract.rs": "60d95b1f0d0d88b641d524044d52e812c52f7015b2b0438a3152942c30575eca",
+      "native/tests/stop3_contract.rs": "33d125187e132156c4f36490da2c427128b4124480577d72e0536fde591848cc",
       "native/tests/support/output_start_three.rs": "db4b652f2ded441d5e1b88e56f1a81efd9bcd0d61162f26a6124bb7e5c3891f4",
       "native/tests/take_monitor_contract.rs": "49d35deecd18f7099f95d4272f5cb45fbe5855823c976ca3e3930cc11d909614",
       "native/tests/take_transport_contract.rs": "b2ea3a4c65484b6db1df08bcde33e5058331676737c5d648a3fc0b3cde2fa516",
       "native/tests/takes_contract.rs": "b6246862905b3190b1fe9e15ff6c54f312f5c2dfa42581fc78b33cbeacdcf73a",
-      "native/tests/timeline5_contract.rs": "2687b40498a9cc890653d9e93dc673367fe857f07fd514b7a646b5d76556b100",
-      "native/tests/tool_validation_contract.rs": "e183d350192ac3411764a17def6df2dcd16131c103b56357957570ae34d7c4bc",
+      "native/tests/timeline5_contract.rs": "3d512f09ffc6dec6a1499c369c010c5203ad693d56d9f23f2adcb37127e0f5fc",
+      "native/tests/tool_validation_contract.rs": "1067a6f7b162e3feff493aa89aa480dfda8f9900e4d364803135fb51fd11fd88",
       "native/tests/transform_receipt_contract.rs": "ded09b7806ce29c841986527d9897154aae3cdb71da30d6311bcc0f331ac7002",
       "native/tests/trim_contract.rs": "adc6829b64b2a0791ec24d17a58856d0810ec87ba5ba54e15eca1c773039443a",
-      "native/tests/ui6_contract.rs": "b869dcadf22238ed5113035b9c2481978be1cc8591879969aa7464a02966284b",
-      "native/Cargo.toml": "d4f75d3c8e0b01589a6e65700b841fa32db911194cf7d6bce4e232b9a1040ee9",
-      "native/Cargo.lock": "6f862fa6e98e50dd86605062acc7dcec3e59a2b61258be02a0fa18416c773fae",
-      "native/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
-      "docs/protocol.json": "042e8c42da2dfd6d78fa0f695b2b59495d8254d5fe718b0f20d0e2e6f58a6993",
-      "native/assets/prompts.json": "8e75374c641fce8ef09bd460b02be92ed55034de4faa89155f11eb18d4e580f3"
+      "native/tests/ui6_contract.rs": "b869dcadf22238ed5113035b9c2481978be1cc8591879969aa7464a02966284b"
     }
   }
 }

@@ -8,13 +8,14 @@
 use crate::{
     js_json::{Limits, NumericNormalizationError, Prepared},
     obs::{MAX_BYTES, Socket, open_socket},
+    observation::ReadRequest,
     ordered_transform::{
         ProjectionOwner, RawReadback, SceneItemSelectors, SceneItemTransformReadback,
         TransformReadbackError,
     },
 };
 use futures_util::{
-    SinkExt, StreamExt,
+    Sink as MessageSink, SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
 use serde::Serialize;
@@ -274,6 +275,7 @@ impl fmt::Debug for BatchResult {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ShutdownError {
+    NativeTransport,
     ActorFailed,
     Deadline,
 }
@@ -302,6 +304,7 @@ enum ReplyData {
 }
 enum CommandKind {
     Single(String),
+    Observation(ReadRequest),
     ReservedControl(StopControl),
     SafetyStop(SafetyStopRequest),
     ManualRecordStop,
@@ -369,6 +372,7 @@ impl StopControl {
 }
 enum SingleRequest<'a> {
     Ordinary(&'a str),
+    Observation(ReadRequest),
     Transform,
     Reserved(StopControl),
     SafetyStop(SafetyStopRequest),
@@ -378,6 +382,7 @@ impl SingleRequest<'_> {
     fn request_type(&self) -> &str {
         match self {
             Self::Ordinary(name) => name,
+            Self::Observation(request) => request.as_str(),
             Self::Transform => "GetSceneItemTransform",
             Self::Reserved(control) => control.request_type(),
             Self::SafetyStop(kind) => kind.request_type(),
@@ -397,6 +402,9 @@ struct Command {
     kind: CommandKind,
     request_id: String,
     wire: String,
+    // Set only after the complete frame's send/flush future succeeds. An
+    // incomplete write never gains observational response-retirement rights.
+    flushed: bool,
     deadline: Instant,
     state: Arc<AtomicU8>,
     guard: Option<Guard>,
@@ -487,6 +495,12 @@ pub struct ObsSession {
     terminal: watch::Sender<Option<Invalidation>>,
     task: Option<JoinHandle<()>>,
     shutdown_timeout: Duration,
+    #[cfg(all(
+        feature = "platform-tls-evaluation",
+        any(target_os = "macos", target_os = "linux")
+    ))]
+    tls_custody: Option<crate::platform_transport::Custody>,
+    network_custody: Option<crate::network_transport::Custody>,
 }
 
 /// Its permits remain charged until the event itself is dropped, even after
@@ -591,6 +605,85 @@ impl ObsSession {
         password: Option<&str>,
         options: SessionOptions,
     ) -> Result<(Self, EventReceiver), ConnectError> {
+        Self::connect_inner(
+            url,
+            password,
+            options,
+            #[cfg(all(
+                feature = "platform-tls-evaluation",
+                any(target_os = "macos", target_os = "linux")
+            ))]
+            None,
+            None,
+            None,
+        )
+        .await
+    }
+    #[cfg(all(
+        feature = "platform-tls-evaluation",
+        any(target_os = "macos", target_os = "linux")
+    ))]
+    pub async fn connect_with_platform_owner(
+        url: &str,
+        password: Option<&str>,
+        options: SessionOptions,
+        owner: &crate::platform_transport::Owner,
+    ) -> Result<(Self, EventReceiver), ConnectError> {
+        Self::connect_inner(url, password, options, Some(owner.custody()), None, None).await
+    }
+    #[cfg(all(
+        feature = "platform-tls-evaluation",
+        any(target_os = "macos", target_os = "linux")
+    ))]
+    pub async fn connect_with_platform_connector(
+        url: &str,
+        password: Option<&str>,
+        options: SessionOptions,
+        connector: crate::platform_transport::Connector,
+    ) -> Result<(Self, EventReceiver), ConnectError> {
+        Self::connect_inner(
+            url,
+            password,
+            options,
+            Some(connector.into_custody()),
+            None,
+            None,
+        )
+        .await
+    }
+    pub async fn connect_with_network_connector(
+        url: &str,
+        password: Option<&str>,
+        options: SessionOptions,
+        connector: crate::network_transport::Connector,
+        deadline: Instant,
+    ) -> Result<(Self, EventReceiver), ConnectError> {
+        Self::connect_inner(
+            url,
+            password,
+            options,
+            #[cfg(all(
+                feature = "platform-tls-evaluation",
+                any(target_os = "macos", target_os = "linux")
+            ))]
+            None,
+            Some(connector.into_custody()),
+            Some(deadline),
+        )
+        .await
+    }
+    async fn connect_inner(
+        url: &str,
+        password: Option<&str>,
+        options: SessionOptions,
+        #[cfg(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        ))]
+        tls_custody: Option<crate::platform_transport::Custody>,
+        network_custody: Option<crate::network_transport::Custody>,
+        original_deadline: Option<Instant>,
+    ) -> Result<(Self, EventReceiver), ConnectError> {
         if [
             options.request_items,
             options.request_bytes,
@@ -615,20 +708,66 @@ impl ObsSession {
             return Err(ConnectError::InvalidOptions);
         }
         // No implicit downgrade or unqualified replacement TLS implementation.
-        if !url.starts_with("ws://") {
+        #[cfg(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        ))]
+        let allowed = if tls_custody.is_some() {
+            url.starts_with("wss://")
+        } else {
+            url.starts_with("ws://")
+        };
+        #[cfg(not(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        )))]
+        let allowed = url.starts_with("ws://");
+        let allowed = allowed
+            || (network_custody.is_some()
+                && (url.starts_with("ws://")
+                    || (cfg!(all(
+                        feature = "platform-tls-evaluation",
+                        any(target_os = "macos", target_os = "linux")
+                    )) && url.starts_with("wss://"))));
+        if !allowed {
             return Err(ConnectError::UnsupportedTransport);
         }
         let token = ConnectionToken::allocate()?;
         let deadline = Instant::now()
             .checked_add(options.connect_timeout)
             .ok_or(ConnectError::InvalidOptions)?;
-        let socket = timeout_at(
-            deadline,
-            open_socket(url, password, options.event_subscriptions, deadline),
-        )
-        .await
-        .map_err(|_| ConnectError::Deadline)?
-        .map_err(ConnectError::Handshake)?;
+        let deadline = original_deadline.map_or(deadline, |original| original.min(deadline));
+        let establish = async {
+            if let Some(custody) = &network_custody {
+                return crate::obs::open_owned_socket(
+                    url,
+                    password,
+                    options.event_subscriptions,
+                    deadline,
+                    custody,
+                )
+                .await;
+            }
+            #[cfg(all(
+                feature = "platform-tls-evaluation",
+                any(target_os = "macos", target_os = "linux")
+            ))]
+            if let Some(custody) = &tls_custody {
+                return crate::obs::open_platform_socket(
+                    url,
+                    password,
+                    options.event_subscriptions,
+                    deadline,
+                    custody,
+                )
+                .await;
+            }
+            open_socket(url, password, options.event_subscriptions, deadline).await
+        };
+        let socket = timeout_at(deadline, establish)
+            .await
+            .map_err(|_| ConnectError::Deadline)?
+            .map_err(ConnectError::Handshake)?;
         let (sender, commands) = mpsc::channel(options.request_items);
         let (stop_sender, stop_commands) = mpsc::channel(1);
         let (safety_sender, safety_commands) = mpsc::channel(1);
@@ -687,6 +826,12 @@ impl ObsSession {
             terminal,
             task: Some(task),
             shutdown_timeout: options.shutdown_timeout,
+            #[cfg(all(
+                feature = "platform-tls-evaluation",
+                any(target_os = "macos", target_os = "linux")
+            ))]
+            tls_custody,
+            network_custody,
         };
         Ok((
             owner,
@@ -711,13 +856,29 @@ impl ObsSession {
         self.stop.send_replace(true);
         let mut task = self.task.take().expect("owned actor");
         let budget = self.shutdown_timeout.saturating_add(Duration::from_secs(1));
-        match timeout(budget, &mut task).await {
+        let actor_result = match timeout(budget, &mut task).await {
             Ok(result) => result.map_err(|_| ShutdownError::ActorFailed),
             Err(_) => {
                 task.abort();
                 let _ = task.await;
                 Err(ShutdownError::Deadline)
             }
+        };
+        let mut native_failed = false;
+        #[cfg(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        ))]
+        if let Some(custody) = &self.tls_custody {
+            native_failed |= custody.join().await.is_err();
+        }
+        if let Some(custody) = &self.network_custody {
+            native_failed |= custody.join().await.is_err();
+        }
+        if native_failed {
+            Err(ShutdownError::NativeTransport)
+        } else {
+            actor_result
         }
     }
 }
@@ -746,7 +907,141 @@ fn request_deadline(duration: Duration) -> Result<Instant, RequestError> {
     }
 }
 
+#[cfg(all(
+    test,
+    all(
+        feature = "platform-tls-evaluation",
+        any(target_os = "macos", target_os = "linux")
+    )
+))]
+mod platform_transport_integration_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    async fn peer(stream: tokio::io::DuplexStream, count: Arc<AtomicUsize>, hello: bool) {
+        let mut peer = tokio_tungstenite::accept_async(stream).await.unwrap();
+        count.fetch_add(1, Ordering::SeqCst);
+        if hello {
+            peer.send(Message::Text(
+                json!({"op":0,"d":{"obsWebSocketVersion":"5.7.0","rpcVersion":1}})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+            let identify = peer.next().await.unwrap().unwrap();
+            let Message::Text(identify) = identify else {
+                panic!("Identify expected")
+            };
+            assert_eq!(serde_json::from_str::<Value>(&identify).unwrap()["op"], 1);
+            peer.send(Message::Text(
+                json!({"op":2,"d":{"negotiatedRpcVersion":1}})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+        }
+        while let Some(message) = peer.next().await {
+            if matches!(message, Ok(Message::Close(_)) | Err(_)) {
+                let _ = peer.flush().await;
+                break;
+            }
+        }
+    }
+    #[tokio::test]
+    async fn actor_and_native_owner_must_both_join_before_session_shutdown_receipt() {
+        let (client, server) = tokio::io::duplex(65536);
+        let (mut external_owner, fixture) = crate::platform_transport::Owner::fixture(client);
+        let count = Arc::new(AtomicUsize::new(0));
+        let server = tokio::spawn(peer(server, count.clone(), true));
+        let connector = external_owner.connector();
+        let bootstrap = tokio::spawn(async move {
+            ObsSession::connect_with_platform_connector(
+                "wss://127.0.0.1:4455/fixture",
+                None,
+                SessionOptions::default(),
+                connector,
+            )
+            .await
+        });
+        let (session, _events) = bootstrap.await.unwrap().unwrap();
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        let mut shutdown = Box::pin(session.shutdown());
+        assert!(futures_util::poll!(shutdown.as_mut()).is_pending());
+        timeout(Duration::from_secs(1), server)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(fixture.retired.load(Ordering::SeqCst));
+        assert!(
+            futures_util::poll!(shutdown.as_mut()).is_pending(),
+            "native custody was treated as joined before release"
+        );
+        fixture.release();
+        timeout(Duration::from_secs(1), shutdown)
+            .await
+            .unwrap()
+            .unwrap();
+        external_owner.shutdown().await.unwrap();
+    }
+    #[tokio::test]
+    async fn original_identify_deadline_drops_one_upgrade_but_outer_owner_still_joins() {
+        let (client, server) = tokio::io::duplex(65536);
+        let (mut external_owner, fixture) = crate::platform_transport::Owner::fixture(client);
+        let count = Arc::new(AtomicUsize::new(0));
+        let server = tokio::spawn(peer(server, count.clone(), false));
+        let result = ObsSession::connect_with_platform_owner(
+            "wss://127.0.0.1:4455/fixture",
+            None,
+            SessionOptions {
+                connect_timeout: Duration::from_millis(20),
+                ..Default::default()
+            },
+            &external_owner,
+        )
+        .await;
+        assert!(matches!(result, Err(ConnectError::Deadline)));
+        timeout(Duration::from_secs(1), server)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        assert!(fixture.retired.load(Ordering::SeqCst));
+        let mut closing = Box::pin(external_owner.shutdown());
+        assert!(futures_util::poll!(closing.as_mut()).is_pending());
+        drop(closing);
+        fixture.release();
+        external_owner.shutdown().await.unwrap();
+    }
+}
+
 impl SessionHandle {
+    /// Closed observational admission used only by the canonical typed reader.
+    /// Keeps the caller's absolute deadline; no raw name can opt into this
+    /// response-only retirement policy, and no incomplete send survives it.
+    pub(crate) async fn observational_until(
+        &self,
+        expected: ConnectionToken,
+        request: ReadRequest,
+        data: Value,
+        deadline: Instant,
+    ) -> Result<Value, RequestError> {
+        match self
+            .single_until(
+                expected,
+                SingleRequest::Observation(request),
+                data,
+                deadline,
+                || Ok(()),
+            )
+            .await?
+        {
+            ReplyData::Single(value) => Ok(value),
+            _ => Err(RequestError::Unknown(
+                Invalidation::ResponseIdentityMismatch,
+            )),
+        }
+    }
     /// Explicit authorized tool text from this immutable physical session.
     /// A queued/not-dispatched operation must never inherit a prior close reason.
     pub(crate) fn authorized_disconnect_message(&self, error: &RequestError) -> Option<String> {
@@ -1064,6 +1359,7 @@ impl SessionHandle {
         let admission = Admission {
             expected,
             kind: match request {
+                SingleRequest::Observation(request) => CommandKind::Observation(request),
                 SingleRequest::Transform => CommandKind::Transform,
                 SingleRequest::Reserved(control) => CommandKind::ReservedControl(control),
                 SingleRequest::SafetyStop(kind) => CommandKind::SafetyStop(kind),
@@ -1241,6 +1537,7 @@ impl SessionHandle {
             kind,
             request_id,
             wire,
+            flushed: false,
             deadline,
             state: state.clone(),
             guard: Some(Box::new(guard)),
@@ -1414,6 +1711,7 @@ fn response(
 ) -> Result<Option<Result<ReplyData, RequestError>>, Invalidation> {
     let request_type = match &command.kind {
         CommandKind::Single(request_type) if !batch => request_type.as_str(),
+        CommandKind::Observation(request) if !batch => request.as_str(),
         CommandKind::Transform if !batch => "GetSceneItemTransform",
         CommandKind::ReservedControl(control) if !batch => control.request_type(),
         CommandKind::SafetyStop(kind) if !batch => kind.request_type(),
@@ -1645,6 +1943,17 @@ fn route_response(
         return Ok(None);
     };
     let id = data["requestId"].as_str();
+    // Expired observational IDs are never reused. A late single reply owns no
+    // active operation, including when a different-shaped batch is now active.
+    // No tombstone or peer-controlled retention is required.
+    if !batch
+        && !active
+            .iter()
+            .flatten()
+            .any(|command| id == Some(command.request_id.as_str()))
+    {
+        return Ok(None);
+    }
     let slot = active
         .iter()
         .position(|command| {
@@ -1700,6 +2009,33 @@ fn unknown_active(active: &mut ActiveCommands, reason: &Invalidation) {
     }
 }
 
+/// Only response custody of an already fully flushed typed observation may
+/// expire locally. Effects, arbitrary requests and incomplete writes retain the
+/// conservative session-wide Unknown/retirement policy.
+fn retire_observations(active: &mut ActiveCommands) -> bool {
+    let mut retired = false;
+    let now = Instant::now();
+    for slot in active {
+        let reason = slot.as_ref().and_then(|command| {
+            if !command.flushed || !matches!(command.kind, CommandKind::Observation(_)) {
+                return None;
+            }
+            if now >= command.deadline {
+                Some(Invalidation::DeadlineAfterDispatch)
+            } else if command.reply.is_closed() {
+                Some(Invalidation::CancelledAfterDispatch)
+            } else {
+                None
+            }
+        });
+        if let Some(reason) = reason {
+            unknown(slot, &reason);
+            retired = true;
+        }
+    }
+    retired
+}
+
 #[derive(Default)]
 struct DeferredReply(Option<Result<ReplyData, RequestError>>);
 impl DeferredReply {
@@ -1712,15 +2048,19 @@ impl DeferredReply {
 
 /// Flush exactly one complete frame; a second frame never interleaves its bytes.
 /// Already-sent other work may settle while this frame is flushing.
-async fn send_active(
+async fn send_active<S, R>(
     active: &mut ActiveCommands,
     slot: usize,
-    sink: &mut Sink,
-    stream: &mut Stream,
+    sink: &mut S,
+    stream: &mut R,
     publisher: &Publisher,
     stopping: &mut watch::Receiver<bool>,
     projections: &ProjectionOwner,
-) -> Result<Option<Result<ReplyData, RequestError>>, Invalidation> {
+) -> Result<Option<Result<ReplyData, RequestError>>, Invalidation>
+where
+    S: MessageSink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
+    R: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
     let wire = std::mem::take(&mut active[slot].as_mut().expect("active sender").wire);
     let send = sink.send(Message::Text(wire.into()));
     tokio::pin!(send);
@@ -1732,15 +2072,15 @@ async fn send_active(
             _=tokio::time::sleep_until(deadline)=>return Err(Invalidation::DeadlineAfterDispatch),
             _=active_closed(active)=>return Err(Invalidation::CancelledAfterDispatch),
             _=publisher.sender.closed()=>return Err(Invalidation::EventConsumerDropped),
-            sent=&mut send=>{sent.map_err(|_|Invalidation::SocketWriteFailed)?;return Ok(early.0);},
+            sent=&mut send=>{sent.map_err(|_|Invalidation::SocketWriteFailed)?;active[slot].as_mut().expect("flushed frame owner").flushed=true;return Ok(early.0);},
             next=stream.next()=>{if let Some(result)=route_response(incoming(next,publisher)?,active,Some(slot),projections)?{early.observe(result);}},
         }
     }
 }
 
 /// At most one ordinary, one owned Take control, and one closed public safety
-/// Stop share a sole socket reader/writer. Any unresolved cancellation/deadline
-/// retires the connection; delivered results stay known and peers never replay.
+/// Stop share a sole socket reader/writer. Unresolved effect/incomplete-write
+/// cancellation/deadline retires the connection; delivered results stay known.
 async fn drive(
     command: Command,
     control_queues: (&mut mpsc::Receiver<Command>, &mut mpsc::Receiver<Command>),
@@ -1774,6 +2114,7 @@ async fn drive(
         }
     }
     loop {
+        retire_observations(&mut active);
         if active.iter().all(Option::is_none) {
             return None;
         }
@@ -1782,11 +2123,12 @@ async fn drive(
         let admit_safety = active[Lane::SafetyStop.slot()].is_none();
         let failure = tokio::select! {biased;
             _=stopping.changed()=>Some(Invalidation::Shutdown),
-            _=tokio::time::sleep_until(deadline)=>Some(Invalidation::DeadlineAfterDispatch),
-            _=active_closed(&mut active)=>Some(Invalidation::CancelledAfterDispatch),
+            _=tokio::time::sleep_until(deadline)=>if retire_observations(&mut active){None}else{Some(Invalidation::DeadlineAfterDispatch)},
+            _=active_closed(&mut active)=>if retire_observations(&mut active){None}else{Some(Invalidation::CancelledAfterDispatch)},
             _=publisher.sender.closed()=>Some(Invalidation::EventConsumerDropped),
             (slot,queued)=next_control(stop_commands,safety_commands,admit_owned,admit_safety)=>{
                 let Some(mut queued)=queued else{unknown_active(&mut active,&Invalidation::Shutdown);return Some(Invalidation::Shutdown);};
+                retire_observations(&mut active);
                 if let Some(refusal)=prepare_dispatch(&mut queued,token,&active){finish(queued,Err(RequestError::BeforeDispatch(refusal)));continue;}
                 active[slot]=Some(queued);
                 match send_active(&mut active,slot,sink,stream,publisher,stopping,projections).await {
@@ -1927,6 +2269,179 @@ async fn actor(
 mod tests {
     use super::*;
 
+    fn observational_phase_command(
+        kind: CommandKind,
+        flushed: bool,
+        deadline: Instant,
+    ) -> (
+        Command,
+        oneshot::Receiver<Reply>,
+        Arc<Semaphore>,
+        Arc<Semaphore>,
+    ) {
+        let token = ConnectionToken::allocate().unwrap();
+        let items = Arc::new(Semaphore::new(1));
+        let bytes = Arc::new(Semaphore::new(64));
+        let (reply, receive) = oneshot::channel();
+        (
+            Command {
+                expected: token,
+                kind,
+                request_id: format!("{}:1", token.0),
+                wire: "{}".into(),
+                flushed,
+                deadline,
+                state: Arc::new(AtomicU8::new(DISPATCHING)),
+                guard: None,
+                reply,
+                lease: RequestLease {
+                    _item: items.clone().try_acquire_owned().unwrap(),
+                    _bytes: bytes.clone().try_acquire_many_owned(64).unwrap(),
+                },
+            },
+            receive,
+            items,
+            bytes,
+        )
+    }
+    #[tokio::test]
+    async fn only_flushed_typed_observation_can_retire_without_connection_failure() {
+        for (kind, flushed, allowed) in [
+            (
+                CommandKind::Observation(ReadRequest::VideoSettings),
+                true,
+                true,
+            ),
+            (
+                CommandKind::Observation(ReadRequest::VideoSettings),
+                false,
+                false,
+            ),
+            (CommandKind::Single("GetVideoSettings".into()), true, false),
+            (CommandKind::Single("SetInputMute".into()), true, false),
+            (CommandKind::Transform, true, false),
+            (
+                CommandKind::ReservedControl(StopControl::RecordStatus),
+                true,
+                false,
+            ),
+            (
+                CommandKind::SafetyStop(SafetyStopRequest::Stream),
+                true,
+                false,
+            ),
+            (CommandKind::ManualRecordStop, true, false),
+            (
+                CommandKind::Batch {
+                    request_types: vec!["GetStats".into()],
+                    halt_on_failure: false,
+                },
+                true,
+                false,
+            ),
+        ] {
+            let (command, receive, items, bytes) =
+                observational_phase_command(kind, flushed, Instant::now());
+            let mut active = [Some(command), None, None];
+            assert_eq!(retire_observations(&mut active), allowed);
+            assert_eq!(active[0].is_none(), allowed);
+            assert_eq!(items.available_permits(), 0);
+            assert_eq!(bytes.available_permits(), 0);
+            if allowed {
+                let reply = receive.await.unwrap();
+                assert!(matches!(
+                    reply.result,
+                    Err(RequestError::Unknown(Invalidation::DeadlineAfterDispatch))
+                ));
+                assert_eq!(items.available_permits(), 0);
+                drop(reply);
+            } else {
+                drop(active);
+                drop(receive);
+            }
+            assert_eq!(items.available_permits(), 1);
+            assert_eq!(bytes.available_permits(), 64);
+        }
+    }
+    #[tokio::test]
+    async fn typed_observation_partial_flush_deadline_remains_fatal_unknown() {
+        use std::{
+            pin::Pin,
+            sync::atomic::AtomicBool,
+            task::{Context, Poll},
+        };
+        struct HeldFlush(Arc<AtomicBool>);
+        impl MessageSink<Message> for HeldFlush {
+            type Error = tokio_tungstenite::tungstenite::Error;
+            fn poll_ready(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Result<(), Self::Error>> {
+                Poll::Ready(Ok(()))
+            }
+            fn start_send(self: Pin<&mut Self>, _: Message) -> Result<(), Self::Error> {
+                self.0.store(true, Ordering::Release);
+                Ok(())
+            }
+            fn poll_flush(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Result<(), Self::Error>> {
+                Poll::Pending
+            }
+            fn poll_close(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<Result<(), Self::Error>> {
+                Poll::Ready(Ok(()))
+            }
+        }
+        let entered = Arc::new(AtomicBool::new(false));
+        let mut sink = HeldFlush(entered.clone());
+        let mut stream = futures_util::stream::pending();
+        let (command, receive, items, bytes) = observational_phase_command(
+            CommandKind::Observation(ReadRequest::VideoSettings),
+            false,
+            Instant::now() + Duration::from_millis(40),
+        );
+        let token = command.expected;
+        let mut active = [Some(command), None, None];
+        let (sender, _events) = mpsc::channel(1);
+        let publisher = Publisher {
+            token,
+            sender,
+            items: Arc::new(Semaphore::new(1)),
+            bytes: Arc::new(Semaphore::new(1024)),
+            cursor: Arc::new(AtomicU64::new(0)),
+            peer_close: Arc::new(OnceLock::new()),
+        };
+        let (_stop, mut stopping) = watch::channel(false);
+        let projections = ProjectionOwner::new(1);
+        let result = send_active(
+            &mut active,
+            0,
+            &mut sink,
+            &mut stream,
+            &publisher,
+            &mut stopping,
+            &projections,
+        )
+        .await;
+        assert!(matches!(result, Err(Invalidation::DeadlineAfterDispatch)));
+        assert!(entered.load(Ordering::Acquire));
+        assert!(!active[0].as_ref().unwrap().flushed);
+        assert!(!retire_observations(&mut active));
+        unknown_active(&mut active, &Invalidation::DeadlineAfterDispatch);
+        let reply = receive.await.unwrap();
+        assert!(matches!(
+            reply.result,
+            Err(RequestError::Unknown(Invalidation::DeadlineAfterDispatch))
+        ));
+        assert_eq!(items.available_permits(), 0);
+        drop(reply);
+        assert_eq!(items.available_permits(), 1);
+        assert_eq!(bytes.available_permits(), 64);
+    }
     #[test]
     fn counters_exhaust_without_wrap_or_reuse() {
         let counter = AtomicU64::new(u64::MAX - 1);
@@ -2030,6 +2545,7 @@ mod tests {
             kind: CommandKind::ManualRecordStop,
             request_id: "manual-impact-phase-only".into(),
             wire: String::new(),
+            flushed: false,
             deadline: Instant::now() + Duration::from_secs(2),
             state,
             guard: Some(Box::new(move || {
@@ -2163,6 +2679,7 @@ mod tests {
             kind: CommandKind::ReservedControl(StopControl::StopRecord),
             request_id: "controlled:1".into(),
             wire: String::new(),
+            flushed: false,
             deadline: Instant::now() + Duration::from_secs(2),
             state: Arc::new(AtomicU8::new(DISPATCHING)),
             guard: None,

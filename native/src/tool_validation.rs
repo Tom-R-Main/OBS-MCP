@@ -148,6 +148,77 @@ fn input_error(name: &str, schema: &Value, args: &Value, order: Option<&Ordered>
     if schema_node.value() != *schema {
         return Err(ProjectionUnavailable::SchemaMismatch);
     }
+    project_input_error(name, schema_node, args, order)
+}
+// No arbitrary schema admission: only the exact Source-generated base plus
+// Source's optional confirm property can reach this diagnostic-only projector.
+fn confirmation_node(name: &str) -> Result<Ordered> {
+    if !matches!(
+        name,
+        "obs-take-scene"
+            | "obs-start-stream"
+            | "obs-stop-stream"
+            | "obs-toggle-stream"
+            | "obs-stop-record"
+            | "obs-toggle-record"
+            | "obs-take-stop"
+            | "obs-call-request"
+            | "obs-batch"
+            | "obs-start-output"
+            | "obs-stop-output"
+            | "obs-toggle-output"
+    ) {
+        return Err(ProjectionUnavailable::UnknownTool);
+    }
+    let mut schema = catalog()
+        .get(name)
+        .ok_or(ProjectionUnavailable::UnknownTool)?
+        .clone();
+    let Ordered::Object(fields) = &mut schema else {
+        return Err(ProjectionUnavailable::UnsupportedSchema);
+    };
+    // Source's no-input-schema tools gain a Zod object when confirmation is
+    // enabled, including the JSON Schema dialect that their baseline lacks.
+    if !fields.iter().any(|(key, _)| key == "$schema") {
+        fields.insert(
+            0,
+            (
+                "$schema".into(),
+                Ordered::Scalar(json!("https://json-schema.org/draft/2020-12/schema")),
+            ),
+        );
+    }
+    let properties = fields
+        .iter_mut()
+        .find(|(key, _)| key == "properties")
+        .map(|(_, node)| node)
+        .ok_or(ProjectionUnavailable::UnsupportedSchema)?;
+    let Ordered::Object(properties) = properties else {
+        return Err(ProjectionUnavailable::UnsupportedSchema);
+    };
+    if properties.iter().any(|(key, _)| key == "confirm") {
+        return Err(ProjectionUnavailable::SchemaMismatch);
+    }
+    let property=serde_json::from_str(r#"{"type":"boolean","description":"For clients that cannot show the user a question: pass true only after the user has agreed. Ignored when the server can ask the user itself"}"#).map_err(|_|ProjectionUnavailable::UnsupportedSchema)?;
+    properties.push(("confirm".into(), property));
+    Ok(schema)
+}
+/// Exact optional-confirm metadata; grants no dispatch or arbitrary schema authority.
+pub fn confirmation_schema(name: &str) -> Result<Value> {
+    Ok(confirmation_node(name)?.value())
+}
+/// Diagnostic-only Source confirmation extension, preserving original declared
+/// field order and appending confirm last, exactly like Zod.extend.
+pub fn confirmation_error(name: &str, args: &Value) -> Result<Value> {
+    let schema = confirmation_node(name)?;
+    project_input_error(name, &schema, args, None)
+}
+fn project_input_error(
+    name: &str,
+    schema_node: &Ordered,
+    args: &Value,
+    order: Option<&Ordered>,
+) -> Result<Value> {
     let mut nodes = 0;
     let mut bytes = 0;
     bound_input(args, 0, &mut nodes, &mut bytes)?;
@@ -524,6 +595,25 @@ fn nullable_base(schema: &Ordered) -> Option<&Ordered> {
         .any(|variant| variant.get("type").and_then(Ordered::string) == Some("null"))
         .then_some(nonnull)
 }
+// Exact scalar-literal unions emitted for the scene-template alignment field.
+// These project Zod's union diagnostic, not enum diagnostics or dispatch rights.
+fn literal_union(schema: &Ordered) -> Option<Vec<&Ordered>> {
+    let variants = schema.get("anyOf")?.array()?;
+    if variants.is_empty() || variants.len() > 64 {
+        return None;
+    }
+    variants
+        .iter()
+        .map(|variant| {
+            let fields = variant.object()?;
+            let value = variant.get("const")?;
+            (fields.len() == 2
+                && variant.get("type").and_then(Ordered::string) == Some("number")
+                && value.number().is_some())
+            .then_some(value)
+        })
+        .collect()
+}
 fn schema_type(schema: &Ordered) -> Option<&str> {
     let value = schema.get("type")?;
     value.string().or_else(|| {
@@ -656,13 +746,16 @@ fn qualify(schema: &Ordered, depth: usize) -> Result<()> {
         return Err(ProjectionUnavailable::UnsupportedSchema);
     }
     if schema.get("anyOf").is_some() {
+        if literal_union(schema).is_some() {
+            return Ok(());
+        }
         let base = nullable_base(schema).ok_or(ProjectionUnavailable::UnsupportedSchema)?;
         return qualify(base, depth + 1);
     }
-    if schema
-        .get("additionalProperties")
-        .is_some_and(|value| value.object().is_none_or(|fields| !fields.is_empty()))
-    {
+    if schema.get("additionalProperties").is_some_and(|value| {
+        value.value() != Value::Bool(false)
+            && value.object().is_none_or(|fields| !fields.is_empty())
+    }) {
         return Err(ProjectionUnavailable::UnsupportedSchema);
     }
     let ty = schema_type(schema).ok_or(ProjectionUnavailable::UnsupportedSchema)?;
@@ -762,6 +855,15 @@ fn walk(
             return Ok(());
         }
         return walk(base, input, order, path, issues, depth + 1);
+    }
+    if let Some(values) = literal_union(schema) {
+        if values
+            .iter()
+            .any(|value| input.is_some_and(|input| equivalent(input, &value.value())))
+        {
+            return Ok(());
+        }
+        return issues.push(path, "Invalid input".into());
     }
     if nullable(schema) && input.is_some_and(Value::is_null) {
         return Ok(());
@@ -882,6 +984,35 @@ fn walk(
                         depth + 1,
                     )?;
                     path.pop();
+                }
+                if schema
+                    .get("additionalProperties")
+                    .is_some_and(|v| v.value() == Value::Bool(false))
+                {
+                    let unknown = record_keys(input, order)
+                        .into_iter()
+                        .filter(|name| !properties.iter().any(|(property, _)| property == name))
+                        .collect::<Vec<_>>();
+                    // Multiple original string-key orderings cannot be recovered
+                    // from Value. Refuse that projection until a typed sidecar is
+                    // qualified; a single unknown key has no ordering ambiguity.
+                    if unknown.len() > 1 && order.is_none() {
+                        return Err(ProjectionUnavailable::UnsupportedSchema);
+                    }
+                    if !unknown.is_empty() {
+                        issues.push(
+                            path,
+                            format!(
+                                "Unrecognized key{}: {}",
+                                if unknown.len() == 1 { "" } else { "s" },
+                                unknown
+                                    .iter()
+                                    .map(|key| serde_json::to_string(key).expect("JSON object key"))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        )?;
+                    }
                 }
             }
         }
@@ -1061,4 +1192,38 @@ fn uuid(s: &str) -> bool {
             || s.eq_ignore_ascii_case("ffffffff-ffff-ffff-ffff-ffffffffffff")
             || matches!(b[14], b'1'..=b'8')
                 && matches!(b[19].to_ascii_lowercase(), b'8' | b'9' | b'a' | b'b'))
+}
+
+#[cfg(test)]
+mod confirmation_controls {
+    use super::*;
+    #[test]
+    fn confirmation_metadata_is_closed_and_never_authorizes_arbitrary_schema_projection() {
+        let name = "obs-stop-record";
+        let base = catalog().get(name).unwrap().value();
+        let extended = confirmation_schema(name).unwrap();
+        assert!(base["properties"].get("confirm").is_none());
+        assert_eq!(extended["properties"]["confirm"]["type"], "boolean");
+        assert_eq!(
+            confirmation_schema("obs-get-version"),
+            Err(ProjectionUnavailable::UnknownTool)
+        );
+        assert_eq!(
+            tool_error(name, &extended, &json!({"confirm":"true"})),
+            Err(ProjectionUnavailable::SchemaMismatch)
+        );
+        assert_eq!(
+            tool_error(name, &base, &json!({"confirm":"true"})),
+            Err(ProjectionUnavailable::NoIssues)
+        );
+        assert!(confirmation_error(name, &json!({"confirm":"true"})).unwrap()["isError"] == true);
+        assert_eq!(
+            confirmation_error(name, &json!({"confirm":true})),
+            Err(ProjectionUnavailable::NoIssues)
+        );
+        let combined =
+            confirmation_error("obs-take-scene", &json!({"stageId":3,"confirm":4})).unwrap();
+        let text = combined["content"][0]["text"].as_str().unwrap();
+        assert!(text.find("stageId").unwrap() < text.find("confirm").unwrap());
+    }
 }

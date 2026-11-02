@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20.19.0, 22.x, 24.x]
+        node: [22.12.0, 24.x, 26.x]
         os: [ubuntu-latest, macos-latest]
 
     steps:
@@ -48,6 +48,10 @@ jobs:
           cache: npm
       - run: npm run check:dependencies
       - run: npm ci --ignore-scripts --no-audit
+      # Native-only artifact builds need the pinned Rust toolchain and graph;
+      # Node here is development archive/client tooling, not bundle runtime.
+      - run: rustup toolchain install 1.95.0 --profile minimal
+      - run: cargo fetch --locked --manifest-path native/Cargo.toml
       - run: npm run test:package
 
   native:
@@ -73,11 +77,11 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit
       - run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt,clippy
       - run: cargo fetch --locked --manifest-path native/Cargo.toml
-      - name: Install media qualification tools on Linux
+      - name: Install media and platform TLS qualification tools on Linux
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg pkg-config libgnutls28-dev
       - name: Install media qualification tools on macOS
         if: runner.os == 'macOS'
         env:

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture } from "../support/native-default-fixture.js";
 import { expectNativeInventory } from '../support/native-inventory.js';
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { mkdirSync, rmSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -91,7 +92,7 @@ for(const legacy of[false,true])describe(`persistent public native lane (legacy=
   const expected=await oracle.client.callTool({name:"obs-stage-scene",arguments:args});const actual=await native.client.callTool({name:"obs-stage-scene",arguments:args});expect(normal(actual,native)).toEqual(normal(expected,oracle));
   const stage=(actual.structuredContent as {stageId:string}).stageId;expect(stage).toMatch(uuid);
   const unsupported=await raw(native,9000,"qualification/unowned",legacy?{}:{_meta:meta("persistent-parity")});expect(unsupported.error).toMatchObject({code:-32601});
-  await expect(native.client.callTool({name:"obs-call-request",arguments:{requestType:"SetCurrentProgramScene",requestData:{sceneName:"Main"}}})).rejects.toThrow(/native-only qualification/);
+  await expect(native.client.callTool({name:"obs-call-request",arguments:{requestType:"SetCurrentProgramScene",requestData:{sceneName:"Main"}}})).rejects.toThrow(/native production profile/);
   const expectedTake=await oracle.client.callTool({name:"obs-take-scene",arguments:{stageId:(expected.structuredContent as {stageId:string}).stageId}});const actualTake=await native.client.callTool({name:"obs-take-scene",arguments:{stageId:stage}});expect(normal(actualTake,native)).toEqual(normal(expectedTake,oracle));
   expect(native.state.program).toBe(native.state.sceneName);expect(count(native,"TriggerStudioModeTransition")).toBe(1);expect(native.fake.connectionCount).toBe(1);expect(children(native.transport.pid!)).toEqual([]);
  });
@@ -174,11 +175,9 @@ it("refuses unowned task metadata before OBS activation while keeping the qualif
  await native.client.callTool({name:"obs-get-record-status",arguments:{}});expect(native.fake.connectionCount).toBe(1);expect(children(native.transport.pid!)).toEqual([]);
 });
 
-it("fails CLI and HTTP configuration before activation instead of executing the SDK",()=>{
- for(const [args,extra] of [[['--help'],{}],[[],{OBS_MCP_HTTP_PORT:'3456'}]] as const){
-  const result=spawnSync(binary,[...args],{cwd:root,encoding:'utf8',env:{PATH:process.env.PATH,OBS_MCP_NATIVE_STATEFUL:'1',OBS_MCP_COMPAT_NODE:join(root,'native/target/nonexistent-service-node'),OBS_MCP_COMPAT_ENTRY:join(root,'native/target/nonexistent-service-sdk.js'),...extra}});
-  expect(result.status).toBe(1);expect(result.stdout).toBe('');expect(result.stderr).toContain('Native stateful qualification supports static stdio only');
- }
+it("serves bounded CLI help without OBS configuration or a compatibility runtime",()=>{
+ const result=spawnSync(binary,['--help'],{cwd:root,encoding:'utf8',env:{PATH:process.env.PATH,...nativeDefaultFixture(root)}});
+ expect(result.status).toBe(0);expect(result.stdout).toContain('OBS_MCP_NATIVE_STATEFUL is retired');expect(result.stderr).toBe('');
 });
 
 function demoFixture(session:Session){
@@ -374,7 +373,7 @@ function directoryFixture(session:Session){session.fake.respondWith('GetRecordDi
 for(const legacy of[false,true])describe(`persistent custom read callbacks (legacy=${legacy})`,()=>{
  it('qualifies all seven exact SDK contracts, reports and read effects on one physical connection',async()=>{
   const oracle=await start(false,legacy,true,{},directoryFixture);const native=await start(true,legacy,true,{},directoryFixture);
-  const list=await native.client.listTools();const expectedList=await oracle.client.listTools();const contract=JSON.parse(readFileSync(join(root,"native/assets/tools.json"),"utf8"));const declared=[...new Set([...Object.keys(contract.requests),...Object.keys(contract.locals),...Object.keys(contract.workflows),...Object.keys(contract.service.handlers)])].filter(name=>!['obs-start-stream','obs-stop-stream','obs-toggle-stream'].includes(name)).sort();expect(list.tools.map(tool=>tool.name).sort()).toEqual(declared);expectNativeInventory(list.tools,expectedList.tools);for(const name of customReadNames)expect(list.tools.find(tool=>tool.name===name)).toEqual(expectedList.tools.find(tool=>tool.name===name));
+  const list=await native.client.listTools();const expectedList=await oracle.client.listTools();const contract=JSON.parse(readFileSync(join(root,"native/assets/tools.json"),"utf8"));const declared=[...new Set([...Object.keys(contract.requests),...Object.keys(contract.locals),...Object.keys(contract.workflows),...Object.keys(contract.service.handlers)])].filter(name=>!['obs-start-stream','obs-stop-stream','obs-toggle-stream','obs-start-record','obs-toggle-record','obs-start-output','obs-stop-output','obs-toggle-output','obs-call-request','obs-batch','obs-call-vendor-request','obs-trigger-hotkey-by-name','obs-trigger-hotkey-by-key-sequence','obs-press-input-property-button'].includes(name)).sort();expect(list.tools.map(tool=>tool.name).sort()).toEqual(declared);expectNativeInventory(list.tools,expectedList.tools);for(const name of customReadNames)expect(list.tools.find(tool=>tool.name===name)).toEqual(expectedList.tools.find(tool=>tool.name===name));
   await same(oracle,native,'obs-get-version');await same(oracle,native,'obs-get-status');
   for(const[name,args]of[['obs-test-connection',{}],['obs-get-input-list',{}],['obs-get-input-list',{inputKind:'screen_capture'}],['obs-get-input-kind-list',{}],['obs-get-input-kind-list',{unversioned:false}],['obs-get-source-screenshot',{sourceName:'Application',imageFormat:'jpeg',imageWidth:960}],['obs-sleep',{sleepMillis:0}],['obs-sleep',{sleepMillis:3}],['obs-sleep',{sleepFrames:0}],['obs-sleep',{sleepFrames:1}],['obs-sleep',{}],['obs-sleep',{sleepMillis:1,sleepFrames:1}]] as const)await same(oracle,native,name,args);
   expect(count(native,'GetVersion')).toBe(3);expect(count(native,'GetVideoSettings')).toBe(2);expect(native.fake.connectionCount).toBe(1);expect(children(native.transport.pid!)).toEqual([]);

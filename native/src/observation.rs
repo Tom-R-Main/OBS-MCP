@@ -21,6 +21,7 @@ pub struct ObservationError {
     pub reason: &'static str,
     pub message: String,
     request_code: Option<u64>,
+    request_timeout: bool,
 }
 impl std::fmt::Debug for ObservationError {
     fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -37,6 +38,7 @@ impl ObservationError {
             reason,
             message: message.into(),
             request_code: None,
+            request_timeout: false,
         }
     }
     /// Retain an explicit OBS rejection separately from local capability or
@@ -46,10 +48,28 @@ impl ObservationError {
             reason,
             message: message.into(),
             request_code: Some(code),
+            request_timeout: false,
         }
     }
     pub fn request_code(&self) -> Option<u64> {
         self.request_code
+    }
+    pub(crate) fn timed_out(request: ReadRequest, millis: u128) -> Self {
+        Self {
+            request_timeout: true,
+            ..Self::new(
+                "evidence_unavailable",
+                format!("Request {} timed out after {millis}ms", request.as_str()),
+            )
+        }
+    }
+    /// Diagnostic provenance only. The workflow owns the original read budget;
+    /// adapter scheduling must not relabel it as a shorter remaining budget.
+    pub(crate) fn with_original_read_budget(mut self, request: ReadRequest, millis: u128) -> Self {
+        if self.request_timeout {
+            self.message = format!("Request {} timed out after {millis}ms", request.as_str());
+        }
+        self
     }
     fn invalidated() -> Self {
         Self::new(
@@ -441,7 +461,7 @@ impl<'a, R: ReadAdapter> Observation<'a, R> {
         if self.state.has_changed().is_err() {
             return Err(ObservationError::invalidated());
         }
-        let value = value?;
+        let value = value.map_err(|error| error.with_original_read_budget(request, duration_ms))?;
         if !value.is_object() {
             return Err(ObservationError::new(
                 "evidence_unavailable",
@@ -876,5 +896,79 @@ pub(crate) fn js_string(value: Option<&Value>) -> String {
             .collect::<Vec<_>>()
             .join(","),
         Some(Value::Object(_)) => "[object Object]".to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod timeout_projection_tests {
+    use super::*;
+    struct TimedOutReader {
+        provider: watch::Sender<EvidenceState>,
+        change: u8,
+    }
+    impl ReadAdapter for TimedOutReader {
+        fn supports(&self, _request: ReadRequest) -> Option<bool> {
+            None
+        }
+        fn read<'a>(
+            &'a mut self,
+            request: ReadRequest,
+            _data: Value,
+            _deadline: Instant,
+        ) -> ReadFuture<'a> {
+            Box::pin(async move {
+                self.provider.send_modify(|state| match self.change {
+                    1 => state.revision += 1,
+                    2 => state.connected = false,
+                    3 => state.cancelled = true,
+                    4 => state.generation += 1,
+                    _ => {}
+                });
+                // Model an adapter that entered after part of the original
+                // workflow budget elapsed. Only diagnostic provenance moves.
+                Err(ObservationError::timed_out(request, 1_990))
+            })
+        }
+    }
+    #[tokio::test]
+    async fn original_workflow_timeout_budget_is_exact_and_never_overrides_invalidation() {
+        for change in 0..5 {
+            let (provider, state) = watch::channel(EvidenceState {
+                generation: 7,
+                revision: 0,
+                connected: true,
+                cancelled: false,
+            });
+            let mut reader = TimedOutReader { provider, change };
+            let mut sample = Observation::new(
+                &mut reader,
+                state,
+                7,
+                "2026-11-02T00:00:00.000Z".into(),
+                Instant::now() + Duration::from_secs(12),
+            )
+            .unwrap();
+            let error = sample
+                .read(ReadRequest::VideoSettings, json!({}))
+                .await
+                .unwrap_err();
+            assert_eq!(
+                error.reason,
+                match change {
+                    0 => "evidence_unavailable",
+                    3 => "cancelled",
+                    _ => "observation_invalidated",
+                }
+            );
+            if change == 0 {
+                assert_eq!(
+                    error.message,
+                    "Request GetVideoSettings timed out after 2000ms"
+                );
+            }
+        }
+        let peer = ObservationError::new("evidence_unavailable", "Peer read timeout after 1990ms")
+            .with_original_read_budget(ReadRequest::VideoSettings, 2_000);
+        assert_eq!(peer.message, "Peer read timeout after 1990ms");
     }
 }

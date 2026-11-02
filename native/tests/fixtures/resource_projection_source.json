@@ -1,0 +1,466 @@
+{
+  "SourceSDK": "2.4.0",
+  "SourceWireProofSha256": "7e969f53108646eb160fd3dba940f53a3b1c02e701a8701937998176bb815273",
+  "cases": [
+    {
+      "event": "RecordStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "StreamStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "ReplayBufferStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "VirtualcamStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "CurrentProgramSceneChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        }
+      ]
+    },
+    {
+      "event": "CurrentProfileChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "CurrentSceneCollectionChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        }
+      ]
+    },
+    {
+      "event": "CurrentPreviewSceneChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        }
+      ]
+    },
+    {
+      "event": "StudioModeStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "VideoSettingsChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "CanvasCreated",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "CanvasRemoved",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        }
+      ]
+    },
+    {
+      "event": "SceneNameChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scene/Old%2F%25%3F%23/items"
+        }
+      ]
+    },
+    {
+      "event": "SceneCreated",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        }
+      ]
+    },
+    {
+      "event": "SceneRemoved",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        }
+      ]
+    },
+    {
+      "event": "SceneListChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        }
+      ]
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scene/Demo%20%2F%20%C3%A9%20%F0%9F%98%80%20!'()*/items"
+        }
+      ]
+    },
+    {
+      "event": "SceneItemRemoved",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scene/Demo%20%2F%20%C3%A9%20%F0%9F%98%80%20!'()*/items"
+        }
+      ]
+    },
+    {
+      "event": "SceneItemListReindexed",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scene/Demo%20%2F%20%C3%A9%20%F0%9F%98%80%20!'()*/items"
+        }
+      ]
+    },
+    {
+      "event": "SceneItemEnableStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scene/Demo%20%2F%20%C3%A9%20%F0%9F%98%80%20!'()*/items"
+        }
+      ]
+    },
+    {
+      "event": "SceneItemLockStateChanged",
+      "data": {
+        "sceneName": "Demo / \u00e9 \ud83d\ude00 !'()*",
+        "oldSceneName": "Old/%?#"
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scene/Demo%20%2F%20%C3%A9%20%F0%9F%98%80%20!'()*/items"
+        }
+      ]
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": null,
+      "projection": []
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": [],
+      "projection": []
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": {},
+      "projection": []
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": {
+        "sceneName": 5
+      },
+      "projection": []
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": {
+        "oldSceneName": 5
+      },
+      "projection": []
+    },
+    {
+      "event": "SceneItemCreated",
+      "data": {
+        "sceneName": ""
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://scene//items"
+        }
+      ]
+    },
+    {
+      "event": "SceneNameChanged",
+      "data": null,
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        }
+      ]
+    },
+    {
+      "event": "SceneNameChanged",
+      "data": [],
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        }
+      ]
+    },
+    {
+      "event": "SceneNameChanged",
+      "data": {},
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        }
+      ]
+    },
+    {
+      "event": "SceneNameChanged",
+      "data": {
+        "oldSceneName": 5
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        }
+      ]
+    },
+    {
+      "event": "SceneNameChanged",
+      "data": {
+        "oldSceneName": ""
+      },
+      "projection": [
+        {
+          "kind": "updated",
+          "uri": "obs://status"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scenes"
+        },
+        {
+          "kind": "list-changed"
+        },
+        {
+          "kind": "updated",
+          "uri": "obs://scene//items"
+        }
+      ]
+    },
+    {
+      "event": "InputSettingsChanged",
+      "data": {
+        "inputName": "Ignored"
+      },
+      "projection": []
+    }
+  ],
+  "uris": [
+    "obs://status",
+    "obs://scenes",
+    "obs://scene/Old%2F%25%3F%23/items",
+    "obs://scene/Demo%20%2F%20%C3%A9%20%F0%9F%98%80%20!'()*/items",
+    "obs://scene//items"
+  ],
+  "invalidLegacy": {
+    "invalid-uri-type": {
+      "code": -32603,
+      "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"params\",\n      \"uri\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+    },
+    "missing-uri": {
+      "code": -32603,
+      "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"params\",\n      \"uri\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+    }
+  }
+}

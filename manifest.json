@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.4",
-  "name": "obs-mcp",
+  "name": "obs-mcp-native",
   "version": "1.1.1",
-  "display_name": "OBS MCP",
-  "description": "Inspect, plan and supervise OBS Studio workflows through MCP",
-  "long_description": "Inspect OBS Studio, plan and stage scene changes, and supervise bounded recordings through MCP. Results include structured evidence and durable operation receipts for review. The full compatibility interface covers scenes, sources, audio, filters, transitions, recording, streaming, canvases and configuration through the built-in WebSocket v5 server. Tool discovery remains available while OBS is offline.\n\nThis package uses Node.js 20.19 or newer. OBS Studio 28 or newer must have its WebSocket server enabled under Tools > WebSocket Server Settings. See the README for the separate Rust entry, its qualification lane and current limits.",
+  "display_name": "OBS MCP Native",
+  "description": "Rust OBS MCP service with immutable production and advanced profiles",
+  "long_description": "Host-specific Rust service for darwin/arm64. Node.js and the JavaScript MCP SDK are not installed or run by this extension. Choose an existing approved private state directory before startup. Discovery works while OBS is offline. The 178-name catalog is a union of immutable profiles, not simultaneous tool availability: Production exposes up to 164 with approved host/media adapters; Advanced exposes 163 and excludes guarded Take/media/Stage/recovery owners. Read-only and dynamic tool groups narrow discovery further. Native transport/platform qualification is separate from package contents; consult docs/native-distribution.md for current prerequisites and limits.",
   "icon": "icon.png",
   "author": {
     "name": "Thomas Main",
@@ -29,22 +29,15 @@
   ],
   "compatibility": {
     "platforms": [
-      "darwin",
-      "win32",
-      "linux"
-    ],
-    "runtimes": {
-      "node": ">=20.19.0"
-    }
+      "darwin"
+    ]
   },
   "server": {
-    "type": "node",
-    "entry_point": "server/index.js",
+    "type": "binary",
+    "entry_point": "native/obs-mcp-native",
     "mcp_config": {
-      "command": "node",
-      "args": [
-        "${__dirname}/server/index.js"
-      ],
+      "command": "${__dirname}/native/obs-mcp-native",
+      "args": [],
       "env": {
         "OBS_WEBSOCKET_URL": "${user_config.obs_websocket_url}",
         "OBS_WEBSOCKET_PASSWORD": "${user_config.obs_websocket_password}",
@@ -52,7 +45,12 @@
         "OBS_MCP_READ_ONLY": "${user_config.obs_mcp_read_only}",
         "OBS_MCP_CONFIRM_LIVE": "${user_config.obs_mcp_confirm_live}",
         "OBS_MCP_READ_OBS_CONFIG": "${user_config.obs_mcp_read_obs_config}",
-        "OBS_MCP_DYNAMIC_TOOLSETS": "${user_config.obs_mcp_dynamic_toolsets}"
+        "OBS_MCP_DYNAMIC_TOOLSETS": "${user_config.obs_mcp_dynamic_toolsets}",
+        "OBS_MCP_STATE_DIR": "${user_config.obs_mcp_state_dir}",
+        "OBS_MCP_NATIVE_PROFILE": "${user_config.obs_mcp_native_profile}",
+        "OBS_MCP_NATIVE_RECORDING_ROOT": "${user_config.obs_mcp_recording_root}",
+        "OBS_MCP_NATIVE_FFMPEG": "${user_config.obs_mcp_ffmpeg}",
+        "OBS_MCP_NATIVE_FFPROBE": "${user_config.obs_mcp_ffprobe}"
       }
     }
   },
@@ -105,6 +103,751 @@
       "description": "When no password is entered above, read the one OBS saved on this computer.",
       "required": false,
       "default": false
+    },
+    "obs_mcp_state_dir": {
+      "type": "directory",
+      "title": "Approved private state directory",
+      "description": "Required existing absolute directory owned by you, with safe private permissions (0700 on Unix). Stores endpoint-bound operation journals and snapshots. Create and approve it explicitly; the extension does not initialize a new home directory or erase history.",
+      "required": true
+    },
+    "obs_mcp_native_profile": {
+      "type": "string",
+      "title": "Native capability profile",
+      "description": "production (default) or advanced. Advanced permits manual/raw/vendor/hotkey effects but never creates guarded Take/media/Stage/recovery owners. Possible advanced effects durably block later guarded reentry in the same endpoint/state namespace; restarting MCP does not clear this.",
+      "required": false,
+      "default": "production"
+    },
+    "obs_mcp_recording_root": {
+      "type": "directory",
+      "title": "Approved recording directory (optional)",
+      "description": "Existing approved private recording directory for Production Take/Clip/file workflows. Leave empty for inspection and other available workflows. Advanced ignores guarded-owner configuration. Availability depends on validated local adapters and media tools.",
+      "required": false
+    },
+    "obs_mcp_ffmpeg": {
+      "type": "file",
+      "title": "FFmpeg executable (optional)",
+      "description": "Existing trusted FFmpeg executable used for local media inspection/processing. If omitted, discovery uses PATH. No executable is downloaded or installed by this extension.",
+      "required": false
+    },
+    "obs_mcp_ffprobe": {
+      "type": "file",
+      "title": "ffprobe executable (optional)",
+      "description": "Existing trusted ffprobe executable used for local media inspection/processing. If omitted, discovery uses PATH. No executable is downloaded or installed by this extension.",
+      "required": false
     }
-  }
+  },
+  "tools": [
+    {
+      "name": "obs-get-status",
+      "description": "Get the current status of the OBS MCP server and OBS connection"
+    },
+    {
+      "name": "obs-get-version",
+      "description": "Get OBS Studio version information"
+    },
+    {
+      "name": "obs-test-connection",
+      "description": "Test the connection to OBS WebSocket"
+    },
+    {
+      "name": "obs-get-stats",
+      "description": "Gets statistics about OBS, obs-websocket, and the current session"
+    },
+    {
+      "name": "obs-broadcast-custom-event",
+      "description": "Broadcasts a CustomEvent to all WebSocket clients"
+    },
+    {
+      "name": "obs-call-vendor-request",
+      "description": "Call a request registered to a vendor"
+    },
+    {
+      "name": "obs-get-hotkey-list",
+      "description": "Gets an array of all hotkey names in OBS"
+    },
+    {
+      "name": "obs-trigger-hotkey-by-name",
+      "description": "Triggers a hotkey using its name"
+    },
+    {
+      "name": "obs-trigger-hotkey-by-key-sequence",
+      "description": "Triggers a hotkey using a sequence of keys"
+    },
+    {
+      "name": "obs-sleep",
+      "description": "Waits for a time duration or a number of OBS video frames before returning. Use it to pace sequences such as holding a recorded shot on screen."
+    },
+    {
+      "name": "obs-observe",
+      "description": "Bounded read-only production observation: exact collection/canvas/program/preview identities, outputs, control, take and recovery state. Rejects inconsistent reads and reports missing evidence with next checks. Same contract as obs://status; no rendered-content or readiness claim."
+    },
+    {
+      "name": "obs-claim-control",
+      "description": "When several agents share this server, claim OBS for this client: until it is released or expires, other clients cannot change OBS (reading and stopping outputs still work). Claiming again extends it. obs-take-start claims control for the length of a take"
+    },
+    {
+      "name": "obs-release-control",
+      "description": "Let other clients change OBS again after obs-claim-control"
+    },
+    {
+      "name": "obs-control-status",
+      "description": "Report which client, if any, holds control of OBS and until when"
+    },
+    {
+      "name": "obs-get-scene-list",
+      "description": "Get a list of scenes in OBS"
+    },
+    {
+      "name": "obs-get-current-scene",
+      "description": "Get the current active scene in OBS"
+    },
+    {
+      "name": "obs-set-current-scene",
+      "description": "Set the current active scene in OBS"
+    },
+    {
+      "name": "obs-get-preview-scene",
+      "description": "Get the current preview scene in OBS Studio Mode"
+    },
+    {
+      "name": "obs-set-preview-scene",
+      "description": "Set the current preview scene in OBS Studio Mode"
+    },
+    {
+      "name": "obs-create-scene",
+      "description": "Create a new scene in OBS"
+    },
+    {
+      "name": "obs-remove-scene",
+      "description": "Remove a scene from OBS"
+    },
+    {
+      "name": "obs-trigger-studio-transition",
+      "description": "Trigger a transition from preview to program scene in Studio Mode"
+    },
+    {
+      "name": "obs-get-source-active",
+      "description": "Gets the active and show state of a source"
+    },
+    {
+      "name": "obs-get-source-screenshot",
+      "description": "Gets a source screenshot as MCP image content"
+    },
+    {
+      "name": "obs-save-source-screenshot",
+      "description": "Saves a screenshot of a source to the filesystem"
+    },
+    {
+      "name": "obs-get-scene-items",
+      "description": "Get a list of all scene items in a scene"
+    },
+    {
+      "name": "obs-create-scene-item",
+      "description": "Create a scene item for a source in a scene"
+    },
+    {
+      "name": "obs-remove-scene-item",
+      "description": "Remove a scene item from a scene"
+    },
+    {
+      "name": "obs-set-scene-item-enabled",
+      "description": "Show or hide a scene item"
+    },
+    {
+      "name": "obs-get-scene-item-transform",
+      "description": "Get the position, rotation, scale, or crop of a scene item"
+    },
+    {
+      "name": "obs-set-scene-item-transform",
+      "description": "Set the position, rotation, scale, or crop of a scene item, then return the transform OBS applied"
+    },
+    {
+      "name": "obs-get-scene-item-id",
+      "description": "Get the ID of a scene item by its source name"
+    },
+    {
+      "name": "obs-get-stream-status",
+      "description": "Get the current streaming status"
+    },
+    {
+      "name": "obs-start-stream",
+      "description": "Start streaming in OBS and wait until OBS confirms the stream is active"
+    },
+    {
+      "name": "obs-stop-stream",
+      "description": "Stop streaming in OBS"
+    },
+    {
+      "name": "obs-toggle-stream",
+      "description": "Toggle the streaming state in OBS"
+    },
+    {
+      "name": "obs-send-stream-caption",
+      "description": "Sends CEA-608 caption text over the stream output"
+    },
+    {
+      "name": "obs-get-transition-list",
+      "description": "Get a list of available transitions in OBS"
+    },
+    {
+      "name": "obs-get-current-transition",
+      "description": "Get the name of the currently active transition"
+    },
+    {
+      "name": "obs-set-current-transition",
+      "description": "Set the current transition in OBS"
+    },
+    {
+      "name": "obs-get-transition-duration",
+      "description": "Get the duration of the current transition in milliseconds"
+    },
+    {
+      "name": "obs-set-transition-duration",
+      "description": "Set the duration of the current transition in milliseconds"
+    },
+    {
+      "name": "obs-get-transition-kind",
+      "description": "Get the kind/type of the current transition"
+    },
+    {
+      "name": "obs-set-transition-settings",
+      "description": "Set the settings of the current transition"
+    },
+    {
+      "name": "obs-get-transition-settings",
+      "description": "Get the settings of the current transition"
+    },
+    {
+      "name": "obs-trigger-transition",
+      "description": "Trigger a scene transition in OBS (Studio Mode must be enabled)"
+    },
+    {
+      "name": "obs-get-persistent-data",
+      "description": "Gets the value of a slot from the selected persistent data realm"
+    },
+    {
+      "name": "obs-set-persistent-data",
+      "description": "Sets the value of a slot from the selected persistent data realm"
+    },
+    {
+      "name": "obs-get-scene-collection-list",
+      "description": "Gets an array of all scene collections"
+    },
+    {
+      "name": "obs-set-current-scene-collection",
+      "description": "Switches to a scene collection"
+    },
+    {
+      "name": "obs-create-scene-collection",
+      "description": "Creates a new scene collection, switching to it in the process"
+    },
+    {
+      "name": "obs-get-profile-list",
+      "description": "Gets an array of all profiles"
+    },
+    {
+      "name": "obs-set-current-profile",
+      "description": "Switches to a profile"
+    },
+    {
+      "name": "obs-create-profile",
+      "description": "Creates a new profile, switching to it in the process"
+    },
+    {
+      "name": "obs-remove-profile",
+      "description": "Removes a profile. If the current profile is chosen, it will change to a different profile first"
+    },
+    {
+      "name": "obs-get-profile-parameter",
+      "description": "Gets a parameter from the current profile's configuration"
+    },
+    {
+      "name": "obs-set-profile-parameter",
+      "description": "Sets the value of a parameter in the current profile's configuration. OBS does not rebuild its outputs after this call, so changes to output settings (categories Output, SimpleOutput, AdvOut) take effect only after OBS restarts or its settings are applied in the OBS window"
+    },
+    {
+      "name": "obs-get-video-settings",
+      "description": "Gets the current video settings"
+    },
+    {
+      "name": "obs-set-video-settings",
+      "description": "Sets the current video settings"
+    },
+    {
+      "name": "obs-get-stream-service-settings",
+      "description": "Gets the current stream service settings"
+    },
+    {
+      "name": "obs-set-stream-service-settings",
+      "description": "Sets the current stream service settings"
+    },
+    {
+      "name": "obs-get-record-directory",
+      "description": "Gets the current directory that the record output is set to"
+    },
+    {
+      "name": "obs-set-record-directory",
+      "description": "Sets the current directory that the record output writes files to"
+    },
+    {
+      "name": "obs-get-filter-kind-list",
+      "description": "Gets an array of all available source filter kinds"
+    },
+    {
+      "name": "obs-get-source-filter-list",
+      "description": "Gets an array of all of a source's filters"
+    },
+    {
+      "name": "obs-get-filter-default-settings",
+      "description": "Gets the default settings for a filter kind"
+    },
+    {
+      "name": "obs-create-source-filter",
+      "description": "Creates a new filter, adding it to the specified source"
+    },
+    {
+      "name": "obs-remove-source-filter",
+      "description": "Removes a filter from a source"
+    },
+    {
+      "name": "obs-set-source-filter-name",
+      "description": "Sets the name of a source filter (rename)"
+    },
+    {
+      "name": "obs-get-source-filter",
+      "description": "Gets the info for a specific source filter"
+    },
+    {
+      "name": "obs-set-source-filter-index",
+      "description": "Sets the index position of a filter on a source"
+    },
+    {
+      "name": "obs-set-source-filter-settings",
+      "description": "Sets the settings of a source filter"
+    },
+    {
+      "name": "obs-set-source-filter-enabled",
+      "description": "Sets the enable state of a source filter"
+    },
+    {
+      "name": "obs-get-input-list",
+      "description": "Gets an array of all inputs in OBS"
+    },
+    {
+      "name": "obs-get-input-kind-list",
+      "description": "Gets an array of all available input kinds in OBS"
+    },
+    {
+      "name": "obs-get-special-inputs",
+      "description": "Gets the names of all special inputs"
+    },
+    {
+      "name": "obs-create-input",
+      "description": "Creates a new input, adding it as a scene item to the specified scene, then returns its settings and size in the program scene, warning when it renders at 0×0"
+    },
+    {
+      "name": "obs-remove-input",
+      "description": "Removes an existing input"
+    },
+    {
+      "name": "obs-set-input-name",
+      "description": "Sets the name of an input (rename)"
+    },
+    {
+      "name": "obs-get-input-default-settings",
+      "description": "Gets the default settings for an input kind"
+    },
+    {
+      "name": "obs-get-input-settings",
+      "description": "Gets the settings of an input"
+    },
+    {
+      "name": "obs-set-input-settings",
+      "description": "Sets the settings of an input, then returns the resulting settings and the input's size in the program scene, warning when it renders at 0×0"
+    },
+    {
+      "name": "obs-get-input-mute",
+      "description": "Gets the audio mute state of an input"
+    },
+    {
+      "name": "obs-set-input-mute",
+      "description": "Sets the audio mute state of an input"
+    },
+    {
+      "name": "obs-toggle-input-mute",
+      "description": "Toggles the audio mute state of an input"
+    },
+    {
+      "name": "obs-get-input-volume",
+      "description": "Gets the current volume setting of an input"
+    },
+    {
+      "name": "obs-set-input-volume",
+      "description": "Sets the volume setting of an input"
+    },
+    {
+      "name": "obs-get-input-audio-balance",
+      "description": "Gets the audio balance of an input"
+    },
+    {
+      "name": "obs-set-input-audio-balance",
+      "description": "Sets the audio balance of an input"
+    },
+    {
+      "name": "obs-get-input-audio-sync-offset",
+      "description": "Gets the audio sync offset of an input"
+    },
+    {
+      "name": "obs-set-input-audio-sync-offset",
+      "description": "Sets the audio sync offset of an input"
+    },
+    {
+      "name": "obs-get-input-audio-monitor-type",
+      "description": "Gets the audio monitor type of an input"
+    },
+    {
+      "name": "obs-set-input-audio-monitor-type",
+      "description": "Sets the audio monitor type of an input"
+    },
+    {
+      "name": "obs-get-media-input-status",
+      "description": "Gets the status of a media input"
+    },
+    {
+      "name": "obs-set-media-input-cursor",
+      "description": "Sets the cursor position of a media input"
+    },
+    {
+      "name": "obs-offset-media-input-cursor",
+      "description": "Offsets the current cursor position of a media input"
+    },
+    {
+      "name": "obs-trigger-media-input-action",
+      "description": "Triggers an action on a media input"
+    },
+    {
+      "name": "obs-get-virtual-cam-status",
+      "description": "Gets the status of the virtualcam output"
+    },
+    {
+      "name": "obs-toggle-virtual-cam",
+      "description": "Toggles the state of the virtualcam output"
+    },
+    {
+      "name": "obs-start-virtual-cam",
+      "description": "Starts the virtualcam output and waits until OBS confirms it is active"
+    },
+    {
+      "name": "obs-stop-virtual-cam",
+      "description": "Stops the virtualcam output"
+    },
+    {
+      "name": "obs-get-replay-buffer-status",
+      "description": "Gets the status of the replay buffer output"
+    },
+    {
+      "name": "obs-toggle-replay-buffer",
+      "description": "Toggles the state of the replay buffer output"
+    },
+    {
+      "name": "obs-start-replay-buffer",
+      "description": "Starts the replay buffer output and waits until OBS confirms it is active"
+    },
+    {
+      "name": "obs-stop-replay-buffer",
+      "description": "Stops the replay buffer output"
+    },
+    {
+      "name": "obs-save-replay-buffer",
+      "description": "Saves the contents of the replay buffer output"
+    },
+    {
+      "name": "obs-get-last-replay-buffer-replay",
+      "description": "Gets the filename of the last replay buffer save file"
+    },
+    {
+      "name": "obs-get-output-list",
+      "description": "Gets the list of available outputs"
+    },
+    {
+      "name": "obs-get-output-status",
+      "description": "Gets the status of an output"
+    },
+    {
+      "name": "obs-toggle-output",
+      "description": "Toggles the status of an output"
+    },
+    {
+      "name": "obs-start-output",
+      "description": "Starts an output"
+    },
+    {
+      "name": "obs-stop-output",
+      "description": "Stops an output"
+    },
+    {
+      "name": "obs-get-output-settings",
+      "description": "Gets the settings of an output"
+    },
+    {
+      "name": "obs-set-output-settings",
+      "description": "Sets the settings of an output"
+    },
+    {
+      "name": "obs-get-record-status",
+      "description": "Gets the status of the record output"
+    },
+    {
+      "name": "obs-toggle-record",
+      "description": "Toggles the status of the record output"
+    },
+    {
+      "name": "obs-start-record",
+      "description": "Starts the record output and waits until OBS confirms it is active"
+    },
+    {
+      "name": "obs-stop-record",
+      "description": "Stops the record output"
+    },
+    {
+      "name": "obs-toggle-record-pause",
+      "description": "Toggles pause on the record output"
+    },
+    {
+      "name": "obs-pause-record",
+      "description": "Pauses the record output"
+    },
+    {
+      "name": "obs-resume-record",
+      "description": "Resumes the record output"
+    },
+    {
+      "name": "obs-split-record-file",
+      "description": "Splits the current file being recorded into a new file"
+    },
+    {
+      "name": "obs-create-record-chapter",
+      "description": "Adds a new chapter marker to the file currently being recorded"
+    },
+    {
+      "name": "obs-get-studio-mode",
+      "description": "Gets whether studio mode is enabled"
+    },
+    {
+      "name": "obs-set-studio-mode",
+      "description": "Enables or disables studio mode"
+    },
+    {
+      "name": "obs-open-input-properties",
+      "description": "Opens the properties dialog of an input"
+    },
+    {
+      "name": "obs-open-input-filters",
+      "description": "Opens the filters dialog of an input"
+    },
+    {
+      "name": "obs-open-input-interact",
+      "description": "Opens the interact dialog of an input"
+    },
+    {
+      "name": "obs-get-monitor-list",
+      "description": "Gets a list of connected monitors and information about them"
+    },
+    {
+      "name": "obs-open-video-mix-projector",
+      "description": "Opens a projector for a specific output video mix"
+    },
+    {
+      "name": "obs-open-source-projector",
+      "description": "Opens a projector for a source"
+    },
+    {
+      "name": "obs-get-canvas-list",
+      "description": "Get all canvases available in OBS"
+    },
+    {
+      "name": "obs-get-input-audio-tracks",
+      "description": "Get the enabled audio tracks for an input"
+    },
+    {
+      "name": "obs-set-input-audio-tracks",
+      "description": "Set the enabled audio tracks for an input"
+    },
+    {
+      "name": "obs-get-input-deinterlace-field-order",
+      "description": "Get the deinterlace field order of an asynchronous input"
+    },
+    {
+      "name": "obs-set-input-deinterlace-field-order",
+      "description": "Set the deinterlace field order of an asynchronous input"
+    },
+    {
+      "name": "obs-get-input-deinterlace-mode",
+      "description": "Get the deinterlace mode of an asynchronous input"
+    },
+    {
+      "name": "obs-set-input-deinterlace-mode",
+      "description": "Set the deinterlace mode of an asynchronous input"
+    },
+    {
+      "name": "obs-get-input-property-list-items",
+      "description": "Get the selectable items for a dynamic input list property"
+    },
+    {
+      "name": "obs-press-input-property-button",
+      "description": "Press a button exposed by an input property"
+    },
+    {
+      "name": "obs-duplicate-scene-item",
+      "description": "Duplicate a scene item while preserving its transform and crop"
+    },
+    {
+      "name": "obs-get-group-scene-items",
+      "description": "Get the scene items contained in an OBS group"
+    },
+    {
+      "name": "obs-get-scene-item-enabled",
+      "description": "Get whether a scene item is enabled"
+    },
+    {
+      "name": "obs-get-scene-item-index",
+      "description": "Get the index position of a scene item"
+    },
+    {
+      "name": "obs-set-scene-item-index",
+      "description": "Set the index position of a scene item"
+    },
+    {
+      "name": "obs-get-scene-item-locked",
+      "description": "Get whether a scene item is locked"
+    },
+    {
+      "name": "obs-set-scene-item-locked",
+      "description": "Set whether a scene item is locked"
+    },
+    {
+      "name": "obs-get-scene-item-blend-mode",
+      "description": "Get the blend mode of a scene item"
+    },
+    {
+      "name": "obs-set-scene-item-blend-mode",
+      "description": "Set the blend mode of a scene item"
+    },
+    {
+      "name": "obs-get-scene-item-source",
+      "description": "Get the source associated with a scene item"
+    },
+    {
+      "name": "obs-get-group-list",
+      "description": "Get all OBS groups"
+    },
+    {
+      "name": "obs-set-scene-name",
+      "description": "Rename an OBS scene"
+    },
+    {
+      "name": "obs-get-scene-transition-override",
+      "description": "Get the transition override configured for a scene"
+    },
+    {
+      "name": "obs-set-scene-transition-override",
+      "description": "Set or clear the transition override for a scene"
+    },
+    {
+      "name": "obs-get-transition-kind-list",
+      "description": "Get all available OBS transition kinds"
+    },
+    {
+      "name": "obs-get-transition-cursor",
+      "description": "Get the current scene transition cursor position"
+    },
+    {
+      "name": "obs-set-tbar-position",
+      "description": "Set and optionally release the OBS Studio Mode T-Bar position"
+    },
+    {
+      "name": "obs-describe-request",
+      "description": "Inspect the exact fields and constraints of requests in the pinned OBS WebSocket protocol"
+    },
+    {
+      "name": "obs-call-request",
+      "description": "Call any request in the pinned OBS WebSocket protocol; inspect it with obs-describe-request first"
+    },
+    {
+      "name": "obs-batch",
+      "description": "Send several requests from the pinned OBS WebSocket protocol in one message. serial-realtime runs them in order as fast as possible; serial-frame runs one per rendered frame, so changes such as hiding one source and showing another land on the same frame. Sleep ({sleepMillis} or {sleepFrames}) pauses serial batches. Each request succeeds or fails on its own unless haltOnFailure is set"
+    },
+    {
+      "name": "obs-preflight",
+      "description": "Check for the conditions that make OBS silently refuse or botch a recording: an active recording, an invalid output path, low disk space, an unusable encoder, unapplied output settings, audible inputs, and blank (0×0) sources. Read-only; run it before obs-start-record"
+    },
+    {
+      "name": "obs-record-clip",
+      "description": "Record a clip of up to 50s in one call: runs obs-preflight, starts recording and waits for OBS to confirm, adds chapter markers, stops, then checks the file's length and audio with ffprobe/ffmpeg when available. For longer takes use obs-start-record and obs-stop-record"
+    },
+    {
+      "name": "obs-capture-window",
+      "description": "Resolve a macOS ScreenCaptureKit or Linux X11 window using an existing compatible capture as read-only inventory, then create/reuse the capture, fit it and optionally silence it. Refuses missing or ambiguous discovery before changes. apply:false returns a plan without snapshots, mutations or screenshots. Mac application auto-discovery is refused; configure and bind an existing application capture in OBS. Linux application matching selects one window. Wayland portal selection requires the user: configure a PipeWire window capture in OBS, then use backend:portal without window/application to fit and inspect it. Returns capture size and optional screenshot; inspect the picture for target correctness."
+    },
+    {
+      "name": "obs-take-start",
+      "description": "Start a watched recording of any length: runs obs-preflight, starts recording and waits for OBS to confirm, then watches audio, frames, and picture until obs-take-stop. Mark steps with obs-take-mark and check progress with obs-take-status. By default, profile, scene collection, and output setting changes are refused until the take stops"
+    },
+    {
+      "name": "obs-take-mark",
+      "description": "Add a named chapter to the running take, in the file (Hybrid MP4/MOV) and in the take log"
+    },
+    {
+      "name": "obs-take-status",
+      "description": "Report the running take: length, file size, loudest recorded input, skipped frames, black or unchanging picture, chapters, and warnings so far"
+    },
+    {
+      "name": "obs-take-stop",
+      "description": "Stop the running take: stops recording, then checks the file's length and audio with ffprobe/ffmpeg when available, reports what the monitor saw, and writes <name>.take.json next to a local recording"
+    },
+    {
+      "name": "obs-prepare-demo",
+      "description": "Plan by default. Fit and silence one existing macOS, Linux X11 or authorized PipeWire window capture in the exact current collection/program scene. Refuses live output, shared sources, groups, missing identity/state, and unpersisted recovery. Does not retarget or create anything. No UI exclusion guarantee."
+    },
+    {
+      "name": "obs-recover-demo",
+      "description": "Plan by default. Restore only fields owned by the given durable preparation journal. Refuses conflicting operator changes, different identities/collection, and active output. Rereads postconditions; partial failure needs inspection before retry. Legacy snapshots require manual obs-restore."
+    },
+    {
+      "name": "obs-trim-take",
+      "description": "Plan, and optionally export, a copy of a recording with its dead time cut: stretches where the picture does not change (and the sound, if any, is silent). A spinner or shimmering label counts as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before the next chapter and the end, and moves chapters to match. Without apply it only returns the plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory"
+    },
+    {
+      "name": "obs-contact-sheet",
+      "description": "Return one image of frames from a recording, tiled in time order: at each chapter start by default, or at the given times. Use it to check a take or an edit without watching it. Needs ffmpeg; works on files in the OBS recording directory"
+    },
+    {
+      "name": "obs-snapshot",
+      "description": "Save the current settings, mute, volume, and audio tracks of inputs, and the transform, visibility, lock, and order of scene items, so obs-restore can undo later changes. Defaults to the program scene and the inputs in it. Snapshots are saved on disk (the last 20) and survive restarts; call with list: true to see them"
+    },
+    {
+      "name": "obs-restore",
+      "description": "Return inputs and scene items to a snapshot from obs-snapshot, changing only what differs, in one request batch. dryRun lists the changes without making them. Removed items and inputs cannot be recreated, and items added since are left in place; both are reported"
+    },
+    {
+      "name": "obs-apply-scene",
+      "description": "Describe a scene and let the server make OBS match it: creates the scene, inputs, and items that are missing, and sets only the settings, visibility, lock, audio, transforms, and order that differ. Without apply it returns the plan. Applies in two request batches, checks the result, warns about sources that render at 0×0, and saves a snapshot first so obs-restore can undo changes to existing sources"
+    },
+    {
+      "name": "obs-audit-scene",
+      "description": "Read a specifically selected scene and report structural pass, fail, or unknown checks with item occurrence identities. Optional screenshot supports separate visual review. A structural pass does not establish correct rendered content or recording readiness. Does not alter OBS."
+    },
+    {
+      "name": "obs-plan-scene-template",
+      "description": "Resolve portable logical roles against exact local collection/canvas/source/occurrence bindings. Flat layouts and literal transforms only. Returns proposed changes and explicit blockers for missing/duplicate bindings, renamed/replaced sources, incompatible kinds, nested scenes, and wrong canvas. Never sends mutation requests."
+    },
+    {
+      "name": "obs-stage-scene",
+      "description": "Stage an exact existing scene in Studio Mode preview, include its screenshot, and issue a short-lived one-use stageId. Rechecks dependencies and program before/after staging. Does not edit inputs, filters, audio, or layout; shared inputs remain shared. Inspect the image before obs-take-scene."
+    },
+    {
+      "name": "obs-take-scene",
+      "description": "Consume a stageId once. Recheck the staged subject, program, preview, connection and Studio Mode; dispatch one transition; separately report request acceptance and whether the intended scene is observed on program. Never blindly retry uncertain outcomes. Rendered content still requires inspection."
+    }
+  ]
 }
