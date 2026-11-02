@@ -168,6 +168,8 @@ pub(crate) struct ProjectionOwner {
     closed: Arc<AtomicBool>,
     #[cfg(test)]
     next_gate: Mutex<Option<Arc<TestGate>>>,
+    #[cfg(test)]
+    next_return_gate: Mutex<Option<Arc<TestGate>>>,
 }
 impl ProjectionOwner {
     pub(crate) fn new(items: usize) -> Self {
@@ -186,12 +188,20 @@ impl ProjectionOwner {
             closed: Arc::new(AtomicBool::new(false)),
             #[cfg(test)]
             next_gate: Mutex::new(None),
+            #[cfg(test)]
+            next_return_gate: Mutex::new(None),
         }
     }
     #[cfg(test)]
     pub(crate) fn hold_next(&self) -> Arc<TestGate> {
         let gate = Arc::new(TestGate::new());
         *self.next_gate.lock().unwrap() = Some(gate.clone());
+        gate
+    }
+    #[cfg(test)]
+    fn hold_next_return(&self) -> Arc<TestGate> {
+        let gate = Arc::new(TestGate::new());
+        *self.next_return_gate.lock().unwrap() = Some(gate.clone());
         gate
     }
     pub(crate) fn cancel(&self) {
@@ -277,6 +287,8 @@ impl ProjectionOwner {
             }
             #[cfg(test)]
             let gate = self.next_gate.lock().unwrap().take();
+            #[cfg(test)]
+            let return_gate = self.next_return_gate.lock().unwrap().take();
             set.spawn_blocking(move || {
                 #[cfg(test)]
                 if let Some(gate) = gate {
@@ -284,6 +296,10 @@ impl ProjectionOwner {
                 }
                 let result = canonical(raw, &text, text_limit, &control);
                 let _ = send.send(result);
+                #[cfg(test)]
+                if let Some(gate) = return_gate {
+                    gate.wait();
+                }
             });
         }
         let result = match timeout_at(deadline, &mut receive).await {
@@ -790,6 +806,80 @@ mod tests {
         .await
         .unwrap();
     }
+    async fn join_current_workers(owner: &ProjectionOwner) -> Result<(), ProjectionError> {
+        let mut healthy = true;
+        while let Some(joined) = std::future::poll_fn(|cx| {
+            let mut jobs = owner.jobs.lock().unwrap();
+            match jobs.set.as_mut() {
+                Some(set) => set.poll_join_next(cx),
+                None => std::task::Poll::Ready(None),
+            }
+        })
+        .await
+        {
+            healthy &= joined.is_ok();
+        }
+        if healthy {
+            Ok(())
+        } else {
+            Err(ProjectionError::WorkerFailed)
+        }
+    }
+    #[tokio::test]
+    async fn published_result_does_not_release_physical_worker_before_owner_join() {
+        let owner = ProjectionOwner::with_limits(1, 64, 64);
+        let gate = owner.hold_next_return();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let first = owner
+            .project(owner.capture(&frame("0"), json!({}), deadline).unwrap())
+            .await;
+        let reached_gate = tokio::time::timeout(Duration::from_secs(2), async {
+            while !gate.started.load(Ordering::Acquire) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .is_ok();
+        let canonical = first
+            .as_ref()
+            .ok()
+            .map(|row| row.applied_json.as_str().to_owned());
+        drop(first);
+        let raw_free = owner.raw.available_permits();
+        let text_free = owner.text.available_permits();
+        let charged_workers = owner.jobs.lock().unwrap().set.as_ref().unwrap().len();
+        let next = match owner.capture(&frame("false"), json!({}), deadline) {
+            Ok(raw) => owner.project(raw).await,
+            Err(error) => Err(error),
+        };
+        // A distinct owner has independent physical-worker admission. This is
+        // not interference from other concurrently running unit tests.
+        let independent = ProjectionOwner::with_limits(1, 64, 64);
+        let other = match independent.capture(&frame("false"), json!({}), deadline) {
+            Ok(raw) => independent.project(raw).await,
+            Err(error) => Err(error),
+        };
+        let independent_text = other
+            .as_ref()
+            .ok()
+            .map(|row| row.applied_json.as_str().to_owned());
+        drop(other);
+        independent.shutdown().await;
+        let mut shutdown = Box::pin(owner.shutdown());
+        let join_pending = poll!(shutdown.as_mut()).is_pending();
+        // Always release and join the same held worker BEFORE assertions.
+        gate.release();
+        shutdown.await;
+        assert!(reached_gate);
+        assert_eq!(canonical.as_deref(), Some("0"));
+        assert_eq!((raw_free, text_free, charged_workers), (64, 64, 1));
+        assert_eq!(independent_text.as_deref(), Some("false"));
+        assert!(join_pending);
+        assert!(matches!(next, Err(ProjectionError::WorkerCapacity)));
+        assert_eq!(owner.raw.available_permits(), 64);
+        assert_eq!(owner.text.available_permits(), 64);
+        assert!(owner.jobs.lock().unwrap().set.is_none());
+    }
     #[tokio::test]
     async fn canonical_matches_actual_node_for_order_duplicates_escapes_types_and_numeric_leaves() {
         let raws = vec![
@@ -818,8 +908,9 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
         let expected: Vec<String> = serde_json::from_slice(&output.stdout).unwrap();
-        let owner = ProjectionOwner::new(2);
         for (raw, expected) in raws.iter().zip(expected) {
+            // Each independent semantic vector closes and joins its own worker.
+            let owner = ProjectionOwner::new(2);
             let captured = owner
                 .capture(
                     &frame(raw),
@@ -827,17 +918,22 @@ mod tests {
                     Instant::now() + Duration::from_secs(5),
                 )
                 .unwrap();
-            let result = owner.project(captured).await.unwrap();
-            assert_eq!(result.applied_json.as_str(), expected);
-            assert!(!format!("{result:?}").contains("negativeZero"));
+            let result = owner.project(captured).await;
+            let observed = result
+                .as_ref()
+                .ok()
+                .map(|row| row.applied_json.as_str().to_owned());
+            let diagnostic = format!("{result:?}");
+            drop(result);
+            owner.shutdown().await;
+            assert_eq!(observed.as_deref(), Some(expected.as_str()));
+            assert!(!diagnostic.contains("negativeZero"));
+            assert_eq!(owner.raw.available_permits(), LIMIT);
+            assert_eq!(owner.text.available_permits(), LIMIT);
         }
-        owner.shutdown().await;
-        assert_eq!(owner.raw.available_permits(), LIMIT);
-        assert_eq!(owner.text.available_permits(), LIMIT);
     }
     #[tokio::test]
     async fn selected_path_duplicates_last_wins_and_null_or_missing_defaults_to_object() {
-        let owner = ProjectionOwner::new(1);
         for (raw, expected) in [
             (
                 r#"{"d":{"responseData":{"sceneItemTransform":{"bad":1}}},"d":{"responseData":{"sceneItemTransform":{"z":1,"a":2}}}}"#,
@@ -855,15 +951,19 @@ mod tests {
             (r#"{"d":{"responseData":null}}"#, "{}"),
             (r#"{"d":{"responseData":false}}"#, "{}"),
         ] {
+            let owner = ProjectionOwner::new(1);
             let capture = owner
                 .capture(raw, json!({}), Instant::now() + Duration::from_secs(3))
                 .unwrap();
-            assert_eq!(
-                owner.project(capture).await.unwrap().applied_json.as_str(),
-                expected
-            );
+            let result = owner.project(capture).await;
+            let observed = result
+                .as_ref()
+                .ok()
+                .map(|row| row.applied_json.as_str().to_owned());
+            drop(result);
+            owner.shutdown().await;
+            assert_eq!(observed.as_deref(), Some(expected));
         }
-        owner.shutdown().await;
     }
     #[tokio::test]
     async fn exact_raw_and_text_pools_are_independent_and_release_after_failure_and_retention() {
@@ -884,6 +984,7 @@ mod tests {
             owner.project(expansion).await,
             Err(ProjectionError::TextCapacity)
         ));
+        join_current_workers(&owner).await.unwrap();
         assert_eq!(owner.raw.available_permits(), 32);
         let first = owner
             .project(
@@ -893,6 +994,7 @@ mod tests {
             )
             .await
             .unwrap();
+        join_current_workers(&owner).await.unwrap();
         assert!(matches!(
             owner
                 .project(
@@ -903,6 +1005,7 @@ mod tests {
                 .await,
             Err(ProjectionError::TextCapacity)
         ));
+        join_current_workers(&owner).await.unwrap();
         drop(first);
         owner
             .project(

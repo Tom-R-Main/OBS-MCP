@@ -554,8 +554,8 @@
     "obs-trim-take": "compat"
   },
   "sealed": {
-    "at": "2026-11-01T22:35:39.460Z",
-    "sourceRevision": "addbf9c389f1fc9e3402c2633b6351cce0bf0a44",
+    "at": "2026-11-02T01:43:50.146Z",
+    "sourceRevision": "0dd03af3432b00177d3006316b2104d241154373",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -667,7 +667,7 @@
       "native/src/obs.rs": "80f0bf6ddcbc01eb99abf1f0048afaf731fd4916e39b465d4246a31f12759ad0",
       "native/src/observation.rs": "e7708101677c1f682623c863850436e05efc31f1e98175ffc0d10ea02e905058",
       "native/src/operation_store.rs": "d1bbade3268909b89850d84e24a68f40421bf41d69d25f0de687fcb1a75aa1b5",
-      "native/src/ordered_transform.rs": "8188985106b0f4c313b4863c1338290c0f811dcc5dd8b41135f4697bf02c481a",
+      "native/src/ordered_transform.rs": "f05c314e4b8a065768b1bd46aa7dd31c7f995b049be7e88202c8c9c09d9a90c4",
       "native/src/output_events.rs": "cf0841670a57dd8aef64baf124633aec0ba6f8cba38b1f8233639dd7370d0d89",
       "native/src/output_start.rs": "c094ea38816770145fc88f07d7fa8acd271b57863e087d829cb172e840b7d5c1",
       "native/src/output_start_v2.rs": "6e1a96c1abb1f0f0b60e6f5225e98a167043f69927d123b9f600fb7169e47d7d",
