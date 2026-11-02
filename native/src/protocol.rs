@@ -26,6 +26,7 @@ pub(crate) struct ProtocolSession {
     history: Vec<Vec<u8>>,
     replay_bytes: usize,
     native_service: bool,
+    dynamic_tools: bool,
     legacy_name: Option<String>,
 }
 
@@ -59,6 +60,24 @@ impl OwnedReplyContext {
         .complete(result, cacheable)
     }
 }
+impl OwnedReplyContext {
+    pub(crate) fn tool_changes<'a>(&self, ids: impl Iterator<Item = &'a Value>) -> Vec<Value> {
+        if self.era == Era::Legacy {
+            return vec![json!({"jsonrpc":"2.0","method":"notifications/tools/list_changed"})];
+        }
+        ids.map(|id|json!({"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":id}}})).collect()
+    }
+    pub(crate) fn subscription_id(&self, limit: usize) -> Option<Value> {
+        if self.era != Era::Modern || self.id.as_str().is_some_and(|id| id.len() > limit) {
+            None
+        } else {
+            Some(self.id.clone())
+        }
+    }
+    pub(crate) fn subscription_ack(&self, honored: Value) -> Value {
+        json!({"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":self.id},"notifications":honored}})
+    }
+}
 pub(crate) enum Admission<'a> {
     Reply(Value),
     List(ReplyContext<'a>),
@@ -76,13 +95,18 @@ pub(crate) enum Admission<'a> {
         name: &'a str,
         arguments: Value,
     },
+    Listen {
+        reply: ReplyContext<'a>,
+        notifications: &'a Value,
+        valid_filter: bool,
+    },
     Initialized,
     Compatibility,
 }
 
-fn capabilities(native_service: bool) -> Value {
+fn capabilities(native_service: bool, dynamic: bool) -> Value {
     if native_service {
-        return json!({"tools":{"listChanged":false},"resources":{"listChanged":false},"completions":{},"prompts":{"listChanged":false}});
+        return json!({"tools":{"listChanged":dynamic},"resources":{"listChanged":false},"completions":{},"prompts":{"listChanged":false}});
     }
     json!({"tools":{"listChanged":true},"resources":{"listChanged":true,"subscribe":true},"completions":{},"prompts":{"listChanged":true}})
 }
@@ -270,6 +294,12 @@ impl ProtocolSession {
             ..Default::default()
         }
     }
+    pub(crate) fn native_dynamic_service() -> Self {
+        Self {
+            dynamic_tools: true,
+            ..Self::native_service()
+        }
+    }
     pub(crate) fn legacy_name(&self) -> Option<&str> {
         self.legacy_name.as_deref()
     }
@@ -312,6 +342,20 @@ impl ProtocolSession {
         let Some(id) = id.filter(|id| id.is_string() || id.is_i64() || id.is_u64()) else {
             return Admission::Compatibility;
         };
+        if self.dynamic_tools
+            && method == "initialize"
+            && (!crate::dynamic_tools::bounded_identity(id)
+                || !crate::dynamic_tools::bounded_context(params))
+        {
+            return Admission::Reply(
+                ReplyContext {
+                    id,
+                    era: Era::Legacy,
+                }
+                .owned()
+                .error(-32000, "Native dynamic initialization capacity exceeded"),
+            );
+        }
         if method == "initialize"
             && self.state == State::Fresh
             && only_keys(params, &["protocolVersion", "clientInfo", "capabilities"])
@@ -338,7 +382,7 @@ impl ProtocolSession {
                     era: Era::Legacy,
                 }
                 .complete(
-                    json!({"protocolVersion":params["protocolVersion"],"capabilities":capabilities(self.native_service),"serverInfo":server_info()}),
+                    json!({"protocolVersion":params["protocolVersion"],"capabilities":capabilities(self.native_service,self.dynamic_tools),"serverInfo":server_info()}),
                     false,
                 ),
             );
@@ -356,9 +400,57 @@ impl ProtocolSession {
         if method == "server/discover" && era == Era::Modern && only_keys(params, &["_meta"]) {
             self.state = State::Modern;
             return Admission::Reply(reply.complete(
-                json!({"supportedVersions":[MODERN],"capabilities":capabilities(self.native_service)}),
+                json!({"supportedVersions":[MODERN],"capabilities":capabilities(self.native_service,self.dynamic_tools)}),
                 true,
             ));
+        }
+        if self.dynamic_tools && method == "subscriptions/listen" && era == Era::Modern {
+            self.state = State::Modern;
+            if !crate::dynamic_tools::bounded_identity(id)
+                || !crate::dynamic_tools::bounded_context(
+                    params.get("_meta").unwrap_or(&Value::Null),
+                )
+            {
+                return Admission::Reply(
+                    reply
+                        .owned()
+                        .error(-32603, "Native subscription identity capacity exceeded"),
+                );
+            }
+            // Envelope admission remains here. Source's router checks listener
+            // capacity before deciding whether the filter body is valid.
+            if !only_keys(params, &["_meta", "notifications"]) {
+                return Admission::Reply(reply.owned().error(-32602,"Invalid params: 'notifications' is required and must be a valid SubscriptionFilter"));
+            }
+            let notifications = &params["notifications"];
+            let valid = only_keys(
+                notifications,
+                &[
+                    "toolsListChanged",
+                    "promptsListChanged",
+                    "resourcesListChanged",
+                    "resourceSubscriptions",
+                ],
+            ) && [
+                "toolsListChanged",
+                "promptsListChanged",
+                "resourcesListChanged",
+            ]
+            .iter()
+            .all(|key| optional(notifications, key, Value::is_boolean))
+                && optional(notifications, "resourceSubscriptions", |uris| {
+                    uris.as_array().is_some_and(|uris| {
+                        uris.len() <= 1024
+                            && uris
+                                .iter()
+                                .all(|uri| uri.as_str().is_some_and(|u| u.len() <= 1024))
+                    })
+                });
+            return Admission::Listen {
+                reply,
+                notifications,
+                valid_filter: valid,
+            };
         }
         if method == "prompts/list" && (empty_params(params) || only_keys(params, &["_meta"])) {
             if era == Era::Modern {
@@ -440,6 +532,20 @@ impl ProtocolSession {
         };
         if era == Era::Modern {
             self.state = State::Modern;
+        }
+        if self.dynamic_tools
+            && crate::dynamic_tools::controller(name)
+            && (!crate::dynamic_tools::bounded_call(
+                id,
+                params.get("arguments").unwrap_or(&json!({})),
+            ) || !crate::dynamic_tools::bounded_context(
+                params.get("_meta").unwrap_or(&Value::Null),
+            ))
+        {
+            return Admission::Reply(reply.owned().error(
+                -32000,
+                "Native dynamic visibility input capacity exceeded; no change was admitted",
+            ));
         }
         Admission::Call {
             reply,
@@ -594,7 +700,7 @@ mod tests {
         let Admission::Reply(result) = admit(&mut session, &message) else {
             panic!("recognized offers refused");
         };
-        assert_eq!(result["result"]["capabilities"], capabilities(true));
+        assert_eq!(result["result"]["capabilities"], capabilities(true, false));
         for name in ["roots", "sampling", "elicitation", "tasks", "extensions"] {
             assert!(result["result"]["capabilities"].get(name).is_none());
         }

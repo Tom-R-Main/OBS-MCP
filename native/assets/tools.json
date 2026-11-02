@@ -9281,6 +9281,352 @@
       "obs-plan-scene-template": "scenes",
       "obs-stage-scene": "scenes",
       "obs-take-scene": "scenes"
+    },
+    "dynamic": {
+      "groups": [
+        {
+          "group": "general",
+          "covers": "status, version, statistics, hotkeys, vendor requests, custom events, sleep"
+        },
+        {
+          "group": "scenes",
+          "covers": "scenes, canvases, program and preview scene, obs-apply-scene"
+        },
+        {
+          "group": "scene-items",
+          "covers": "scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore"
+        },
+        {
+          "group": "sources",
+          "covers": "source screenshots and active state"
+        },
+        {
+          "group": "inputs",
+          "covers": "inputs, input settings and properties, audio, deinterlacing, obs-capture-window"
+        },
+        {
+          "group": "media",
+          "covers": "media input playback"
+        },
+        {
+          "group": "filters",
+          "covers": "source filters"
+        },
+        {
+          "group": "transitions",
+          "covers": "transitions, overrides, the T-Bar"
+        },
+        {
+          "group": "record",
+          "covers": "recording, chapters, preflight, clips, watched takes, trimming, contact sheets"
+        },
+        {
+          "group": "stream",
+          "covers": "streaming and captions"
+        },
+        {
+          "group": "outputs",
+          "covers": "virtual camera, replay buffer, and generic outputs"
+        },
+        {
+          "group": "config",
+          "covers": "profiles, scene collections, video settings, persistent data"
+        },
+        {
+          "group": "ui",
+          "covers": "studio mode, dialogs, projectors"
+        },
+        {
+          "group": "protocol",
+          "covers": "describing and calling any OBS request, request batches"
+        }
+      ],
+      "tools": [
+        {
+          "name": "obs-list-toolsets",
+          "title": "List Tool Groups",
+          "description": "List the groups of OBS tools, what each covers, and how many of its tools are enabled. Enable a group with obs-enable-toolset before using its tools",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "obs-enable-toolset",
+          "title": "Enable Tool Groups",
+          "description": "Turn on groups of OBS tools for this session; the client reloads its tool list. See obs-list-toolsets",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "groups": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "general",
+                    "scenes",
+                    "scene-items",
+                    "sources",
+                    "inputs",
+                    "media",
+                    "filters",
+                    "transitions",
+                    "record",
+                    "stream",
+                    "outputs",
+                    "config",
+                    "ui",
+                    "protocol"
+                  ]
+                },
+                "description": "Groups from obs-list-toolsets"
+              }
+            },
+            "required": [
+              "groups"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "obs-disable-toolset",
+          "title": "Disable Tool Groups",
+          "description": "Turn off groups of OBS tools for this session to keep the tool list short",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "groups": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "general",
+                    "scenes",
+                    "scene-items",
+                    "sources",
+                    "inputs",
+                    "media",
+                    "filters",
+                    "transitions",
+                    "record",
+                    "stream",
+                    "outputs",
+                    "config",
+                    "ui",
+                    "protocol"
+                  ]
+                },
+                "description": "Groups from obs-list-toolsets"
+              }
+            },
+            "required": [
+              "groups"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema"
+          },
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        }
+      ],
+      "registryOrder": [
+        "obs-get-status",
+        "obs-get-version",
+        "obs-test-connection",
+        "obs-get-stats",
+        "obs-broadcast-custom-event",
+        "obs-call-vendor-request",
+        "obs-get-hotkey-list",
+        "obs-trigger-hotkey-by-name",
+        "obs-trigger-hotkey-by-key-sequence",
+        "obs-sleep",
+        "obs-observe",
+        "obs-claim-control",
+        "obs-release-control",
+        "obs-control-status",
+        "obs-get-scene-list",
+        "obs-get-current-scene",
+        "obs-set-current-scene",
+        "obs-get-preview-scene",
+        "obs-set-preview-scene",
+        "obs-create-scene",
+        "obs-remove-scene",
+        "obs-trigger-studio-transition",
+        "obs-get-source-active",
+        "obs-get-source-screenshot",
+        "obs-save-source-screenshot",
+        "obs-get-scene-items",
+        "obs-create-scene-item",
+        "obs-remove-scene-item",
+        "obs-set-scene-item-enabled",
+        "obs-get-scene-item-transform",
+        "obs-set-scene-item-transform",
+        "obs-get-scene-item-id",
+        "obs-get-stream-status",
+        "obs-start-stream",
+        "obs-stop-stream",
+        "obs-toggle-stream",
+        "obs-send-stream-caption",
+        "obs-get-transition-list",
+        "obs-get-current-transition",
+        "obs-set-current-transition",
+        "obs-get-transition-duration",
+        "obs-set-transition-duration",
+        "obs-get-transition-kind",
+        "obs-set-transition-settings",
+        "obs-get-transition-settings",
+        "obs-trigger-transition",
+        "obs-get-persistent-data",
+        "obs-set-persistent-data",
+        "obs-get-scene-collection-list",
+        "obs-set-current-scene-collection",
+        "obs-create-scene-collection",
+        "obs-get-profile-list",
+        "obs-set-current-profile",
+        "obs-create-profile",
+        "obs-remove-profile",
+        "obs-get-profile-parameter",
+        "obs-set-profile-parameter",
+        "obs-get-video-settings",
+        "obs-set-video-settings",
+        "obs-get-stream-service-settings",
+        "obs-set-stream-service-settings",
+        "obs-get-record-directory",
+        "obs-set-record-directory",
+        "obs-get-filter-kind-list",
+        "obs-get-source-filter-list",
+        "obs-get-filter-default-settings",
+        "obs-create-source-filter",
+        "obs-remove-source-filter",
+        "obs-set-source-filter-name",
+        "obs-get-source-filter",
+        "obs-set-source-filter-index",
+        "obs-set-source-filter-settings",
+        "obs-set-source-filter-enabled",
+        "obs-get-input-list",
+        "obs-get-input-kind-list",
+        "obs-get-special-inputs",
+        "obs-create-input",
+        "obs-remove-input",
+        "obs-set-input-name",
+        "obs-get-input-default-settings",
+        "obs-get-input-settings",
+        "obs-set-input-settings",
+        "obs-get-input-mute",
+        "obs-set-input-mute",
+        "obs-toggle-input-mute",
+        "obs-get-input-volume",
+        "obs-set-input-volume",
+        "obs-get-input-audio-balance",
+        "obs-set-input-audio-balance",
+        "obs-get-input-audio-sync-offset",
+        "obs-set-input-audio-sync-offset",
+        "obs-get-input-audio-monitor-type",
+        "obs-set-input-audio-monitor-type",
+        "obs-get-media-input-status",
+        "obs-set-media-input-cursor",
+        "obs-offset-media-input-cursor",
+        "obs-trigger-media-input-action",
+        "obs-get-virtual-cam-status",
+        "obs-toggle-virtual-cam",
+        "obs-start-virtual-cam",
+        "obs-stop-virtual-cam",
+        "obs-get-replay-buffer-status",
+        "obs-toggle-replay-buffer",
+        "obs-start-replay-buffer",
+        "obs-stop-replay-buffer",
+        "obs-save-replay-buffer",
+        "obs-get-last-replay-buffer-replay",
+        "obs-get-output-list",
+        "obs-get-output-status",
+        "obs-toggle-output",
+        "obs-start-output",
+        "obs-stop-output",
+        "obs-get-output-settings",
+        "obs-set-output-settings",
+        "obs-get-record-status",
+        "obs-toggle-record",
+        "obs-start-record",
+        "obs-stop-record",
+        "obs-toggle-record-pause",
+        "obs-pause-record",
+        "obs-resume-record",
+        "obs-split-record-file",
+        "obs-create-record-chapter",
+        "obs-get-studio-mode",
+        "obs-set-studio-mode",
+        "obs-open-input-properties",
+        "obs-open-input-filters",
+        "obs-open-input-interact",
+        "obs-get-monitor-list",
+        "obs-open-video-mix-projector",
+        "obs-open-source-projector",
+        "obs-get-canvas-list",
+        "obs-get-input-audio-tracks",
+        "obs-set-input-audio-tracks",
+        "obs-get-input-deinterlace-field-order",
+        "obs-set-input-deinterlace-field-order",
+        "obs-get-input-deinterlace-mode",
+        "obs-set-input-deinterlace-mode",
+        "obs-get-input-property-list-items",
+        "obs-press-input-property-button",
+        "obs-duplicate-scene-item",
+        "obs-get-group-scene-items",
+        "obs-get-scene-item-enabled",
+        "obs-get-scene-item-index",
+        "obs-set-scene-item-index",
+        "obs-get-scene-item-locked",
+        "obs-set-scene-item-locked",
+        "obs-get-scene-item-blend-mode",
+        "obs-set-scene-item-blend-mode",
+        "obs-get-scene-item-source",
+        "obs-get-group-list",
+        "obs-set-scene-name",
+        "obs-get-scene-transition-override",
+        "obs-set-scene-transition-override",
+        "obs-get-transition-kind-list",
+        "obs-get-transition-cursor",
+        "obs-set-tbar-position",
+        "obs-describe-request",
+        "obs-call-request",
+        "obs-batch",
+        "obs-preflight",
+        "obs-record-clip",
+        "obs-capture-window",
+        "obs-take-start",
+        "obs-take-mark",
+        "obs-take-status",
+        "obs-take-stop",
+        "obs-prepare-demo",
+        "obs-recover-demo",
+        "obs-trim-take",
+        "obs-contact-sheet",
+        "obs-snapshot",
+        "obs-restore",
+        "obs-apply-scene",
+        "obs-audit-scene",
+        "obs-plan-scene-template",
+        "obs-stage-scene",
+        "obs-take-scene"
+      ]
     }
   },
   "locals": {
@@ -9695,6 +10041,168 @@
               "type": "boolean"
             }
           },
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-apply-scene": {
+        "handler": "apply-scene",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "sceneName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sources": {
+              "minItems": 1,
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Input name; an existing input is reused, including one shown in another scene"
+                  },
+                  "kind": {
+                    "description": "Input kind, e.g. screen_capture or color_source_v3; needed only to create the input",
+                    "type": "string"
+                  },
+                  "settings": {
+                    "description": "Input settings to set; others are left as they are",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "visible": {
+                    "type": "boolean"
+                  },
+                  "locked": {
+                    "type": "boolean"
+                  },
+                  "muted": {
+                    "type": "boolean"
+                  },
+                  "volumeDb": {
+                    "type": "number",
+                    "minimum": -100,
+                    "maximum": 26
+                  },
+                  "audioTracks": {
+                    "description": "The tracks it feeds, e.g. [1]; [] removes it from every track",
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 6
+                    }
+                  },
+                  "fit": {
+                    "description": "Scale it to fit the canvas, centered, keeping its aspect ratio",
+                    "type": "string",
+                    "enum": [
+                      "canvas"
+                    ]
+                  },
+                  "transform": {
+                    "description": "Transform fields to set; applied after fit",
+                    "type": "object",
+                    "properties": {
+                      "positionX": {
+                        "type": "number"
+                      },
+                      "positionY": {
+                        "type": "number"
+                      },
+                      "scaleX": {
+                        "type": "number"
+                      },
+                      "scaleY": {
+                        "type": "number"
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "alignment": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "boundsType": {
+                        "type": "string",
+                        "enum": [
+                          "OBS_BOUNDS_NONE",
+                          "OBS_BOUNDS_STRETCH",
+                          "OBS_BOUNDS_SCALE_INNER",
+                          "OBS_BOUNDS_SCALE_OUTER",
+                          "OBS_BOUNDS_SCALE_TO_WIDTH",
+                          "OBS_BOUNDS_SCALE_TO_HEIGHT",
+                          "OBS_BOUNDS_MAX_ONLY"
+                        ]
+                      },
+                      "boundsWidth": {
+                        "type": "number"
+                      },
+                      "boundsHeight": {
+                        "type": "number"
+                      },
+                      "boundsAlignment": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cropLeft": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cropRight": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cropTop": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "cropBottom": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              },
+              "description": "Sources in the scene, listed back to front"
+            },
+            "order": {
+              "default": false,
+              "description": "Stack the sources in the listed order, in front of any others",
+              "type": "boolean"
+            },
+            "removeOthers": {
+              "default": false,
+              "description": "Remove items not listed from this scene (their inputs remain)",
+              "type": "boolean"
+            },
+            "apply": {
+              "default": false,
+              "description": "Make the changes; otherwise only plan",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sceneName",
+            "sources"
+          ],
           "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },

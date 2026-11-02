@@ -175,7 +175,7 @@ it("refuses unowned task metadata before OBS activation while keeping the qualif
 });
 
 it("fails CLI and HTTP configuration before activation instead of executing the SDK",()=>{
- for(const [args,extra] of [[['--help'],{}],[[],{OBS_MCP_HTTP_PORT:'3456'}],[[],{OBS_MCP_DYNAMIC_TOOLSETS:'true'}]] as const){
+ for(const [args,extra] of [[['--help'],{}],[[],{OBS_MCP_HTTP_PORT:'3456'}]] as const){
   const result=spawnSync(binary,[...args],{cwd:root,encoding:'utf8',env:{PATH:process.env.PATH,OBS_MCP_NATIVE_STATEFUL:'1',OBS_MCP_COMPAT_NODE:join(root,'native/target/nonexistent-service-node'),OBS_MCP_COMPAT_ENTRY:join(root,'native/target/nonexistent-service-sdk.js'),...extra}});
   expect(result.status).toBe(1);expect(result.stdout).toBe('');expect(result.stderr).toContain('Native stateful qualification supports static stdio only');
  }

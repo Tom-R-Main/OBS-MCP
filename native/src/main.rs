@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 mod compat;
+mod dynamic_tools;
 mod native_service;
 mod prompt_catalog;
 mod protocol;
@@ -141,6 +142,7 @@ async fn run() -> io::Result<()> {
                 arguments,
             } => (reply, name, arguments, false),
             Admission::Compatibility
+            | Admission::Listen { .. }
             | Admission::ResourceRead { .. }
             | Admission::ResourceCompletion { .. } => {
                 return handoff(

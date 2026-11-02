@@ -4,6 +4,7 @@
 //! routes are registered here. Dropping Service is emergency invalidation, not
 //! evidence that OBS stopped; shutdown() is the joined lifecycle boundary.
 use crate::{
+    apply_scene, apply_scene_transport, apply_scene_workflow,
     custody::{Clock, CustodyCoordinator, SharedControl, TrackedRequest},
     demo::{
         self, Demo, DemoAdmission, DemoContext, JournalFile, JournalStore, PrepareMetadata,
@@ -315,6 +316,7 @@ fn manual_policy_bytes(policy: &Policy) -> Option<usize> {
         .filter(|n| *n <= SAFETY_QUEUE_BYTES)
 }
 enum Command {
+    ApplyScene(apply_scene::Request, String, Cancellation, Instant, Reply),
     Snapshot(snapshot_tools::Request, Cancellation, Reply),
     Restore(
         restore_workflow::Request,
@@ -345,6 +347,15 @@ enum Command {
         Reply,
     ),
 }
+struct ApplySceneCall {
+    request: apply_scene::Request,
+    caller: String,
+    cancellation: Cancellation,
+    admitted_at: Instant,
+    timeout: Duration,
+    capabilities: Option<apply_scene_transport::Capabilities>,
+    reads: snapshot_tools::Context,
+}
 struct RestoreCall {
     request: restore_workflow::Request,
     caller: String,
@@ -367,6 +378,17 @@ struct WriterReturn {
     broken: bool,
 }
 enum Completion {
+    ApplyScenePlanned {
+        owners: Box<PreparationOwners>,
+        call: Box<ApplySceneCall>,
+        planned: apply_scene_workflow::Planned,
+        reply: Reply,
+    },
+    ApplySceneFinished {
+        owners: Box<PreparationOwners>,
+        execution: apply_scene_workflow::Execution,
+        reply: Reply,
+    },
     Generic(Reply, Value),
     RestorePlanned {
         owners: Box<PreparationOwners>,
@@ -618,6 +640,16 @@ impl ServiceHandle {
         cancel: Cancellation,
     ) -> Result<Value, ServiceError> {
         self.call(|reply| Command::Workflow(WorkflowCall::Audit(args, limit), cancel, reply))
+            .await
+    }
+    pub async fn apply_scene(
+        &self,
+        request: apply_scene::Request,
+        caller: String,
+        cancellation: Cancellation,
+    ) -> Result<Value, ServiceError> {
+        let admitted_at = Instant::now();
+        self.call(|reply| Command::ApplyScene(request, caller, cancellation, admitted_at, reply))
             .await
     }
     pub async fn restore(
@@ -1033,6 +1065,19 @@ async fn run(
             value=jobs.join_next(),if !jobs.is_empty()=>{
                 match value {
                     Some(Ok(Completion::Generic(reply,result)))=>{active_cancel=None;let _=reply.send(Ok(result));},
+                    Some(Ok(Completion::ApplyScenePlanned{owners,call,planned,reply}))=>{
+                        match planned {
+                            apply_scene_workflow::Planned::Finished(result)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(result));},
+                            apply_scene_workflow::Planned::Ready(ready)=>{
+                                if closing||call.cancellation.is_cancelled()||call.admitted_at.elapsed()>=call.timeout {preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(apply_scene_workflow::refusal(&ready,"Apply Scene cancelled or original deadline expired before dispatch")));continue;}
+                                let writer=match broker.scope(ScopeKind::ApplyScene){Ok(writer)=>writer,Err(_)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(apply_scene_workflow::refusal(&ready,"Unresolved receipt custody prevents Apply Scene; inspect obs-observe before another change")));continue;}};
+                                let id=(identities.lock().unwrap())();let context=apply_scene_workflow::Context{reads:call.reads,control:control.clone(),clock:clock.clone(),cancellation:call.cancellation,admitted_at:call.admitted_at,timeout:call.timeout,operation_id:id,caller:call.caller,request:call.request,capabilities:call.capabilities};
+                                jobs.spawn(async move{let execution=apply_scene_workflow::apply(writer,ready,context).await;Completion::ApplySceneFinished{owners,execution,reply}});
+                            },
+                            apply_scene_workflow::Planned::Save(..)=>unreachable!("snapshot publication joined before actor completion"),
+                        }
+                    },
+                    Some(Ok(Completion::ApplySceneFinished{owners,execution,reply}))=>{drop(execution.store);preparation=Some(*owners);broken|=execution.broken;active_cancel=None;let _=reply.send(Ok(execution.result));},
                     Some(Ok(Completion::RestorePlanned{owners,call,planned,reply}))=>{
                         match planned {
                             restore_workflow::Planned::Finished(result)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(result));},
@@ -1082,6 +1127,33 @@ async fn run(
                     if safety_ready {let queued=waiting_safety.pop_front().unwrap();safety_waiting_bytes-=queued.bytes();queued.command()}else{let queued=waiting_generics.pop_front().unwrap();waiting_bytes-=queued.bytes;Command::Generic(queued.call,queued.caller,queued.cancel,queued.at,queued.reply)}
                 };
                 match command {
+                    Command::ApplyScene(request,caller,cancel,admitted_at,reply)=>{
+                        // Original Source write policy precedes every Apply read,
+                        // including plan-only/no-change and snapshot inspection.
+                        let decision=match apply_scene_workflow::policy(&request,&caller,&control,&clock){Ok(decision)=>decision,Err(())=>{let _=reply.send(Err(ServiceError::Binding));continue;}};
+                        if let Some(result)=decision.tool_result(){let _=reply.send(Ok(result));continue;}
+                        let refusal=if broken{Some(ServiceError::Uncertain)}else if take_initializing||jobs.len()>take_jobs||!safety_jobs.is_empty()||!waiting_safety.is_empty(){Some(ServiceError::Busy)}else if preparation.is_none()||options.connection.is_none(){Some(ServiceError::Unsupported)}else{None};
+                        if let Some(error)=refusal{let _=reply.send(Err(error));continue;}
+                        let timeout=options.operation_timeout;let Some(deadline)=admitted_at.checked_add(timeout)else{let _=reply.send(Err(ServiceError::Binding));continue;};
+                        if cancel.is_cancelled()||Instant::now()>=deadline{let _=reply.send(Ok(apply_scene::failure("Apply Scene cancelled or original deadline expired before reads")));continue;}
+                        let owners=Box::new(preparation.take().unwrap());let endpoint=options.connection.as_ref().unwrap().url.clone();let known=version.lock().unwrap().clone().flatten();
+                        let capabilities=known.as_ref().and_then(|value|apply_scene_transport::Capabilities::from_version(&physical,value));
+                        let reads=known.as_ref().and_then(|value|value["availableRequests"].as_array()).map(|rows|Arc::new(rows.iter().filter_map(Value::as_str).map(str::to_owned).collect::<HashSet<_>>()));
+                        let reads=snapshot_tools::Context{handle:physical.clone(),reader:bridge.reader(),fence:bridge.fence(),endpoint:endpoint.clone(),capabilities:reads,cancellation:cancel.clone(),deadline};
+                        let call=Box::new(ApplySceneCall{request,caller,cancellation:cancel.clone(),admitted_at,timeout,capabilities,reads});active_cancel=Some(cancel.clone());
+                        let metadata_ids=identities.clone();let metadata_clock=clock.clone();let metadata=move||{let id={let mut factory=metadata_ids.lock().unwrap();factory().chars().take(8).collect()};CaptureMetadata{id,obs_url:endpoint,taken_at:(metadata_clock)().utc}};
+                        jobs.spawn(async move{
+                            let planned=apply_scene_workflow::plan(call.reads.clone(),&call.request,metadata).await;
+                            let (owners,planned)=match planned {
+                                apply_scene_workflow::Planned::Save(ready,snapshot)=>tokio::task::spawn_blocking(move||{
+                                    let mut owners=owners;let saved=if cancel.is_cancelled(){Err("Apply Scene cancelled before snapshot publication".to_owned())}else if Instant::now()>=deadline{Err("Apply Scene deadline expired before snapshot publication".to_owned())}else{owners.snapshots.save(&snapshot).map_err(|e|e.tool_message().to_owned())};
+                                    let planned=match saved{Ok(())=>apply_scene_workflow::Planned::Ready(ready),Err(error)=>apply_scene_workflow::Planned::Finished(apply_scene::snapshot_failure(&error))};(owners,planned)
+                                }).await.expect("Apply Scene snapshot publication must join"),
+                                other=>(owners,other),
+                            };
+                            Completion::ApplyScenePlanned{owners,call,planned,reply}
+                        });
+                    },
                     Command::Restore(request,caller,cancel,admitted_at,reply)=>{
                         // Source's outer write policy precedes even local snapshot
                         // lookup, corrupt-file inspection, dryRun and no-change.

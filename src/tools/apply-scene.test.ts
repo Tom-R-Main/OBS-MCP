@@ -32,6 +32,113 @@ afterEach(async () => {
 });
 
 describe("obs-apply-scene", () => {
+  // Only readCurrent asks for the scene inventory: snapshot capture already
+  // has explicit scene/input names. Change state at a whole-workflow read,
+  // rather than relying on timing or internal request counts.
+  function onCurrentRead(ordinal: number, change: () => void): void {
+    let reads = 0;
+    harness.fakeObs.respondWith("GetSceneList", () => {
+      if (++reads === ordinal) change();
+      return { scenes: Object.keys(state.scenes).map((sceneName) => ({ sceneName })) };
+    });
+  }
+
+  it("does not retry an acknowledged creation omitted from the next inventory", async () => {
+    let omitSlides = false;
+    onCurrentRead(2, () => { omitSlides = true; });
+    harness.fakeObs.respondWith("GetInputList", () => ({
+      inputs: Object.entries(state.inputs)
+        .filter(([name]) => !omitSlides || name !== "Slides")
+        .map(([inputName, { kind }]) => ({ inputName, inputKind: kind })),
+    }));
+
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo",
+      sources: [{ name: "Chrome", muted: false }, { name: "Slides", kind: "image_source" }],
+      apply: true,
+    });
+
+    expect(sent()).toEqual(["CreateInput"]);
+    expect(state.inputs.Slides).toBeDefined();
+    expect(state.inputs.Chrome!.muted).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/^Stopped before applying changes:\n- Slides: create image_source is still needed; it was not retried\nCreated before stopping:\n- Slides: create image_source\nSnapshot \w+ holds the previous state of existing sources$/);
+  });
+
+  it("does not recreate an existing input removed between planning reads", async () => {
+    onCurrentRead(2, () => {
+      delete state.inputs.Chrome;
+      state.scenes.Demo = state.scenes.Demo!.filter(({ sourceName }) => sourceName !== "Chrome");
+    });
+
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo", sources: [{ name: "Chrome", kind: "screen_capture", muted: false }], apply: true,
+    });
+
+    expect(sent()).toEqual([]);
+    expect(state.inputs.Chrome).toBeUndefined();
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/^Stopped before applying changes:\n- Chrome: create screen_capture is still needed; it was not retried\nSnapshot \w+ holds the previous state of existing sources$/);
+  });
+
+  it("stops on a second-plan kind error while retaining known creations and snapshot", async () => {
+    onCurrentRead(2, () => { state.inputs.Chrome!.kind = "browser_source"; });
+
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo",
+      sources: [{ name: "Chrome", kind: "screen_capture", muted: false }, { name: "Slides", kind: "image_source" }],
+      apply: true,
+    });
+
+    expect(sent()).toEqual(["CreateInput"]);
+    expect(state.inputs.Slides).toBeDefined();
+    expect(state.inputs.Chrome!.muted).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/^Stopped before applying changes:\n- Chrome is a browser_source, not a screen_capture; choose another name\nCreated before stopping:\n- Slides: create image_source\nSnapshot \w+ holds the previous state of existing sources$/);
+  });
+
+  it("reports final-plan errors separately from known change failures and convergence", async () => {
+    onCurrentRead(3, () => { state.inputs.Chrome!.kind = "browser_source"; });
+
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo", sources: [{ name: "Chrome", kind: "screen_capture", muted: false }], apply: true,
+    });
+
+    expect(sent()).toEqual(["SetInputMute"]);
+    expect(state.inputs.Chrome!.muted).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      actions: [{ target: "Chrome", change: "unmute" }], applied: true,
+      failures: [], converged: false, remaining: [], blank: ["Chrome"],
+      verificationErrors: ["Chrome is a browser_source, not a screen_capture; choose another name"],
+    });
+    expect(result.structuredContent).toHaveProperty("snapshotId");
+    expect(resultText(result)).toContain("Could not verify afterwards:\n- Chrome is a browser_source, not a screen_capture; choose another name");
+    expect(resultText(result)).not.toContain("OBS now matches the spec");
+  });
+
+  it("does not replay a creation whose applied effect loses its batch reply", async () => {
+    harness.fakeObs.respondWith("CreateInput", () => {
+      const sceneItemId = state.nextItemId++;
+      state.inputs.Slides = { kind: "image_source", settings: {} };
+      state.scenes.Demo!.push({ sceneItemId, sourceName: "Slides", enabled: true, locked: false, transform: {} });
+      harness.fakeObs.disconnect();
+      return { sceneItemId };
+    });
+
+    const result = await harness.call("obs-apply-scene", {
+      sceneName: "Demo", sources: [{ name: "Slides", kind: "image_source", locked: true }], apply: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/^Apply Scene failed:/);
+    expect(resultText(result)).not.toContain("Nothing changed");
+    expect(sent()).toEqual(["CreateInput"]);
+    expect(state.inputs.Slides).toBeDefined();
+    expect(state.scenes.Demo!.find(({ sourceName }) => sourceName === "Slides")?.locked).toBe(false);
+    expect(harness.fakeObs.history().filter(({ frame }) => frame.d.requestType === "GetSceneList")).toHaveLength(1);
+  });
+
   it("reports that an existing scene already matches", async () => {
     const result = await harness.call("obs-apply-scene", {
       sceneName: "Demo",
@@ -85,6 +192,7 @@ describe("obs-apply-scene", () => {
     const batches = harness.fakeObs.history().filter(({ frame }) => frame.op === OBS_OP.RequestBatch).length;
     expect(batches).toBeGreaterThanOrEqual(2);
     expect(result.structuredContent).toMatchObject({ applied: true, converged: true, failures: [] });
+    expect(result.structuredContent).not.toHaveProperty("verificationErrors");
     // The scene is new, but it reuses existing inputs, whose state is saved.
     expect(result.structuredContent).toHaveProperty("snapshotId");
   });

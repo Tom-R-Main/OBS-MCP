@@ -2,7 +2,11 @@
 //! Native domain owners shared by the executable and consumer contract tests.
 mod identity;
 
+pub mod apply_scene;
+pub mod apply_scene_transport;
+pub mod apply_scene_workflow;
 pub mod capture_backend;
+pub mod capture_window;
 pub mod clock;
 pub mod config;
 pub mod control;
@@ -10,6 +14,7 @@ pub mod custody;
 pub mod custom_mutations;
 pub mod demo;
 pub mod demo_transport;
+pub mod dynamic_visibility;
 pub mod generic_requests;
 pub mod js_json;
 pub mod media_backend;

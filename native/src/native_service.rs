@@ -3,6 +3,7 @@
 //! this module: unsupported features retain the persistent owner's state.
 use crate::{
     compat::Frames,
+    dynamic_tools::{self, DynamicTools},
     protocol::{Admission, OwnedReplyContext, ProtocolSession},
     schema,
     tool_filter::ToolFilter,
@@ -33,7 +34,7 @@ use obs_mcp_native::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs, io,
     path::PathBuf,
     sync::{
@@ -189,6 +190,7 @@ fn handler(name: &str, takes: bool, media: bool) -> Option<&'static str> {
         "obs-preflight" => "preflight",
         "obs-snapshot" => "snapshot",
         "obs-restore" => "restore",
+        "obs-apply-scene" => "apply-scene",
         "obs-get-input-property-list-items" => "property-list",
         "obs-stage-scene" => "stage-scene",
         "obs-take-scene" => "take-scene",
@@ -340,13 +342,9 @@ impl Runtime {
             || ["OBS_MCP_HTTP_PORT", "OBS_MCP_HTTP_TOKEN"]
                 .iter()
                 .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
-            || [
-                "OBS_MCP_FORCE_COMPAT",
-                "OBS_MCP_DYNAMIC_TOOLSETS",
-                "OBS_MCP_CONFIRM_LIVE",
-            ]
-            .iter()
-            .any(|name| enabled(name))
+            || ["OBS_MCP_FORCE_COMPAT", "OBS_MCP_CONFIRM_LIVE"]
+                .iter()
+                .any(|name| enabled(name))
         {
             return Err(io::Error::other(
                 "Native stateful qualification supports static stdio only; requested feature is unavailable and no SDK runtime will start",
@@ -647,10 +645,42 @@ async fn read_resource(
 
 pub(crate) async fn run() -> io::Result<()> {
     let mut runtime = Runtime::configure()?;
-    let filter = ToolFilter::parse(|name| std::env::var(name).ok(), schema::catalog())
-        .map_err(io::Error::other)?;
+    let dynamic_requested =
+        std::env::var("OBS_MCP_DYNAMIC_TOOLSETS").is_ok_and(|value| config::enabled(&value));
+    let filter = ToolFilter::parse(
+        |name| {
+            if dynamic_requested {
+                None
+            } else {
+                std::env::var(name).ok()
+            }
+        },
+        schema::catalog(),
+    )
+    .map_err(io::Error::other)?;
     let manifest = inventory(&filter, runtime.host.is_some(), runtime.media.is_some());
-    let mut protocol = ProtocolSession::native_service();
+    let mut dynamic = if dynamic_requested {
+        let available = schema::catalog()["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .filter(|name| owned(name, runtime.host.is_some(), runtime.media.is_some()))
+            .map(str::to_owned)
+            .collect();
+        Some(DynamicTools::new(
+            available,
+            runtime.host.is_some() || runtime.media.is_some(),
+            |name| std::env::var(name).ok(),
+        )?)
+    } else {
+        None
+    };
+    let mut protocol = if dynamic.is_some() {
+        ProtocolSession::native_dynamic_service()
+    } else {
+        ProtocolSession::native_service()
+    };
     let mut input = Frames::new(BufReader::new(tokio::io::stdin()));
     let (output, mut output_worker) = crate::stdio_output::Output::spawn(tokio::io::stdout());
     let mut output_result = None;
@@ -658,6 +688,10 @@ pub(crate) async fn run() -> io::Result<()> {
     tokio::pin!(stop);
     let mut jobs: JoinSet<Completed> = JoinSet::new();
     let mut pending = HashMap::<String, Pending>::new();
+    let mut local_replies =
+        VecDeque::<(String, Arc<AtomicBool>, crate::stdio_output::Reservation)>::with_capacity(
+            ORDINARY_FRONTEND_JOBS,
+        );
     let mut fatal = None;
     'frontend: loop {
         macro_rules! send_reply {
@@ -669,6 +703,7 @@ pub(crate) async fn run() -> io::Result<()> {
             };
         }
         tokio::select! {
+            biased;
             ()=&mut stop=>break,
             result=&mut output_worker=>{output_result=Some(result);break;},
             result=jobs.join_next(),if !jobs.is_empty()=>{
@@ -679,13 +714,14 @@ pub(crate) async fn run() -> io::Result<()> {
                 if frame.iter().all(u8::is_ascii_whitespace){continue;}
                 let value:Value=match serde_json::from_slice(&frame){Ok(value)=>value,Err(_)=>{send_reply!(&output,&rpc_error(Value::Null,-32700,"Parse error"));continue;}};
                 if value["jsonrpc"]=="2.0" && value.get("id").is_none() && value["method"]=="notifications/cancelled" {
-                    if let Some(id)=value.pointer("/params/requestId") {let key=id.to_string();if let Some(pending)=pending.get(&key){pending.frontend_cancelled.store(true,Ordering::Release);pending.cancel.cancel();if let Some(media)=&pending.media {media.cancel();}}}
+                    if let Some(id)=value.pointer("/params/requestId") {if dynamic.as_mut().is_some_and(|state|state.cancel_subscription(id)){continue;}let key=id.to_string();if let Some(pending)=pending.get(&key){pending.frontend_cancelled.store(true,Ordering::Release);pending.cancel.cancel();if let Some(media)=&pending.media {media.cancel();}}}
                     continue;
                 }
                 let (reply,name,args,resource)=match protocol.admit(&value,&frame) {
                     Admission::Reply(response)=>{send_reply!(&output,&response);continue;},
                     Admission::Initialized=>continue,
-                    Admission::List(reply)=>{send_reply!(&output,&reply.complete(manifest.clone(),true));continue;},
+                    Admission::List(reply)=>{let current=dynamic.as_ref().map_or(&manifest,DynamicTools::manifest);send_reply!(&output,&reply.complete(current.clone(),true));continue;},
+                    Admission::Listen{reply,notifications,valid_filter}=>{if let Some(state)=dynamic.as_mut(){match state.listen(&reply.owned(),notifications,valid_filter,&output){Ok(Some(result))=>send_reply!(&output,&result),Ok(None)=>{},Err(error)=>{fatal=Some(error);break;}}}continue;},
                     Admission::ResourceList(reply)=>(reply.owned(),"native-resource-list".to_owned(),json!({}),true),
                     Admission::ResourceCompletion {reply,prefix}=>(reply.owned(),"native-resource-completion".to_owned(),json!({"prefix":prefix}),true),
                     Admission::ResourceRead {reply,uri:"obs://take/current"}=>{
@@ -703,15 +739,19 @@ pub(crate) async fn run() -> io::Result<()> {
                 // the other's reservation; transport and journal guards remain.
                 let reserved_active=pending.values().any(|job|job.reserved_stop);
                 let safety_reserved_active=pending.values().any(|job|job.reserved_safety_stop);
-                let ordinary_jobs=jobs.len().saturating_sub(usize::from(reserved_active)+usize::from(safety_reserved_active));
+                let ordinary_jobs=(jobs.len()+local_replies.len()).saturating_sub(usize::from(reserved_active)+usize::from(safety_reserved_active));
                 let reserved_stop=ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !reserved_active && !resource && name=="obs-take-stop";
                 let reserved_safety_stop=ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !safety_reserved_active && !resource && matches!(name.as_str(),"obs-stop-stream"|"obs-stop-virtual-cam"|"obs-stop-replay-buffer"|"obs-stop-record");
                 if pending.contains_key(&key)||(ordinary_jobs>=ORDINARY_FRONTEND_JOBS && !reserved_stop && !reserved_safety_stop) {send_reply!(&output,&rpc_error(value["id"].clone(),-32000,"Native request admission unavailable; live state retained"));continue;}
-                if !resource && (!filter.includes(&name)||!owned(&name,runtime.host.is_some(),runtime.media.is_some())) {send_reply!(&output,&rpc_error(value["id"].clone(),-32601,"Tool is unavailable in the native-only qualification lane"));continue;}
+                if !resource && let Some((code,message))=dynamic.as_ref().and_then(|state|state.refusal(&name)){send_reply!(&output,&rpc_error(value["id"].clone(),code,&message));continue;}
+                let controller=dynamic.is_some()&&dynamic_tools::controller(&name);
+                let selected=dynamic.as_ref().map_or_else(||filter.includes(&name),|state|state.includes(&name));
+                if !resource && (!selected||(!controller&&!owned(&name,runtime.host.is_some(),runtime.media.is_some()))) {send_reply!(&output,&rpc_error(value["id"].clone(),-32601,"Tool is unavailable in the native-only qualification lane"));continue;}
                 let read=read_definition(&name);
-                let args=if resource {Some(args)}else if name=="obs-record-clip" {validated_clip_arguments(args)}else if read.is_some(){schema::native_request(&name,&args).ok().flatten().map(|(_,data)|data)}else if name=="obs-describe-request" {schema::validated_local_arguments(&name,"describe-request",&args)}else{schema::service_arguments(&name,&args)};
+                let apply_request=if !resource && name=="obs-apply-scene" {schema::apply_scene_request(value.pointer("/params/arguments").unwrap_or(&json!({})),&frame)}else{None};
+                let args=if name=="obs-apply-scene" {apply_request.as_ref().map(obs_mcp_native::apply_scene::Request::arguments)}else if resource {Some(args)}else if controller{schema::dynamic_arguments(&name,&args)}else if name=="obs-record-clip" {validated_clip_arguments(args)}else if read.is_some(){schema::native_request(&name,&args).ok().flatten().map(|(_,data)|data)}else if name=="obs-describe-request" {schema::validated_local_arguments(&name,"describe-request",&args)}else{schema::service_arguments(&name,&args)};
                 let Some(args)=args else {
-                    let tool=schema::catalog()["tools"].as_array().unwrap().iter().find(|tool|tool["name"]==name).unwrap();
+                    let tool=schema::tool(&name).unwrap();
                     let validation=if name=="obs-set-input-audio-tracks" {obs_mcp_native::tool_validation::tool_error_from_frame(&name,&tool["inputSchema"],value.pointer("/params/arguments").unwrap_or(&json!({})),&frame)}else{obs_mcp_native::tool_validation::tool_error(&name,&tool["inputSchema"],value.pointer("/params/arguments").unwrap_or(&json!({})))};
                     match validation {
                         Ok(result)=>send_reply!(&output,&reply.complete(result,false)),
@@ -723,9 +763,15 @@ pub(crate) async fn run() -> io::Result<()> {
                 let caller=caller_name(CallerContext {envelope,legacy_name:protocol.legacy_name(),..Default::default()});
                 let binding=CallerBinding::resolve(CallerContext {envelope,legacy_name:protocol.legacy_name(),..Default::default()},None,false,None,None);
                 let control=runtime.control.clone();let clock=runtime.clock.clone();
-                let read_only=resource||schema::catalog()["tools"].as_array().unwrap().iter().find(|tool|tool["name"]==name).is_some_and(|tool|tool["annotations"]["readOnlyHint"]==true);
+                let read_only=resource||schema::tool(&name).is_some_and(|tool|tool["annotations"]["readOnlyHint"]==true);
                 let refusal=control.lock().unwrap().evaluate(GateRequest {tool_name:&name,arguments:&args,read_only_hint:read_only,caller:&caller,confirmation:Default::default()},(clock)().epoch_ms).tool_result();
                 if let Some(result)=refusal {send_reply!(&output,&reply.complete(result,false));continue;}
+                if controller {
+                    let cancelled=Arc::new(AtomicBool::new(false));
+                    let reserved=match dynamic.as_mut().unwrap().call(&name,&args,&reply,&output){Ok(reserved)=>reserved,Err(error)=>{fatal=Some(error);break;}};
+                    pending.insert(key.clone(),Pending{cancel:Cancellation::new(),frontend_cancelled:cancelled.clone(),media:None,reserved_stop:false,reserved_safety_stop:false});
+                    local_replies.push_back((key,cancelled,reserved));continue;
+                }
                 // Volume's missing-value callback can finish without OBS.
                 // Other literal callbacks have no early business refusal, so
                 // avoid re-cloning/counting their validated opaque arguments.
@@ -774,6 +820,7 @@ pub(crate) async fn run() -> io::Result<()> {
                     let mut result=match name.as_str() {
                         "obs-get-status"=>if let Some(service)=service.as_ref(){service.read_tool(ReadToolRequest::Status,screenshot_limit,cancel).await.unwrap_or_else(service_error)}else{service_read_tools::status(StatusMetadata {connection:descriptor,connected:false,identified:false},clock.clone()).unwrap_or_else(|reason|error(reason.message))},
                         "obs-sleep" if local_sleep=>match sleep.unwrap(){ReadToolRequest::Sleep{millis:Some(millis),frames:None}=>service_read_tools::sleep_millis(millis,cancel,tokio::time::Instant::now()+Duration::from_secs(60)).await,_=>service_read_tools::sleep_selection_error()},
+                        "obs-apply-scene"=>service.as_ref().unwrap().apply_scene(apply_request.expect("validated original Apply request"),caller,cancel).await.unwrap_or_else(service_error),
                         "obs-describe-request"=>crate::protocol_catalog::describe(&args),
                         "obs-claim-control"=>control.lock().unwrap().claim(&caller,args["minutes"].as_u64().unwrap_or(30) as u16,args["reason"].as_str().unwrap_or(""),(clock)().epoch_ms).map(|result|result.tool_result()).unwrap_or_else(|_|error("Invalid control lease arguments")),
                         "obs-release-control"=>control.lock().unwrap().release(&caller,(clock)().epoch_ms).tool_result(),
@@ -785,8 +832,18 @@ pub(crate) async fn run() -> io::Result<()> {
                     (key,reply,Ok(result),cancelled,resource)
                 });
             },
+            ()=tokio::task::yield_now(),if !local_replies.is_empty()=>{
+                let (key,cancelled,reserved)=local_replies.pop_front().unwrap();pending.remove(&key);
+                if !cancelled.load(Ordering::Acquire){let ticket=reserved.commit();if matches!(ticket.progress().stage,crate::stdio_output::Stage::Failed(_)){fatal=Some(io::Error::other("Dynamic controller reply writer failed"));break;}}
+            },
         }
     }
+    // Uncommitted canceled/EOF controller replies own queue permits. Release
+    // them before dropping the final sender; committed notifications stay owned.
+    local_replies.clear();
+    // Actual Source stdin EOF closes the registry without synthetic listener
+    // completion frames. Committed notification cursors remain with the writer.
+    drop(dynamic.take());
     // EOF, cancellation, signals and write failures cannot drop jobs or the loan.
     // Frontend replies may be gone; actual Service work remains owned until join.
     for pending in pending.values() {
@@ -1048,9 +1105,9 @@ mod tests {
     }
     #[test]
     fn later_bad_clock_fails_closed_and_preserves_uncertain_receipt() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target")
-            .join(format!("native-clock-failure-{}", std::process::id()));
+        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target");
+        std::fs::create_dir_all(&parent).unwrap();
+        let root = parent.join(format!("native-clock-failure-{}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args([

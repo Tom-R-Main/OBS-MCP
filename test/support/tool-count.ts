@@ -8,12 +8,12 @@
 export const TOOL_COUNT = 178;
 
 /** Declared union across opt-in feature configurations; not one host inventory. */
-export const NATIVE_STATEFUL_DECLARED_TOOL_COUNT = 166;
+export const NATIVE_STATEFUL_DECLARED_TOOL_COUNT = 167;
 
-/** Qualified all-host-adapters plan: union166 minus the three Stream controls.
+/** Qualified all-host-adapters plan: union167 minus the three Stream controls.
  * Stream callbacks may trigger OBS automatic recording and remain separate from
  * immutable Take/media ownership. Independent of runtime catalog metadata. */
-export const NATIVE_STATEFUL_TOOL_COUNT = 163;
+export const NATIVE_STATEFUL_TOOL_COUNT = 164;
 
 /** Deferred Source names with all host adapters enabled; independent of metadata. */
 export const NATIVE_STATEFUL_DEFERRED_TOOL_NAMES = [
@@ -30,6 +30,5 @@ export const NATIVE_STATEFUL_DEFERRED_TOOL_NAMES = [
   "obs-start-record",
   "obs-call-request",
   "obs-batch",
-  "obs-capture-window",
-  "obs-apply-scene"
+  "obs-capture-window"
 ] as const;

@@ -475,13 +475,14 @@ mod tests {
     impl Dir {
         fn new() -> Self {
             static NEXT: AtomicU64 = AtomicU64::new(0);
-            let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("target")
-                .join(format!(
-                    "start-fate-poison-{}-{}",
-                    std::process::id(),
-                    NEXT.fetch_add(1, Ordering::Relaxed)
-                ));
+            let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target");
+            // Cargo may use an external target directory in isolated checks.
+            fs::create_dir_all(&parent).unwrap();
+            let root = parent.join(format!(
+                "start-fate-poison-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
             fs::create_dir(&root).unwrap();
             #[cfg(unix)]
             {

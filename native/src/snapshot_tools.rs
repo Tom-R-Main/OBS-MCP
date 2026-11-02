@@ -121,6 +121,7 @@ pub fn list(writer: &mut SnapshotFile, endpoint: &str) -> Value {
         }
     }
 }
+#[derive(Clone)]
 pub struct Context {
     pub handle: SessionHandle,
     pub reader: SessionReader,
@@ -359,4 +360,197 @@ pub(crate) async fn restore_plan(
     reader.0.reader.synchronize(deadline).await?;
     reader.check()?;
     Ok(plan)
+}
+
+// Closed Apply Scene observations on the SAME physical reader. The returned
+// owned domain values grant no raw read, effect, receipt or recovery capability.
+fn apply_reader(context: Context) -> Result<Reader, SnapshotError> {
+    let hash = format!("{:x}", Sha256::digest(context.endpoint.as_bytes()));
+    if context.handle.token() != context.reader.token()
+        || context.handle.token() != context.fence.token()
+        || hash != context.handle.endpoint_hash()
+        || hash != context.reader.endpoint_hash()
+        || hash != context.fence.endpoint_hash()
+        || !context.fence.full_profile()
+        || context.handle.event_subscriptions() & ALL_EVENTS != ALL_EVENTS
+    {
+        return Err(invalidated().into());
+    }
+    let reader = Reader(context);
+    reader.check()?;
+    Ok(reader)
+}
+pub(crate) async fn apply_current(
+    context: Context,
+    request: &crate::apply_scene::Request,
+) -> Result<crate::apply_scene::Current, SnapshotError> {
+    let mut reader = apply_reader(context)?;
+    let deadline = reader.0.deadline;
+    let scenes = reader
+        .read(ReadRequest::SceneList, Value::Null, deadline)
+        .await?;
+    let inputs = reader
+        .read(ReadRequest::InputList, Value::Null, deadline)
+        .await?;
+    let scene_names = scenes
+        .get("scenes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|v| v.is_object())
+        .map(|v| crate::observation::js_string(v.get("sceneName")))
+        .collect::<HashSet<_>>();
+    let input_kinds = inputs
+        .get("inputs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|v| v.is_object())
+        .map(|v| {
+            (
+                crate::observation::js_string(v.get("inputName")),
+                crate::observation::js_string(v.get("inputKind")),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let scene_exists = scene_names.contains(request.scene_name());
+    let items = if scene_exists {
+        snapshots::read_items(&mut reader, &[request.scene_name().into()]).await?
+    } else {
+        vec![]
+    };
+    let names = request
+        .sources()
+        .iter()
+        .map(|s| s.name().to_owned())
+        .filter(|n| input_kinds.contains_key(n))
+        .collect::<Vec<_>>();
+    let inputs = snapshots::read_inputs(&mut reader, &names, &[]).await?;
+    let video = if request.needs_canvas() {
+        let video = reader
+            .read(ReadRequest::VideoSettings, Value::Null, deadline)
+            .await?;
+        let finite = |key: &str| {
+            video
+                .get(key)
+                .and_then(Value::as_f64)
+                .filter(|v| v.is_finite())
+        };
+        Some(crate::apply_scene::Canvas {
+            width: finite("baseWidth").ok_or_else(|| {
+                SnapshotError::Read("OBS did not report finite canvas dimensions".into())
+            })?,
+            height: finite("baseHeight").ok_or_else(|| {
+                SnapshotError::Read("OBS did not report finite canvas dimensions".into())
+            })?,
+        })
+    } else {
+        None
+    };
+    reader.0.reader.synchronize(deadline).await?;
+    reader.check()?;
+    Ok(crate::apply_scene::Current {
+        scene_exists,
+        scene_names,
+        input_kinds,
+        items,
+        inputs,
+        video,
+    })
+}
+pub(crate) async fn apply_blank(
+    context: Context,
+    request: &crate::apply_scene::Request,
+) -> Result<Vec<String>, SnapshotError> {
+    let mut reader = apply_reader(context)?;
+    let deadline = reader.0.deadline;
+    let response = reader
+        .read(
+            ReadRequest::SceneItemList,
+            json!({"sceneName":request.scene_name()}),
+            deadline,
+        )
+        .await?;
+    let names = request
+        .sources()
+        .iter()
+        .map(|s| s.name())
+        .collect::<HashSet<_>>();
+    let blank = response
+        .get("sceneItems")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|v| v.is_object())
+        .filter_map(|item| {
+            let name = crate::observation::js_string(item.get("sourceName"));
+            let transform = item.get("sceneItemTransform").filter(|v| v.is_object());
+            (names.contains(name.as_str())
+                && item["sceneItemEnabled"] != false
+                && transform.is_some_and(|t| {
+                    t["sourceWidth"].as_f64() == Some(0.0)
+                        || t["sourceHeight"].as_f64() == Some(0.0)
+                }))
+            .then(|| (name, item.get("inputKind").cloned().unwrap_or(Value::Null)))
+        })
+        .collect::<Vec<_>>();
+    let media = blank
+        .iter()
+        .filter(|(_, kind)| matches!(kind.as_str(), Some("ffmpeg_source" | "vlc_source")))
+        .collect::<Vec<_>>();
+    let rows = reader
+        .batch(
+            media
+                .iter()
+                .map(|(name, _)| snapshots::ReadCall {
+                    request: ReadRequest::InputSettings,
+                    data: json!({"inputName":name}),
+                })
+                .collect(),
+        )
+        .await
+        .unwrap_or_default();
+    let settings = media
+        .iter()
+        .enumerate()
+        .map(|(index, (name, _))| {
+            (
+                name.as_str(),
+                rows.get(index)
+                    .filter(|r| r.ok)
+                    .and_then(|r| r.response_data.get("inputSettings"))
+                    .filter(|v| v.is_object()),
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    Ok(blank
+        .iter()
+        .filter(|(name, kind)| {
+            !crate::preflight::renders_no_video(
+                kind,
+                settings.get(name.as_str()).copied().flatten(),
+            )
+        })
+        .map(|(name, _)| name.clone())
+        .collect())
+}
+
+/// Internal Apply snapshot lane, never a new public obs-snapshot argument.
+/// Its fixed auto flag preserves Source's separate auto-history retention.
+pub(crate) async fn capture_apply<F: FnOnce() -> CaptureMetadata + Send>(
+    context: Context,
+    selection: crate::apply_scene::SnapshotSelection,
+    metadata: F,
+) -> Result<Snapshot, SnapshotError> {
+    let request = Request {
+        list: false,
+        options: CaptureOptions {
+            scenes: Some(selection.scenes),
+            inputs: Some(selection.inputs),
+            label: Some("before obs-apply-scene".into()),
+            auto: true,
+            ..Default::default()
+        },
+    };
+    capture_with_metadata(context, request, metadata).await
 }

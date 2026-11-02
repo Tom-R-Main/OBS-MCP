@@ -5,13 +5,70 @@ import { Client } from '@modelcontextprotocol/client';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { initialize } from '../build/tools/index.js';
 import { nativeRequestDefinitions } from '../build/tools/request-tool.js';
-import { TOOL_GROUPS, CORE_GROUPS } from '../build/tools/toolsets.js';
+import { TOOL_GROUPS, CORE_GROUPS, ALL_TOOLS, parseToolFilter } from '../build/tools/toolsets.js';
+const CONTROLLERS = ['obs-list-toolsets','obs-enable-toolset','obs-disable-toolset'];
+const same = (left,right) => JSON.stringify(left) === JSON.stringify(right);
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const nonempty = value => typeof value === 'string' && value.trim().length > 0;
+
+// Validate source relationships before publishing the already-bound asset.
+// Descriptor/schema bytes come only from real SDK registration, never here.
+export function validateDynamicContract(dynamic, {tools,groups,registryOrder}) {
+  const require = (condition,message) => {if(!condition)throw new Error(`Invalid Source dynamic controller contract: ${message}`);};
+  require(object(dynamic) && same(Object.keys(dynamic).sort(),['groups','registryOrder','tools']), 'metadata shape');
+  require(Array.isArray(groups) && new Set(groups).size===groups.length && groups.every(nonempty), 'group vocabulary');
+  require(Array.isArray(dynamic.groups) && dynamic.groups.length===groups.length, 'group coverage');
+  for(const[index,row]of dynamic.groups.entries())require(object(row) && same(Object.keys(row).sort(),['covers','group']) && row.group===groups[index] && nonempty(row.covers),'group order or covers');
+  const ordinaryNames=tools.map(tool=>tool.name);
+  require(new Set(ordinaryNames).size===ordinaryNames.length && ordinaryNames.every(nonempty),'ordinary registry names');
+  require(Array.isArray(dynamic.registryOrder) && dynamic.registryOrder.length===ordinaryNames.length && new Set(dynamic.registryOrder).size===ordinaryNames.length && dynamic.registryOrder.every(name=>ordinaryNames.includes(name)) && same(dynamic.registryOrder,registryOrder),'registry order or coverage');
+  require(Array.isArray(dynamic.tools) && dynamic.tools.length===CONTROLLERS.length && new Set(dynamic.tools.map(tool=>tool?.name)).size===CONTROLLERS.length,'controller coverage');
+  for(const name of CONTROLLERS){
+    const tool=dynamic.tools.find(tool=>tool?.name===name);
+    require(object(tool) && !ordinaryNames.includes(name) && nonempty(tool.title) && nonempty(tool.description),'controller metadata');
+    require(tool.annotations?.readOnlyHint===true && tool.annotations?.destructiveHint===false && tool.annotations?.idempotentHint===true && tool.annotations?.openWorldHint===false,'controller annotations');
+    require(object(tool.inputSchema) && tool.inputSchema.type==='object' && object(tool.inputSchema.properties),'controller schema');
+  }
+  const listed=dynamic.tools.find(tool=>tool.name===CONTROLLERS[0]);
+  require(Object.keys(listed.inputSchema.properties).length===0 && !listed.inputSchema.required,'list controller arguments');
+  const enabled=dynamic.tools.find(tool=>tool.name===CONTROLLERS[1]);const disabled=dynamic.tools.find(tool=>tool.name===CONTROLLERS[2]);const groupList=enabled.inputSchema.properties.groups;
+  require(same(enabled.inputSchema,disabled.inputSchema) && same(Object.keys(enabled.inputSchema.properties),['groups']) && same(enabled.inputSchema.required,['groups']),'group controller schema agreement');
+  require(object(groupList) && groupList.type==='array' && groupList.minItems===1 && object(groupList.items) && groupList.items.type==='string' && same(groupList.items.enum,groups),'group schema vocabulary or minimum');
+  return dynamic;
+}
+
+function offlineSource() {
+  const counts={requests:0,connections:0};
+  const denied=kind=>()=>{counts[kind]++;throw new Error('Contract export must never connect or dispatch OBS');};
+  return {counts,client:{isConnected:()=>false,getConnectionStatus:()=>({}),on(){},off(){},connect:denied('connections'),sendRequest:denied('requests'),sendBatch:denied('requests')}};
+}
+
+async function collectDynamicContract(tools, registryOrder) {
+  const source=offlineSource();const server=new McpServer({name:'obs-mcp',version:'1.1.1'});
+  const client=new Client({name:'native-dynamic-contract-export',version:'1'},{versionNegotiation:{mode:'legacy'}});
+  try {
+    const filter=parseToolFilter({OBS_MCP_DYNAMIC_TOOLSETS:'true',OBS_MCP_TOOLSETS:'all'});
+    const registry=initialize(server,source.client,{filter,resourcesAndPrompts:false,sessionNotifications:false,confirmLive:false});
+    const[a,b]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(a),client.connect(b)]);
+    const listed=(await client.listTools()).tools;const ordinary=listed.filter(tool=>!CONTROLLERS.includes(tool.name));
+    if(!same(ordinary,tools))throw new Error('Source dynamic registration changed the ordinary catalog');
+    const result=await client.callTool({name:'obs-list-toolsets',arguments:{}});const rows=result.structuredContent?.groups;
+    if(result.isError || !Array.isArray(rows) || rows.some(row=>!object(row)||row.enabled!==row.total||row.total!==registry.filter(tool=>tool.group===row.group&&tool.handle).length))throw new Error('Source dynamic group summary is inconsistent with actual registration');
+    const dynamic={groups:rows.map(({group,covers})=>({group,covers})),tools:listed.filter(tool=>CONTROLLERS.includes(tool.name)),registryOrder:registry.map(tool=>tool.name)};
+    validateDynamicContract(dynamic,{tools,groups:[...TOOL_GROUPS],registryOrder});
+    if(source.counts.requests!==0 || source.counts.connections!==0)throw new Error('Dynamic contract export touched OBS');
+    return dynamic;
+  }finally{await client.close();await server.close();}
+}
+
+export async function exportNativeContract() {
 const server = new McpServer({ name: 'obs-mcp', version: '1.1.1' });
-const client = new Client({ name: 'native-contract-export', version: '1.0.0' });
-const fake = { isConnected: () => false, getConnectionStatus: () => ({}), on() {}, off() {} };
-const registry = initialize(server, fake, { resourcesAndPrompts: false, confirmLive: false });
+const client = new Client({ name: 'native-contract-export', version: '1.0.0' }, {versionNegotiation:{mode:'legacy'}});
+const source = offlineSource();
+const registry = initialize(server, source.client, {filter:ALL_TOOLS, resourcesAndPrompts:false, sessionNotifications:false, confirmLive:false});
 const [a,b] = InMemoryTransport.createLinkedPair();
 try {
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -48,6 +105,7 @@ try {
   const serviceHandlers = {
     'obs-record-clip':'record-clip',
     'obs-restore':'restore',
+    'obs-apply-scene':'apply-scene',
     'obs-stop-record':'manual-record-stop',
     'obs-toggle-stream':'literal-setter', 'obs-toggle-virtual-cam':'literal-setter', 'obs-toggle-replay-buffer':'literal-setter',
     'obs-start-stream':'confirmed-output-start', 'obs-start-virtual-cam':'confirmed-output-start', 'obs-start-replay-buffer':'confirmed-output-start',
@@ -74,9 +132,14 @@ try {
     if(!tool?.inputSchema) throw new Error(`Missing actual persistent native service schema: ${name}`);
     return [name,{handler,inputSchema:tool.inputSchema}];
   })) };
+  toolsets.dynamic=await collectDynamicContract(tools,registry.map(tool=>tool.name));
+  if(source.counts.requests!==0 || source.counts.connections!==0)throw new Error('Static contract export touched OBS');
   const manifest = { formatVersion: 1, tools, requests, toolsets, locals, workflows, service };
   const path = fileURLToPath(new URL('../native/assets/tools.json', import.meta.url));
   const bytes = JSON.stringify(manifest, null, 2)+'\n';
   if (!existsSync(path) || !readFileSync(path).equals(Buffer.from(bytes))) writeFileSync(path, bytes);
   console.log(JSON.stringify({ tools: tools.length, nativeReadOnly: Object.keys(requests).length, nativeLocal: Object.keys(locals).length, nativeReadOnlyWorkflow: Object.keys(workflows).length, compatibility: tools.length-Object.keys(requests).length-Object.keys(locals).length-Object.keys(workflows).length }));
 } finally { await client.close(); await server.close(); }
+}
+
+if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url))await exportNativeContract();

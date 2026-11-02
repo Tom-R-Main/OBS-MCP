@@ -79,6 +79,65 @@ pub fn tool_error_from_frame(
     }
     input_error(name, schema, args, Some(arguments))
 }
+/// Owned key-order metadata for Apply Scene settings only. This carries no
+/// values, tool identity, dispatch permission or mutation capability.
+/// ```compile_fail
+/// use obs_mcp_native::tool_validation::ApplySceneSettingsOrder;
+/// fn dispatch(order: ApplySceneSettingsOrder) { order.send("StopRecord"); }
+/// ```
+#[derive(Clone)]
+pub struct ApplySceneSettingsOrder {
+    keys: Vec<Option<Vec<String>>>,
+}
+impl fmt::Debug for ApplySceneSettingsOrder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ApplySceneSettingsOrder")
+            .field("sources", &self.keys.len())
+            .finish_non_exhaustive()
+    }
+}
+impl ApplySceneSettingsOrder {
+    /// Compare against ORIGINAL parsed arguments, before Zod-style stripping.
+    /// Normalized domain parsing must independently match the retained keys.
+    pub fn from_frame(original: &Value, frame: &[u8]) -> Result<Self> {
+        if frame.len() > 8 * 1024 * 1024 {
+            return Err(ProjectionUnavailable::InputLimit);
+        }
+        let ordered: Ordered =
+            serde_json::from_slice(frame).map_err(|_| ProjectionUnavailable::UnsupportedSchema)?;
+        let arguments = ordered
+            .get("params")
+            .and_then(|params| params.get("arguments"))
+            .ok_or(ProjectionUnavailable::UnsupportedSchema)?;
+        if arguments.value() != *original {
+            return Err(ProjectionUnavailable::UnsupportedSchema);
+        }
+        let sources = arguments
+            .get("sources")
+            .and_then(Ordered::array)
+            .filter(|sources| (1..=50).contains(&sources.len()))
+            .ok_or(ProjectionUnavailable::UnsupportedSchema)?;
+        let mut keys = Vec::with_capacity(sources.len());
+        for source in sources {
+            let settings = source.get("settings");
+            keys.push(match settings {
+                None => None,
+                Some(settings) if settings.object().is_some() => {
+                    Some(record_keys(&settings.value(), Some(settings)))
+                }
+                Some(_) => return Err(ProjectionUnavailable::UnsupportedSchema),
+            });
+        }
+        Ok(Self { keys })
+    }
+    pub(crate) fn sources(&self) -> usize {
+        self.keys.len()
+    }
+    pub(crate) fn keys(&self, index: usize) -> Option<&[String]> {
+        self.keys.get(index).and_then(Option::as_deref)
+    }
+}
+
 fn input_error(name: &str, schema: &Value, args: &Value, order: Option<&Ordered>) -> Result<Value> {
     if name.len() > 256 {
         return Err(ProjectionUnavailable::UnknownTool);
@@ -179,6 +238,7 @@ fn bound_input(value: &Value, depth: usize, nodes: &mut usize, bytes: &mut usize
 // serde_json::Value sorts object keys in this crate. Zod parses object fields in
 // declaration order, so recover that order from the embedded, source-generated
 // JSON rather than sorting or guessing from the required-fields list.
+#[derive(Clone)]
 enum Ordered {
     Scalar(Value),
     Array(Vec<Ordered>),
@@ -292,6 +352,9 @@ fn catalog() -> &'static HashMap<String, Ordered> {
 fn catalog_field(field: &str) -> HashMap<String, Ordered> {
     let root: Ordered = serde_json::from_str(include_str!("../assets/tools.json"))
         .expect("checked source-generated tool catalog");
+    let dynamic = (field == "inputSchema")
+        .then(|| dynamic_schemas(&root))
+        .flatten();
     let Ordered::Object(mut root) = root else {
         panic!("checked catalog object")
     };
@@ -305,7 +368,7 @@ fn catalog_field(field: &str) -> HashMap<String, Ordered> {
     let Ordered::Array(tools) = tools else {
         panic!("checked tools array")
     };
-    tools
+    let mut schemas: HashMap<String, Ordered> = tools
         .into_iter()
         .filter_map(|tool| {
             let Ordered::Object(mut fields) = tool else {
@@ -318,7 +381,133 @@ fn catalog_field(field: &str) -> HashMap<String, Ordered> {
             let index = fields.iter().position(|(k, _)| k == field)?;
             Some((name, fields.swap_remove(index).1))
         })
-        .collect()
+        .collect();
+    if field == "inputSchema" {
+        // Controllers never belong to ordinary178. A malformed collision must
+        // not authorize controller diagnostics through the ordinary lookup.
+        let collision = DYNAMIC_CONTROLLERS
+            .iter()
+            .any(|name| schemas.contains_key(*name));
+        for name in DYNAMIC_CONTROLLERS {
+            schemas.remove(name);
+        }
+        if !collision && let Some(dynamic) = dynamic {
+            schemas.extend(dynamic);
+        }
+    }
+    schemas
+}
+const DYNAMIC_CONTROLLERS: [&str; 3] = [
+    "obs-list-toolsets",
+    "obs-enable-toolset",
+    "obs-disable-toolset",
+];
+// Only the three separately Source-exported descriptors may extend diagnostic
+// lookup. This supplies no validator, handler, availability or dispatch grant.
+fn dynamic_schemas(root: &Ordered) -> Option<HashMap<String, Ordered>> {
+    let tools = root
+        .get("toolsets")?
+        .get("dynamic")?
+        .get("tools")?
+        .array()?;
+    if tools.len() != DYNAMIC_CONTROLLERS.len() {
+        return None;
+    }
+    let mut schemas = HashMap::new();
+    for tool in tools {
+        let fields = tool.object()?;
+        let keys = fields.iter().map(|(key, _)| key).collect::<HashSet<_>>();
+        if keys.len() != fields.len() {
+            return None;
+        }
+        let name = tool.get("name")?.string()?;
+        if !DYNAMIC_CONTROLLERS.contains(&name) {
+            return None;
+        }
+        if ["title", "description"].iter().any(|key| {
+            tool.get(key)
+                .and_then(Ordered::string)
+                .is_none_or(|value| value.trim().is_empty())
+        }) {
+            return None;
+        }
+        let annotations = tool.get("annotations")?;
+        for (key, expected) in [
+            ("readOnlyHint", true),
+            ("destructiveHint", false),
+            ("idempotentHint", true),
+            ("openWorldHint", false),
+        ] {
+            if annotations.get(key)?.value() != json!(expected) {
+                return None;
+            }
+        }
+        let schema = tool.get("inputSchema")?;
+        if schema.get("type")?.string()? != "object"
+            || qualify(schema, 0).is_err()
+            || schemas.insert(name.to_owned(), schema.clone()).is_some()
+        {
+            return None;
+        }
+    }
+    Some(schemas)
+}
+#[cfg(test)]
+mod dynamic_catalog_tests {
+    use super::*;
+    fn source() -> Value {
+        serde_json::from_str(include_str!("../assets/tools.json")).unwrap()
+    }
+    fn ordered(value: &Value) -> Ordered {
+        serde_json::from_value(value.clone()).unwrap()
+    }
+    #[test]
+    fn only_complete_nondispatching_source_controller_descriptors_bind() {
+        let source = source();
+        assert_eq!(dynamic_schemas(&ordered(&source)).unwrap().len(), 3);
+        let mut missing = source.clone();
+        missing["toolsets"]["dynamic"]["tools"]
+            .as_array_mut()
+            .unwrap()
+            .pop();
+        assert!(dynamic_schemas(&ordered(&missing)).is_none());
+        let mut duplicate = source.clone();
+        duplicate["toolsets"]["dynamic"]["tools"][1] =
+            duplicate["toolsets"]["dynamic"]["tools"][0].clone();
+        assert!(dynamic_schemas(&ordered(&duplicate)).is_none());
+        let mut unknown = source.clone();
+        unknown["toolsets"]["dynamic"]["tools"][0]["name"] = json!("obs-not-bound");
+        assert!(dynamic_schemas(&ordered(&unknown)).is_none());
+        let mut malformed = source.clone();
+        malformed["toolsets"]["dynamic"]["tools"][0]["inputSchema"] = Value::Null;
+        assert!(dynamic_schemas(&ordered(&malformed)).is_none());
+        let mut unsupported = source.clone();
+        unsupported["toolsets"]["dynamic"]["tools"][1]["inputSchema"]["unevaluatedProperties"] =
+            json!(false);
+        assert!(dynamic_schemas(&ordered(&unsupported)).is_none());
+        let mut effectful = source.clone();
+        effectful["toolsets"]["dynamic"]["tools"][1]["annotations"]["readOnlyHint"] = json!(false);
+        assert!(dynamic_schemas(&ordered(&effectful)).is_none());
+    }
+    #[test]
+    fn mismatched_and_unbound_controller_schemas_still_refuse() {
+        let source = source();
+        let schema = &source["toolsets"]["dynamic"]["tools"][1]["inputSchema"];
+        assert!(
+            tool_error("obs-enable-toolset", schema, &json!({"groups":[]})).unwrap()["isError"]
+                == true
+        );
+        let mut wrong = schema.clone();
+        wrong["properties"]["groups"]["minItems"] = json!(0);
+        assert_eq!(
+            tool_error("obs-enable-toolset", &wrong, &json!({"groups":[]})),
+            Err(ProjectionUnavailable::SchemaMismatch)
+        );
+        assert_eq!(
+            tool_error("obs-unknown-controller", schema, &json!({"groups":[]})),
+            Err(ProjectionUnavailable::UnknownTool)
+        );
+    }
 }
 // Only nullable wrappers emitted by the pinned Zod schemas are supported;
 // this is not a general arbitrary-union error formatter.

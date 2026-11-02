@@ -13,6 +13,23 @@ pub(crate) fn catalog() -> &'static Value {
     asset()
 }
 
+pub(crate) fn tool(name: &str) -> Option<&'static Value> {
+    asset()["tools"]
+        .as_array()?
+        .iter()
+        .find(|tool| tool["name"] == name)
+        .or_else(|| {
+            asset()["toolsets"]["dynamic"]["tools"]
+                .as_array()?
+                .iter()
+                .find(|tool| tool["name"] == name)
+        })
+}
+pub(crate) fn dynamic_arguments(name: &str, args: &Value) -> Option<Value> {
+    crate::dynamic_tools::controller(name).then_some(())?;
+    validate(tool(name)?.get("inputSchema")?, args, true)
+}
+
 pub(crate) fn workflow_declared(name: &str, handler: &str) -> bool {
     workflow_declaration(asset(), name, handler)
 }
@@ -71,8 +88,27 @@ pub(crate) fn service_handler(name: &str) -> Option<&'static str> {
     }
     definition["handler"].as_str()
 }
+// Apply's metadata-only order sidecar and typed payload must both originate
+// before any normalization/stripping. The retained job transfers this Request.
+pub(crate) fn apply_scene_request(
+    original: &Value,
+    frame: &[u8],
+) -> Option<obs_mcp_native::apply_scene::Request> {
+    if service_handler("obs-apply-scene") != Some("apply-scene") {
+        return None;
+    }
+    let order =
+        obs_mcp_native::tool_validation::ApplySceneSettingsOrder::from_frame(original, frame)
+            .ok()?;
+    obs_mcp_native::apply_scene::Request::parse(original, &order).ok()
+}
+
 pub(crate) fn service_arguments(name: &str, args: &Value) -> Option<Value> {
     service_handler(name)?;
+    if name == "obs-apply-scene" {
+        // A normalized Value alone cannot retain JavaScript record-key order.
+        return None;
+    }
     if name == "obs-snapshot" {
         obs_mcp_native::snapshot_tools::Request::parse(args).ok()?;
         return Some(args.clone());

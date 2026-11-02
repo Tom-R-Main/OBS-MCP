@@ -3,9 +3,9 @@
 //! Guards never cross an OBS await. Dropping a port ends publication rights;
 //! callers retain each port until its effect and cleanup have actually settled.
 use crate::operation_store::{
-    Admission, BackendStore, GenericKind, GenericPhase, GenericReceipt, OperationKind,
-    OperationReceipt, OperationStore, OperationUpdate, OperationView, PrepareDetails,
-    RestoreCounts, RestorePhase, RestoreReceipt, StoreError, StoreMode,
+    Admission, ApplyReceipt, ApplyUpdate, BackendStore, GenericKind, GenericPhase, GenericReceipt,
+    OperationKind, OperationReceipt, OperationStore, OperationUpdate, OperationView,
+    PrepareDetails, RestoreCounts, RestorePhase, RestoreReceipt, StoreError, StoreMode,
 };
 use crate::session::SafetyStopRequest;
 use std::{
@@ -23,6 +23,7 @@ pub enum ScopeKind {
     SafetyStop(SafetyStopRequest),
     ManualRecordStop,
     RestoreBatch,
+    ApplyScene,
 }
 impl ScopeKind {
     fn is_public_stop(self) -> bool {
@@ -215,6 +216,17 @@ fn safety_admission(
 }
 
 impl DispatchFence {
+    pub(crate) fn is_apply_scene(&self) -> Result<bool, StoreError> {
+        let state = self
+            .shared
+            .state
+            .lock()
+            .map_err(|_| StoreError::Unavailable)?;
+        if state.poisoned {
+            return Err(StoreError::DurabilityUncertain);
+        }
+        Ok(state.scopes.get(&self.id).ok_or(StoreError::Conflict)?.kind == ScopeKind::ApplyScene)
+    }
     pub(crate) fn is_restore_batch(&self) -> Result<bool, StoreError> {
         let state = self
             .shared
@@ -535,6 +547,60 @@ impl ReceiptPort {
                 return Err(StoreError::Conflict);
             }
             state.store.update_restore(receipt, phase, counts, utc)
+        })
+    }
+    pub(crate) fn prepare_apply(
+        &mut self,
+        id: &str,
+        generation: u64,
+        creation_count: u64,
+        utc: &str,
+    ) -> Result<ApplyReceipt, StoreError> {
+        self.apply(|state| {
+            let scope = state.scopes.get(&self.id).ok_or(StoreError::Conflict)?;
+            if scope.kind != ScopeKind::ApplyScene {
+                return Err(StoreError::Conflict);
+            }
+            if state.poisoned {
+                return Err(StoreError::DurabilityUncertain);
+            }
+            let reserved = state.scopes.values().filter(|s| s.stop_reserved).count();
+            if self
+                .shared
+                .view
+                .capacity_used()?
+                .saturating_add(reserved)
+                .saturating_add(1)
+                > crate::operation_store::MAX_RECEIPTS
+                || scope.ids.len() >= crate::operation_store::MAX_RECEIPTS
+            {
+                return Err(StoreError::InventoryLimit);
+            }
+            let receipt = state
+                .store
+                .prepare_apply(id, generation, creation_count, utc)?;
+            state
+                .scopes
+                .get_mut(&self.id)
+                .unwrap()
+                .ids
+                .insert(id.into());
+            Ok(receipt)
+        })
+    }
+    pub(crate) fn update_apply(
+        &mut self,
+        receipt: &ApplyReceipt,
+        update: ApplyUpdate,
+        utc: &str,
+    ) -> Result<ApplyReceipt, StoreError> {
+        self.apply(|state| {
+            if !state.scopes.get(&self.id).is_some_and(|s| {
+                s.kind == ScopeKind::ApplyScene && s.ids.contains(receipt.operation_id())
+            }) {
+                return Err(StoreError::Conflict);
+            }
+            state.store.update_apply(receipt, update, utc)
         })
     }
 }

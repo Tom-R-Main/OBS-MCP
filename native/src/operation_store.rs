@@ -395,6 +395,7 @@ impl OperationView {
                 StoredReceipt::V1(r) => r.to_value(),
                 StoredReceipt::Generic(r) => r.to_value(),
                 StoredReceipt::Restore(r) => r.to_value(),
+                StoredReceipt::Apply(r) => r.to_value(),
             })
             .ok_or(StoreError::Missing)
     }
@@ -409,6 +410,7 @@ impl OperationView {
                     StoredReceipt::V1(r) => r.phase() == Phase::Dispatching,
                     StoredReceipt::Generic(r) => r.phase() == GenericPhase::Dispatching,
                     StoredReceipt::Restore(r) => r.phase() == RestorePhase::Dispatching,
+                    StoredReceipt::Apply(r) => r.dispatching(),
                 }
         }))
     }
@@ -419,7 +421,10 @@ impl OperationView {
                 .iter()
                 .any(|entry| Some(entry.id()) != own && entry.blocking()),
             generic_v2_present: inventory.iter().any(|entry| {
-                matches!(entry, StoredReceipt::Generic(_) | StoredReceipt::Restore(_))
+                matches!(
+                    entry,
+                    StoredReceipt::Generic(_) | StoredReceipt::Restore(_) | StoredReceipt::Apply(_)
+                )
             }),
             total: inventory.len(),
         })
@@ -454,7 +459,10 @@ impl OperationView {
                     && !(live.contains(entry.id()) && entry.known_live_in_flight())
             }),
             generic_v2_present: inventory.iter().any(|entry| {
-                matches!(entry, StoredReceipt::Generic(_) | StoredReceipt::Restore(_))
+                matches!(
+                    entry,
+                    StoredReceipt::Generic(_) | StoredReceipt::Restore(_) | StoredReceipt::Apply(_)
+                )
             }),
             total: inventory.len(),
         })
@@ -776,6 +784,51 @@ impl BackendStore {
             RestorePhase::Acknowledged => (Some(true), Some(true)),
         };
         let updated = RestoreReceipt::checked(record)?;
+        self.persist_value(updated.operation_id(), &updated.to_value(), true)?;
+        Ok(updated)
+    }
+    pub fn prepare_apply(
+        &mut self,
+        id: &str,
+        generation: u64,
+        creation_count: u64,
+        utc: &str,
+    ) -> Result<ApplyReceipt, StoreError> {
+        let receipt = ApplyReceipt::checked(ApplyRecord {
+            version: 4,
+            operation_id: id.into(),
+            kind: "apply-scene-workflow".into(),
+            endpoint_hash: self.endpoint_hash.clone(),
+            generation,
+            created_at: utc.into(),
+            updated_at: utc.into(),
+            phase: ApplyPhase::Prepared,
+            creations: ApplyStageRecord::new(creation_count, true),
+            changes: None,
+            postcondition_observed: false,
+            rendered_composition: "unverified".into(),
+        })?;
+        self.persist_value(id, &receipt.to_value(), false)?;
+        Ok(receipt)
+    }
+    pub fn update_apply(
+        &mut self,
+        receipt: &ApplyReceipt,
+        update: ApplyUpdate,
+        utc: &str,
+    ) -> Result<ApplyReceipt, StoreError> {
+        if receipt.0.endpoint_hash != self.endpoint_hash {
+            return Err(StoreError::EndpointMismatch);
+        }
+        let actual = read_stored(
+            &self
+                .directory
+                .join(format!("{}.json", receipt.operation_id())),
+        )?;
+        if !matches!(actual,StoredReceipt::Apply(ref actual) if actual==receipt) {
+            return Err(StoreError::Conflict);
+        }
+        let updated = receipt.updated(update, utc)?;
         self.persist_value(updated.operation_id(), &updated.to_value(), true)?;
         Ok(updated)
     }
@@ -1626,10 +1679,349 @@ impl RestoreReceipt {
         )
     }
 }
+/// Dedicated V4 Apply Scene workflow metadata. An unfinished workflow is a
+/// restart/admission barrier, never an instruction to resume or replay it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ApplyPhase {
+    Prepared,
+    DispatchingCreations,
+    Continuation,
+    DispatchingChanges,
+    Closed,
+    Aborted,
+    Unknown,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ApplyStagePhase {
+    NotNeeded,
+    Prepared,
+    Dispatching,
+    Acknowledged,
+    NotDispatched,
+    Unknown,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyCounts {
+    pub successful: u64,
+    pub failed: u64,
+    pub skipped: u64,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ApplyStageRecord {
+    execution_type: u8,
+    halt_on_failure: bool,
+    request_count: u64,
+    phase: ApplyStagePhase,
+    request_dispatched: Option<bool>,
+    batch_acknowledged: Option<bool>,
+    counts: Option<ApplyCounts>,
+    not_attempted: Option<u64>,
+}
+impl ApplyStageRecord {
+    fn new(count: u64, halt: bool) -> Self {
+        Self {
+            execution_type: 0,
+            halt_on_failure: halt,
+            request_count: count,
+            phase: if count == 0 {
+                ApplyStagePhase::NotNeeded
+            } else {
+                ApplyStagePhase::Prepared
+            },
+            request_dispatched: Some(false),
+            batch_acknowledged: None,
+            counts: None,
+            not_attempted: (count == 0).then_some(0),
+        }
+    }
+    fn set(&mut self, phase: ApplyStagePhase, counts: Option<ApplyCounts>) {
+        self.phase = phase;
+        self.counts = counts;
+        self.not_attempted = None;
+        (self.request_dispatched, self.batch_acknowledged) = match phase {
+            ApplyStagePhase::NotNeeded | ApplyStagePhase::NotDispatched => {
+                self.not_attempted = Some(self.request_count);
+                (Some(false), None)
+            }
+            ApplyStagePhase::Prepared => (Some(false), None),
+            ApplyStagePhase::Dispatching | ApplyStagePhase::Unknown => (None, None),
+            ApplyStagePhase::Acknowledged => (Some(true), Some(true)),
+        };
+    }
+    fn valid(&self, halt: bool) -> bool {
+        use ApplyStagePhase::*;
+        let base = self.execution_type == 0
+            && self.halt_on_failure == halt
+            && self.request_count <= MAX_SAFE_INTEGER
+            && (self.request_count == 0) == (self.phase == NotNeeded);
+        let facts = match self.phase {
+            NotNeeded | NotDispatched => {
+                self.request_dispatched == Some(false)
+                    && self.batch_acknowledged.is_none()
+                    && self.counts.is_none()
+                    && self.not_attempted == Some(self.request_count)
+            }
+            Prepared => {
+                self.request_dispatched == Some(false)
+                    && self.batch_acknowledged.is_none()
+                    && self.counts.is_none()
+                    && self.not_attempted.is_none()
+            }
+            Dispatching | Unknown => {
+                self.request_dispatched.is_none()
+                    && self.batch_acknowledged.is_none()
+                    && self.counts.is_none()
+                    && self.not_attempted.is_none()
+            }
+            Acknowledged => {
+                self.request_dispatched == Some(true)
+                    && self.batch_acknowledged == Some(true)
+                    && self.not_attempted.is_none()
+                    && self.counts.is_some_and(|c| {
+                        c.successful
+                            .checked_add(c.failed)
+                            .and_then(|v| v.checked_add(c.skipped))
+                            == Some(self.request_count)
+                            && if halt {
+                                c.failed <= 1 && (c.failed != 0 || c.skipped == 0)
+                            } else {
+                                c.skipped == 0
+                            }
+                    })
+            }
+        };
+        base && facts
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ApplyRecord {
+    version: u8,
+    operation_id: String,
+    kind: String,
+    endpoint_hash: String,
+    generation: u64,
+    created_at: String,
+    updated_at: String,
+    phase: ApplyPhase,
+    creations: ApplyStageRecord,
+    changes: Option<ApplyStageRecord>,
+    postcondition_observed: bool,
+    rendered_composition: String,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApplyReceipt(ApplyRecord);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApplyUpdate {
+    Ready,
+    DispatchCreations,
+    CreationsAcknowledged(ApplyCounts),
+    CreationsNotDispatched,
+    CreationsUnknown,
+    DispatchChanges(u64),
+    ChangesAcknowledged(ApplyCounts),
+    ChangesNotDispatched,
+    ChangesUnknown,
+    Close,
+    Abort,
+}
+impl ApplyReceipt {
+    pub fn operation_id(&self) -> &str {
+        &self.0.operation_id
+    }
+    pub fn phase(&self) -> ApplyPhase {
+        self.0.phase
+    }
+    pub fn to_value(&self) -> Value {
+        serde_json::to_value(&self.0).expect("validated metadata")
+    }
+    pub fn creation_count(&self) -> u64 {
+        self.0.creations.request_count
+    }
+    pub fn change_count(&self) -> Option<u64> {
+        self.0.changes.as_ref().map(|s| s.request_count)
+    }
+    pub fn creation_counts(&self) -> Option<ApplyCounts> {
+        self.0.creations.counts
+    }
+    pub fn change_counts(&self) -> Option<ApplyCounts> {
+        self.0.changes.as_ref().and_then(|s| s.counts)
+    }
+    fn successful_creations(&self) -> bool {
+        self.0.creations.phase == ApplyStagePhase::NotNeeded
+            || self.0.creations.phase == ApplyStagePhase::Acknowledged
+                && self
+                    .0
+                    .creations
+                    .counts
+                    .is_some_and(|c| c.failed == 0 && c.skipped == 0)
+    }
+    fn dispatching(&self) -> bool {
+        matches!(
+            self.phase(),
+            ApplyPhase::DispatchingCreations | ApplyPhase::DispatchingChanges
+        )
+    }
+    fn blocking(&self) -> bool {
+        !matches!(self.phase(), ApplyPhase::Closed | ApplyPhase::Aborted)
+    }
+    fn live(&self) -> bool {
+        matches!(
+            self.phase(),
+            ApplyPhase::Prepared
+                | ApplyPhase::DispatchingCreations
+                | ApplyPhase::Continuation
+                | ApplyPhase::DispatchingChanges
+        )
+    }
+    fn checked(record: ApplyRecord) -> Result<Self, StoreError> {
+        use ApplyPhase::*;
+        use ApplyStagePhase as S;
+        let r = Self(record);
+        let c = &r.0.creations;
+        let changes = r.0.changes.as_ref();
+        let stages = c.valid(true) && changes.is_none_or(|s| s.valid(false));
+        let layout = match r.phase() {
+            Prepared => matches!(c.phase, S::Prepared | S::NotNeeded) && changes.is_none(),
+            DispatchingCreations => c.phase == S::Dispatching && changes.is_none(),
+            Continuation => r.successful_creations() && changes.is_none(),
+            DispatchingChanges => {
+                r.successful_creations() && changes.is_some_and(|s| s.phase == S::Dispatching)
+            }
+            Closed => {
+                r.successful_creations()
+                    && changes.is_some_and(|s| matches!(s.phase, S::Acknowledged | S::NotNeeded))
+            }
+            Aborted => match changes {
+                None => matches!(c.phase, S::Acknowledged | S::NotDispatched | S::NotNeeded),
+                Some(s) => r.successful_creations() && s.phase == S::NotDispatched,
+            },
+            Unknown => {
+                c.phase == S::Unknown && changes.is_none()
+                    || r.successful_creations() && changes.is_some_and(|s| s.phase == S::Unknown)
+            }
+        };
+        if r.0.version != 4
+            || r.0.kind != "apply-scene-workflow"
+            || !valid_uuid(&r.0.operation_id)
+            || !valid_hash(&r.0.endpoint_hash)
+            || r.0.generation > MAX_SAFE_INTEGER
+            || !valid_timestamp(&r.0.created_at)
+            || !valid_timestamp(&r.0.updated_at)
+            || r.0.updated_at < r.0.created_at
+            || r.0.postcondition_observed
+            || r.0.rendered_composition != "unverified"
+            || !stages
+            || !layout
+        {
+            return Err(StoreError::InvalidReceipt);
+        }
+        Ok(r)
+    }
+    pub fn from_value(value: Value) -> Result<Self, StoreError> {
+        if value.get("changes").is_none() {
+            return Err(StoreError::InvalidReceipt);
+        }
+        for stage in [
+            value.get("creations"),
+            value.get("changes").filter(|v| !v.is_null()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if [
+                "requestDispatched",
+                "batchAcknowledged",
+                "counts",
+                "notAttempted",
+            ]
+            .iter()
+            .any(|k| stage.get(k).is_none())
+            {
+                return Err(StoreError::InvalidReceipt);
+            }
+        }
+        Self::checked(serde_json::from_value(value).map_err(|_| StoreError::InvalidReceipt)?)
+    }
+    fn updated(&self, update: ApplyUpdate, utc: &str) -> Result<Self, StoreError> {
+        use ApplyPhase::*;
+        use ApplyStagePhase as S;
+        use ApplyUpdate as U;
+        let mut r = self.0.clone();
+        r.updated_at = utc.into();
+        match (r.phase, update) {
+            (Prepared, U::Ready) if r.creations.phase == S::NotNeeded => r.phase = Continuation,
+            (Prepared, U::DispatchCreations) if r.creations.request_count > 0 => {
+                r.phase = DispatchingCreations;
+                r.creations.set(S::Dispatching, None);
+            }
+            (DispatchingCreations, U::CreationsAcknowledged(counts)) => {
+                r.phase = if counts.failed == 0 && counts.skipped == 0 {
+                    Continuation
+                } else {
+                    Aborted
+                };
+                r.creations.set(S::Acknowledged, Some(counts));
+            }
+            (DispatchingCreations, U::CreationsNotDispatched) => {
+                r.phase = Aborted;
+                r.creations.set(S::NotDispatched, None);
+            }
+            (DispatchingCreations, U::CreationsUnknown) => {
+                r.phase = Unknown;
+                r.creations.set(S::Unknown, None);
+            }
+            (Continuation, U::DispatchChanges(count)) if count > 0 => {
+                r.phase = DispatchingChanges;
+                let mut s = ApplyStageRecord::new(count, false);
+                s.set(S::Dispatching, None);
+                r.changes = Some(s);
+            }
+            (DispatchingChanges, U::ChangesAcknowledged(counts)) => {
+                r.phase = Closed;
+                r.changes
+                    .as_mut()
+                    .ok_or(StoreError::Conflict)?
+                    .set(S::Acknowledged, Some(counts));
+            }
+            (DispatchingChanges, U::ChangesNotDispatched) => {
+                r.phase = Aborted;
+                r.changes
+                    .as_mut()
+                    .ok_or(StoreError::Conflict)?
+                    .set(S::NotDispatched, None);
+            }
+            (DispatchingChanges, U::ChangesUnknown) => {
+                r.phase = Unknown;
+                r.changes
+                    .as_mut()
+                    .ok_or(StoreError::Conflict)?
+                    .set(S::Unknown, None);
+            }
+            (Continuation, U::Close) => {
+                r.phase = Closed;
+                r.changes = Some(ApplyStageRecord::new(0, false));
+            }
+            (Prepared | Continuation, U::Abort) => {
+                r.phase = Aborted;
+                if r.creations.phase == S::Prepared {
+                    r.creations.set(S::NotDispatched, None);
+                }
+            }
+            _ => return Err(StoreError::Conflict),
+        }
+        Self::checked(r)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Admission {
     pub blocking: bool,
-    /// Compatibility handoff barrier: true for any non-V1 history, including V3.
+    /// Compatibility handoff barrier: true for any non-V1 history, including V3/V4.
     pub generic_v2_present: bool,
     pub total: usize,
 }
@@ -1637,6 +2029,7 @@ enum StoredReceipt {
     V1(OperationReceipt),
     Generic(GenericReceipt),
     Restore(RestoreReceipt),
+    Apply(ApplyReceipt),
 }
 impl StoredReceipt {
     fn dispatching(&self) -> bool {
@@ -1644,6 +2037,7 @@ impl StoredReceipt {
             Self::V1(r) => r.phase() == Phase::Dispatching,
             Self::Generic(r) => r.phase() == GenericPhase::Dispatching,
             Self::Restore(r) => r.phase() == RestorePhase::Dispatching,
+            Self::Apply(r) => r.dispatching(),
         }
     }
     fn known_live_in_flight(&self) -> bool {
@@ -1651,6 +2045,7 @@ impl StoredReceipt {
             Self::V1(r) => matches!(r.phase(), Phase::Dispatching | Phase::Accepted),
             Self::Generic(r) => r.phase() == GenericPhase::Dispatching,
             Self::Restore(r) => r.phase() == RestorePhase::Dispatching,
+            Self::Apply(r) => r.live(),
         }
     }
     fn id(&self) -> &str {
@@ -1658,6 +2053,7 @@ impl StoredReceipt {
             Self::V1(r) => r.operation_id(),
             Self::Generic(r) => r.operation_id(),
             Self::Restore(r) => r.operation_id(),
+            Self::Apply(r) => r.operation_id(),
         }
     }
     fn endpoint(&self) -> &str {
@@ -1665,6 +2061,7 @@ impl StoredReceipt {
             Self::V1(r) => &r.0.endpoint_hash,
             Self::Generic(r) => &r.0.endpoint_hash,
             Self::Restore(r) => &r.0.endpoint_hash,
+            Self::Apply(r) => &r.0.endpoint_hash,
         }
     }
     fn created(&self) -> &str {
@@ -1672,6 +2069,7 @@ impl StoredReceipt {
             Self::V1(r) => &r.0.created_at,
             Self::Generic(r) => &r.0.created_at,
             Self::Restore(r) => &r.0.created_at,
+            Self::Apply(r) => &r.0.created_at,
         }
     }
     fn blocking(&self) -> bool {
@@ -1679,11 +2077,27 @@ impl StoredReceipt {
             Self::V1(r) => r.phase().is_uncertain(),
             Self::Generic(r) => r.blocking(),
             Self::Restore(r) => r.blocking(),
+            Self::Apply(r) => r.blocking(),
         }
     }
     fn summary(&self) -> Value {
         match self {
             Self::V1(r) => summary_receipt(r),
+            Self::Apply(r) => {
+                let mut value = r.to_value();
+                value.as_object_mut().unwrap().remove("endpointHash");
+                value["status"] = json!(if r.blocking() {
+                    "unknown"
+                } else if r.phase() == ApplyPhase::Closed {
+                    "closed"
+                } else {
+                    "aborted"
+                });
+                value["nextCheck"] = json!(
+                    "Stage acknowledgement is not a postcondition, rendered result, continuation or replay authority. Inspect OBS independently; unfinished history refuses restart."
+                );
+                value
+            }
             Self::Restore(r) => {
                 let mut value = r.to_value();
                 value.as_object_mut().unwrap().remove("endpointHash");
@@ -1727,7 +2141,11 @@ impl StoredReceipt {
 fn read_stored(path: &Path) -> Result<StoredReceipt, StoreError> {
     let value: Value =
         serde_json::from_slice(&read_bytes(path)?).map_err(|_| StoreError::Corrupt)?;
-    if value["version"] == 3 {
+    if value["version"] == 4 {
+        ApplyReceipt::from_value(value)
+            .map(StoredReceipt::Apply)
+            .map_err(|_| StoreError::Corrupt)
+    } else if value["version"] == 3 {
         RestoreReceipt::from_value(value)
             .map(StoredReceipt::Restore)
             .map_err(|_| StoreError::Corrupt)
@@ -1859,6 +2277,29 @@ impl OperationStore {
         match &mut self.mode {
             StoreMode::Direct(s) => s.update_restore(receipt, phase, counts, utc),
             StoreMode::Scoped(p) => p.update_restore(receipt, phase, counts, utc),
+        }
+    }
+    pub fn prepare_apply(
+        &mut self,
+        id: &str,
+        generation: u64,
+        creation_count: u64,
+        utc: &str,
+    ) -> Result<ApplyReceipt, StoreError> {
+        match &mut self.mode {
+            StoreMode::Direct(s) => s.prepare_apply(id, generation, creation_count, utc),
+            StoreMode::Scoped(p) => p.prepare_apply(id, generation, creation_count, utc),
+        }
+    }
+    pub fn update_apply(
+        &mut self,
+        receipt: &ApplyReceipt,
+        update: ApplyUpdate,
+        utc: &str,
+    ) -> Result<ApplyReceipt, StoreError> {
+        match &mut self.mode {
+            StoreMode::Direct(s) => s.update_apply(receipt, update, utc),
+            StoreMode::Scoped(p) => p.update_apply(receipt, update, utc),
         }
     }
 }

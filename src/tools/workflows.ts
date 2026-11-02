@@ -113,9 +113,13 @@ async function captureWindow(
   let kind = "screen_capture";
   if (!mac) {
     const available = await client.sendRequest("GetInputKindList") as { inputKinds?: string[] };
+    const existingPortalKind = existing && VIDEO_ONLY_CAPTURE_KINDS.has(String(existing.inputKind)) && String(existing.inputKind).startsWith("pipewire-")
+      ? String(existing.inputKind) : undefined;
+    if (args.backend === "portal" && !existingPortalKind) return errorResult("capability_unavailable: create and authorize a PipeWire window capture using OBS's desktop portal picker, then call with backend:portal and that inputName. No capture changed");
     kind = args.backend === "x11" ? "xcomposite_input"
+      : args.backend === "portal" ? existingPortalKind!
       : existing && VIDEO_ONLY_CAPTURE_KINDS.has(String(existing.inputKind)) ? String(existing.inputKind)
-      : args.backend !== "portal" && available.inputKinds?.includes("xcomposite_input") ? "xcomposite_input" : "pipewire-screen-capture-source";
+      : available.inputKinds?.includes("xcomposite_input") ? "xcomposite_input" : "pipewire-screen-capture-source";
     if (!available.inputKinds?.includes(kind) && existing?.inputKind !== kind) return errorResult("capability_unavailable: OBS advertises no requested Linux window backend. On Wayland, configure a PipeWire window capture in OBS through the desktop portal; on X11 enable a window manager and XComposite. No capture changed");
     if (kind.startsWith("pipewire-")) {
       if (!existing || existing.inputKind !== kind) return errorResult("capability_unavailable: create and authorize a PipeWire window capture using OBS's desktop portal picker, then call with backend:portal and that inputName. No capture changed");
@@ -209,18 +213,23 @@ async function captureWindow(
     inputName: input.inputName, inputKind: input.inputKind,
     inputUuid: input.inputUuid,
   } : null;
-  const reread = await readInventory();
-  if (!isDeepStrictEqual(identity(existing), identity(reread.find(({ inputName }) => inputName === args.inputName)))
-    || !isDeepStrictEqual(identity(inventory), identity(reread.find(({ inputName }) => inputName === inventoryName)))
-    || !isDeepStrictEqual(inventorySettings, await readSettings(inventorySelector))) {
-    return errorResult("Capture source or selection changed during discovery; rerun with a stable window. No capture changed");
-  }
-  if (!portal && !isDeepStrictEqual(match, await select())) {
-    return errorResult("Window selection changed during discovery; rerun with a stable window. No capture changed");
-  }
-  if (!isDeepStrictEqual(scene, await readScene()) || (existing && !isDeepStrictEqual(membership, await readMembership()))) {
-    return errorResult("Target scene or capture membership changed during discovery; no capture changed");
-  }
+  const checkDiscovery = async (): Promise<CallToolResult | undefined> => {
+    const reread = await readInventory();
+    if (!isDeepStrictEqual(identity(existing), identity(reread.find(({ inputName }) => inputName === args.inputName)))
+      || !isDeepStrictEqual(identity(inventory), identity(reread.find(({ inputName }) => inputName === inventoryName)))
+      || !isDeepStrictEqual(inventorySettings, await readSettings(inventorySelector))) {
+      return errorResult("Capture source or selection changed during discovery; rerun with a stable window. No capture changed");
+    }
+    if (!portal && !isDeepStrictEqual(match, await select())) {
+      return errorResult("Window selection changed during discovery; rerun with a stable window. No capture changed");
+    }
+    if (!isDeepStrictEqual(scene, await readScene()) || (existing && !isDeepStrictEqual(membership, await readMembership()))) {
+      return errorResult("Target scene or capture membership changed during discovery; no capture changed");
+    }
+    return undefined;
+  };
+  const changed = await checkDiscovery();
+  if (changed) return changed;
   if (!args.apply) return {
     content: [{ type: "text", text: "Capture plan only; no capture changed. Rendered target is unverified; inspect the image after applying." }],
     structuredContent: {
@@ -234,6 +243,20 @@ async function captureWindow(
   const snapshot = existing
     ? await takeSnapshot(client, { inputs: [args.inputName], scenes: [args.sceneName], label: "before obs-capture-window", auto: true })
     : undefined;
+  if (snapshot) {
+    // Snapshot capture and publication can await several RPCs. Discovery made
+    // before that work cannot authorize a later same-name replacement.
+    let changed: CallToolResult | undefined;
+    try {
+      changed = await checkDiscovery();
+    } catch (error) {
+      changed = errorResult(`Capture Window failed: ${errorMessage(error)}`);
+    }
+    if (changed) return {
+      ...changed,
+      content: [...changed.content, { type: "text", text: `Saved the previous state as snapshot ${snapshot.id} before detecting the conflict; this call applied no capture changes. Inspect OBS before retrying` }],
+    };
+  }
   const selectedSettings = mac ? { type: SCK_WINDOW_CAPTURE, window: match?.itemValue } : { [property]: match?.itemValue };
   let target: CaptureSelector;
   if (!existing) {
@@ -258,8 +281,11 @@ async function captureWindow(
       { requestType: "SetInputMute", requestData: { ...target, inputMuted: true } },
       { requestType: "SetInputAudioTracks", requestData: { ...target, inputAudioTracks: ALL_TRACKS_OFF } },
     ], { haltOnFailure: true });
-    const failure = silenced.find(({ ok }) => !ok) ?? (silenced.length < 2 ? silenced[0] : undefined);
+    const failure = silenced.find(({ ok }) => !ok);
     if (failure) throw new Error(`${failure.requestType} failed with code ${failure.code}${failure.comment ? `: ${failure.comment}` : ""}`);
+    if (silenced.length !== 2 || silenced[0]?.requestType !== "SetInputMute" || silenced[1]?.requestType !== "SetInputAudioTracks") {
+      throw new Error("Capture silence was not fully acknowledged; inspect OBS before retrying");
+    }
     notes.push("Muted the capture and removed it from every audio track");
   }
 

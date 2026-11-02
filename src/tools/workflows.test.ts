@@ -559,6 +559,101 @@ describe("obs-capture-window", () => {
     }
   });
 
+  it.each([undefined, "Editor"])("refuses explicit portal on an existing X11 capture without discovery or writes (window=%s)", async (window) => {
+    await startCaptureHarness("linux");
+    inputs.push({ inputName: "Editor", inputKind: "xcomposite_input", inputUuid: "editor-source" });
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["xcomposite_input", "pipewire-screen-capture-source"] }));
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [{ sceneItemId: 2, sourceName: "Editor", sourceUuid: "editor-source" }] }));
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Editor", itemValue: "42\r\nEditor\r\nCode" }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor", backend: "portal", ...(window ? { window } : {}), includeScreenshot: true });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/portal|PipeWire/);
+    expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
+    expect(requestTypes()).not.toContain("GetSourceScreenshot");
+    await expectNoCaptureWrites();
+  });
+
+  it.each(["pipewire-window-capture-source", "pipewire-screen-capture-source"])("requires an existing persisted portal selection for %s", async (kind) => {
+    await startCaptureHarness("linux");
+    inputs.push({ inputName: "Editor", inputKind: kind, inputUuid: "editor-source" });
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: [kind] }));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: kind, inputSettings: {} }));
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: [{ sceneItemId: 2, sourceName: "Editor", sourceUuid: "editor-source" }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Editor", backend: "portal" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/persisted portal selection|authorize/i);
+    expect(requestTypes()).not.toContain("GetInputPropertiesListPropertyItems");
+    await expectNoCaptureWrites();
+  });
+
+  it.each(["empty", "first-only", "second-only", "wrong-types", "extra", "rejected"] as const)("stops after an incomplete or failed silence ACK (%s)", async (shape) => {
+    await startCaptureHarness();
+    const row = (requestType: string, requestId: string, ok = true) => ({ requestType, requestId, requestStatus: { result: ok, code: ok ? 100 : 501, ...(ok ? {} : { comment: "SILENCE_REFUSED" }) } });
+    const first = row("SetInputMute", "0");
+    const second = row("SetInputAudioTracks", "1");
+    const rows = shape === "empty" ? [] : shape === "first-only" ? [first] : shape === "second-only" ? [second]
+      : shape === "wrong-types" ? [row("SetInputAudioTracks", "0"), row("SetInputMute", "1")]
+        : shape === "extra" ? [first, second, row("SetInputMute", "2")] : [row("SetInputMute", "0", false)];
+    harness.fakeObs.respondWith("SetInputMute", () => {
+      const batch = harness.fakeObs.history().filter(({ frame }) => frame.op === OBS_OP.RequestBatch).at(-1)!;
+      // Exercise real websocket parsing and client ID normalization. This wire
+      // reply precedes the fake's ordinary full ACK; no production method is mocked.
+      harness.fakeObs.sendRaw({ op: OBS_OP.RequestBatchResponse, d: { requestId: batch.frame.d.requestId, results: rows } }, batch.connectionId);
+      return {};
+    });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402", includeScreenshot: true });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).not.toContain("Muted the capture and removed it from every audio track");
+    expect(requestData("CreateInput")).toHaveLength(1);
+    expect(requestTypes()).not.toContain("GetVideoSettings");
+    expect(requestTypes()).not.toContain("SetSceneItemTransform");
+    expect(requestTypes()).not.toContain("GetCurrentProgramScene");
+    expect(requestTypes()).not.toContain("GetSourceScreenshot");
+    if (shape === "rejected") expect(resultText(result)).toContain("SILENCE_REFUSED");
+  });
+
+  it("accepts a complete silence ACK returned out of order with original request IDs", async () => {
+    await startCaptureHarness();
+    harness.fakeObs.respondWith("SetInputMute", () => {
+      const batch = harness.fakeObs.history().filter(({ frame }) => frame.op === OBS_OP.RequestBatch).at(-1)!;
+      harness.fakeObs.sendRaw({ op: OBS_OP.RequestBatchResponse, d: { requestId: batch.frame.d.requestId, results: [
+        { requestType: "SetInputAudioTracks", requestId: "1", requestStatus: { result: true, code: 100 } },
+        { requestType: "SetInputMute", requestId: "0", requestStatus: { result: true, code: 100 } },
+      ] } }, batch.connectionId);
+      return {};
+    });
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "402" });
+    expect(result.isError, resultText(result)).toBeFalsy();
+    expect(resultText(result)).toContain("Muted the capture and removed it from every audio track");
+    expect(requestData("SetSceneItemTransform")).toHaveLength(1);
+  });
+
+  it.each(["input-uuid", "input-kind", "settings", "scene-uuid", "missing-scene", "membership", "selection"] as const)("rechecks %s after snapshot publication and refuses further capture effects", async (change) => {
+    await startCaptureHarness();
+    inputs.push({ inputName: "Chrome", inputKind: "screen_capture", inputUuid: "chrome-source" });
+    let snapshotStarted = false;
+    harness.fakeObs.respondWith("GetInputMute", () => { snapshotStarted = true; return { inputMuted: false }; });
+    harness.fakeObs.respondWith("GetInputList", () => ({ inputs: inputs.map((input) => input.inputName === "Chrome" && snapshotStarted ? {
+      ...input,
+      ...(change === "input-uuid" ? { inputUuid: "replacement-source" } : {}),
+      ...(change === "input-kind" ? { inputKind: "browser_source" } : {}),
+    } : input) }));
+    harness.fakeObs.respondWith("GetInputSettings", () => ({ inputKind: "screen_capture", inputSettings: { type: 1, window: snapshotStarted && change === "settings" ? 402 : 31875 } }));
+    harness.fakeObs.respondWith("GetSceneList", () => ({ scenes: snapshotStarted && change === "missing-scene" ? [] : [{ sceneName: "Demo", sceneUuid: snapshotStarted && change === "scene-uuid" ? "replacement-scene" : "scene-demo" }] }));
+    harness.fakeObs.respondWith("GetSceneItemList", () => ({ sceneItems: snapshotStarted && change === "membership" ? [] : [{ sceneItemId: 2, sourceName: "Chrome", sourceUuid: "chrome-source", sceneItemTransform: { sourceWidth: 1512, sourceHeight: 949 } }] }));
+    harness.fakeObs.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [{ itemName: "Owned", itemValue: snapshotStarted && change === "selection" ? 31876 : 31875 }] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "Chrome", window: "Owned", includeScreenshot: true });
+    const snapshots = (await harness.call("obs-snapshot", { list: true })).structuredContent as { snapshots: { id: string }[] };
+    expect(snapshotStarted).toBe(true);
+    // The snapshot is an already-completed file effect, not rollback authority.
+    expect(snapshots.snapshots).toHaveLength(1);
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain(`snapshot ${snapshots.snapshots[0]!.id}`);
+    expect(requestTypes().filter((type) => /^(Create|Set)/.test(String(type)))).toEqual([]);
+    expect(requestTypes()).not.toContain("GetCurrentProgramScene");
+    expect(requestTypes()).not.toContain("GetSourceScreenshot");
+  });
+
   it("refuses when OBS is not on macOS", async () => {
     await startCaptureHarness("windows");
 
