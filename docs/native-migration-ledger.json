@@ -558,8 +558,8 @@
     "obs-trim-take": "compat"
   },
   "sealed": {
-    "at": "2026-11-02T03:29:04.549Z",
-    "sourceRevision": "f743013aa274dc587d98e898cdab45bf5908802f",
+    "at": "2026-11-02T10:29:12.747Z",
+    "sourceRevision": "82c78ad6acb14318be3163bc9508010a235b2116",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -722,7 +722,7 @@
       "native/src/trim.rs": "ae9d327c9ba3656e02db0b5748694f643e24ca488599a6c16cd4e86170ccfd8e",
       "native/tests/apply_scene_batch_contract.rs": "22d1d8eb653fd238055b56e24bb4b027f3a9cead460b22bfe3d70c57640d7359",
       "native/tests/apply_scene_contract.rs": "3dc0963fdc768adb1940d7831d89cd0ed5f313713d6ff27bdabdb46772c0badd",
-      "native/tests/apply_scene_service_contract.rs": "5e6c56ada38e1abc0058675575a258fce7d156e717bf3298ea8a021b623d8fe8",
+      "native/tests/apply_scene_service_contract.rs": "e46305c196c08077073d472dcf63927d0d2279df51820f96cff62335afd3c128",
       "native/tests/cancellation_contract.rs": "bf2a1ad16dc685f91ab3fc901044d0ac4110202adbd401c57f0e10f7cff8bd9e",
       "native/tests/capture_window_contract.rs": "4efb553efd440cb6298841730c58572161f0e433c0d4fbb4ab83d3e299f61212",
       "native/tests/clock_contract.rs": "8703ab675f242b44769c4f4d61e163ec40cabd341f063dc845a8a3cfa4470742",
@@ -777,7 +777,7 @@
       "native/tests/scene_item_transform_mutation_contract.rs": "a7b5230b0ef01b33dd857c41c9c5e497bf4e33e3dbbbf6ed82ff3aa331d4673a",
       "native/tests/scene_plan_contract.rs": "ca6d72804c38204c81259090063a495b394c4d4cbfc5ae6cae4d7e6dbef498d4",
       "native/tests/service_contract.rs": "30008b7a7f7cfb172872eae2f7156972f1ae6bdd0da8b672d9191a098869de7d",
-      "native/tests/service_media_uncertainty_contract.rs": "04a6f8a789305dbe9fd51d78f744a1dc21a1a8d26082df255e0a6031f48e661e",
+      "native/tests/service_media_uncertainty_contract.rs": "9f549df776da228af1374e86ff1aa649f53a648135a0ba0879925935d904c24a",
       "native/tests/service_read_tools_contract.rs": "8201004d01a30f6e0d61e88db7370a4ddeef0ba787558b07bc551adee438e5e0",
       "native/tests/service_read_workflows_contract.rs": "62e039b36de270a2f8e9efcdd054b32cbd92819c98407e9c71f110a61fef2a9f",
       "native/tests/session_batch_contract.rs": "736325f39833253b12ad2aad75094d37acef3462bc924b628b4f7e6c723a05c6",

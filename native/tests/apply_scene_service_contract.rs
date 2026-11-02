@@ -314,16 +314,15 @@ struct Fixture {
     malformed: Arc<AtomicBool>,
     notify: Arc<Notify>,
     out: mpsc::Sender<Value>,
-    task: JoinHandle<()>,
+    task: JoinHandle<TcpListener>,
     control: SharedControl,
     host: Arc<Host>,
 }
 impl Fixture {
     async fn new() -> Self {
-        Self::new_at("127.0.0.1:0").await
+        Self::with_listener(TcpListener::bind("127.0.0.1:0").await.unwrap()).await
     }
-    async fn new_at(bind: &str) -> Self {
-        let listener = TcpListener::bind(bind).await.unwrap();
+    async fn with_listener(listener: TcpListener) -> Self {
         let url = format!("ws://{}", listener.local_addr().unwrap());
         let trace = Arc::new(Mutex::new(vec![]));
         let state = Arc::new(Mutex::new(current()));
@@ -369,8 +368,13 @@ impl Fixture {
                 let count=history.lock().unwrap().iter().filter(|f|key(f)==tag).count();let should_hold=holding.lock().unwrap().get(&tag).copied()==Some(count);if should_hold{holding.lock().unwrap().remove(&tag);pending.lock().unwrap().insert(tag,reply);}else{peer.send(Message::Text(reply.to_string().into())).await.unwrap();}wake.notify_waiters();},Some(Ok(Message::Close(_)))|Some(Err(_))|None=>{let _=peer.flush().await;break;},_=>{}}
                                 }
             }
-            let mut second = Box::pin(listener.accept());
-            assert!(poll!(second.as_mut()).is_pending(), "second socket");
+            {
+                let mut second = Box::pin(listener.accept());
+                assert!(poll!(second.as_mut()).is_pending(), "second socket");
+            }
+            // Keep endpoint ownership until the next fixture takes it. A new
+            // Service needs a new connection, not a racy close/rebind of its port.
+            listener
         });
         Self {
             url,
@@ -499,8 +503,8 @@ impl Fixture {
             .unwrap();
         service
     }
-    async fn joined(self) {
-        timeout(WAIT, self.task).await.unwrap().unwrap();
+    async fn joined(self) -> TcpListener {
+        timeout(WAIT, self.task).await.unwrap().unwrap()
     }
 }
 fn apply(
@@ -1153,8 +1157,9 @@ async fn lost_or_malformed_reply_retains_unknown_and_restarted_service_has_no_ef
             let joined = service.shutdown().await.unwrap();
             assert!(joined.workers_joined && joined.socket_joined);
             drop(service);
-            f.joined().await;
-            let next = Fixture::new_at(endpoint.strip_prefix("ws://").unwrap()).await;
+            let listener = f.joined().await;
+            let next = Fixture::with_listener(listener).await;
+            assert_eq!(next.url, endpoint);
             let mut restarted = next.service(&dir).await;
             let mut plan = create_spec();
             plan["apply"] = json!(false);

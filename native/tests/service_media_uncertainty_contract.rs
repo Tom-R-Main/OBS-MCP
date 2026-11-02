@@ -13,10 +13,49 @@ use obs_mcp_native::{
     service::ServiceError,
 };
 use serde_json::json;
-use std::{fs, sync::Arc, time::Duration};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Arc, Mutex, Weak},
+    time::Duration,
+};
+
+#[cfg(unix)]
+struct MediaHelper {
+    directory: Dir,
+}
+#[cfg(unix)]
+impl MediaHelper {
+    fn acquire() -> Arc<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        static SHARED: Mutex<Weak<MediaHelper>> = Mutex::new(Weak::new());
+        let mut shared = SHARED.lock().unwrap();
+        if let Some(helper) = shared.upgrade() {
+            return helper;
+        }
+        let directory = Dir::new();
+        let path = directory.0.join("media-helper");
+        // Publish once before any helper can be spawned. Concurrent tests only
+        // share immutable bytes, so a fork cannot inherit a sibling writer for
+        // an executable that another test is about to launch.
+        fs::write(
+            &path,
+            b"#!/bin/sh\nfor argument do\ncase \"$argument\" in */source.mkv) printf invoked > \"$(dirname \"$argument\")/../spawned\";; esac\ndone\nexit 1\n",
+        )
+        .unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        // Keep the helper directory alive until every Config user has joined.
+        let helper = Arc::new(Self { directory });
+        *shared = Arc::downgrade(&helper);
+        helper
+    }
+    fn executable(&self) -> PathBuf {
+        self.directory.0.join("media-helper")
+    }
+}
 use support::*;
 #[cfg(unix)]
-fn media(dir: &Dir) -> Arc<Config> {
+fn media(dir: &Dir) -> (Arc<Config>, Arc<MediaHelper>) {
     use std::os::unix::fs::PermissionsExt;
     let root = dir.0.join("recordings");
     let work = dir.0.join("media-work");
@@ -24,20 +63,22 @@ fn media(dir: &Dir) -> Arc<Config> {
     fs::create_dir(&work).unwrap();
     fs::set_permissions(&work, fs::Permissions::from_mode(0o700)).unwrap();
     fs::write(root.join("source.mkv"), b"fixture source bytes").unwrap();
-    let helper = dir.0.join("media-helper");
-    fs::write(
-        &helper,
-        b"#!/bin/sh\nprintf invoked > \"$(dirname \"$0\")/spawned\"\nexit 1\n",
-    )
-    .unwrap();
-    fs::set_permissions(&helper, fs::Permissions::from_mode(0o700)).unwrap();
+    let owner = MediaHelper::acquire();
+    let helper = owner.executable();
     assert_eq!(
-        std::process::Command::new(&helper).status().unwrap().code(),
+        std::process::Command::new(&helper)
+            .arg(root.join("source.mkv"))
+            .status()
+            .unwrap()
+            .code(),
         Some(1)
     );
     assert_eq!(fs::read(dir.0.join("spawned")).unwrap(), b"invoked");
     fs::remove_file(dir.0.join("spawned")).unwrap();
-    Arc::new(Config::new(&root, &helper, &helper, &work).unwrap())
+    (
+        Arc::new(Config::new(&root, &helper, &helper, &work).unwrap()),
+        owner,
+    )
 }
 fn unknown(dir: &Dir, url: &str, generic: bool) {
     let mut store = OperationStore::new(&dir.0, url).unwrap();
@@ -83,7 +124,7 @@ async fn refuses(generic: bool) {
         .unwrap()
         .insert("GetRecordDirectory".into());
     let dir = Dir::new();
-    let config = media(&dir);
+    let (config, _helper) = media(&dir);
     unknown(&dir, &socket.url, generic);
     socket.plan(
         "GetRecordDirectory",
@@ -145,7 +186,7 @@ async fn foreign_endpoint_unknown_does_not_blanket_disable_current_endpoint_medi
         .unwrap()
         .insert("GetRecordDirectory".into());
     let dir = Dir::new();
-    let config = media(&dir);
+    let (config, _helper) = media(&dir);
     unknown(&dir, "ws://127.0.0.1:1", false);
     socket.plan(
         "GetRecordDirectory",
@@ -174,4 +215,5 @@ async fn foreign_endpoint_unknown_does_not_blanket_disable_current_endpoint_medi
         "foreign history blocked media admission: {result:?}"
     );
     assert_eq!((status, directory), (1, 1));
+    assert_eq!(fs::read(dir.0.join("spawned")).unwrap(), b"invoked");
 }
