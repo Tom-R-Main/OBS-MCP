@@ -2,8 +2,8 @@
 import {spawn,execFileSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash} from 'node:crypto';
-import {appendFileSync,chmodSync,copyFileSync,existsSync,linkSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,rmSync,symlinkSync,truncateSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {appendFileSync,chmodSync,copyFileSync,existsSync,linkSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,rmSync,statSync,symlinkSync,truncateSync,unlinkSync,writeFileSync} from 'node:fs';
+import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport,getDefaultEnvironment} from '@modelcontextprotocol/client/stdio';
@@ -141,6 +141,35 @@ for(const legacy of[false,true])describe(`Native verified replay retained owner 
   // Flush the retained initializer via an ordinary read: it must not dispatch
   // the departed attempt later with a freshly reset verification timeout.
   await s.client.callTool({name:'obs-get-replay-buffer-status',arguments:{}});expect(f.frames('SaveReplayBuffer')).toHaveLength(0);expect(f.receipts().filter(row=>row.requestType==='SaveReplayBuffer')).toEqual([]);
+ });
+ it('starts the Save acknowledgement cap at Save admission after slow preparation',async()=>{
+  const f=await fixture('Native',legacy),s=await f.connect();
+  f.fake.queueSuccess('GetVersion',{obsVersion:'32.2.2',obsWebSocketVersion:'5.7.0',rpcVersion:1,platform:'macos',availableRequests:['GetVersion','SaveReplayBuffer','GetReplayBufferStatus','GetLastReplayBufferReplay','GetRecordStatus','GetRecordDirectory']},5000);
+  f.fake.queueSuccess('GetReplayBufferStatus',{outputActive:true},1000);f.fake.queueSuccess('GetLastReplayBufferReplay',{savedReplayPath:''},1000);f.fake.queueSuccess('SaveReplayBuffer',{},4500);
+  const job=s.client.callTool({name:tool,arguments:{timeoutSeconds:15}});void job.catch(()=>{});
+  await f.fake.waitForRequest('SaveReplayBuffer',{timeoutMs:11000});f.publish();
+  const result=await job;expect(result.isError,JSON.stringify(result)).not.toBe(true);expect(facts(result)).toMatchObject({status:'verified',requestAccepted:true,strictDecode:true,fileStableDuringVerification:true,file:{path:f.path}});expect(f.frames('SaveReplayBuffer')).toHaveLength(1);acknowledgedOnly(f);
+ },30000);
+ it('retains failed snapshot cleanup custody and refuses another save after permissions are restored',async()=>{
+  const f=await fixture('Native',legacy,{markDecode:true}),s=await f.connect();let reads=0,snapshot:string|undefined,work:string|undefined,originalMode:number|undefined,extraLink:string|undefined;
+  const rootFault=process.getuid?.()===0;
+  f.fake.respondWith('GetLastReplayBufferReplay',()=>{
+   if(++reads===2){
+    expect(existsSync(f.decodeMarker)).toBe(true);
+    const roots=readdirSync(f.state).filter(name=>name.startsWith('.native-media-'));expect(roots).toHaveLength(1);const paths=readdirSync(join(f.state,roots[0]!)).filter(name=>/^replay-[a-f0-9-]+\.snapshot$/.test(name));expect(paths).toHaveLength(1);
+    snapshot=join(f.state,roots[0]!,paths[0]!);work=dirname(snapshot);originalMode=statSync(work).mode&0o7777;
+    if(rootFault){extraLink=join(work,'fixture-snapshot-hardlink');linkSync(snapshot,extraLink);}else chmodSync(work,0o500);
+   }
+   return{savedReplayPath:reads===1?'':f.path};
+  });
+  try{
+   const result=await s.client.callTool({name:tool,arguments:{timeoutSeconds:5}});expect(result.isError,JSON.stringify(result)).toBe(true);expect(facts(result)).toMatchObject({status:'unverified',requestAccepted:true,strictDecode:true,fileStableDuringVerification:false});expect(facts(result).file).toBeUndefined();acknowledgedOnly(f);expect(f.frames('SaveReplayBuffer')).toHaveLength(1);expect(snapshot).toBeDefined();expect(existsSync(snapshot!)).toBe(true);
+   const journal=join(f.state,'replay-verifications');expect(existsSync(join(journal,'active'))).toBe(true);expect(readdirSync(journal).filter(name=>name.endsWith('.started.json'))).toHaveLength(1);expect(readdirSync(journal).filter(name=>name.endsWith('.result.json'))).toEqual([]);expect(f.verificationResults()).toEqual([expect.objectContaining({status:'pending',requestAttribution:'unverified'})]);
+   if(work&&originalMode!==undefined)chmodSync(work,originalMode);if(extraLink&&existsSync(extraLink))unlinkSync(extraLink);
+   await refused(s.client.callTool({name:tool,arguments:{timeoutSeconds:1}}));expect(f.frames('SaveReplayBuffer')).toHaveLength(1);expect(existsSync(snapshot!)).toBe(true);expect(existsSync(join(journal,'active'))).toBe(true);expect(readdirSync(journal).filter(name=>name.endsWith('.result.json'))).toEqual([]);expect(readFileSync(f.path)).toEqual(f.seedBytes);
+   await s.close();await vi.waitFor(()=>expect(f.fake.openConnectionCount).toBe(0));const restarted=await f.connect();await refused(restarted.client.callTool({name:tool,arguments:{timeoutSeconds:1}}));expect(f.frames('SaveReplayBuffer')).toHaveLength(1);expect(existsSync(snapshot!)).toBe(true);expect(existsSync(join(journal,'active'))).toBe(true);expect(readdirSync(journal).filter(name=>name.endsWith('.result.json'))).toEqual([]);
+   if(process.env.REPLAY_VERIFIED_EVIDENCE)appendFileSync(process.env.REPLAY_VERIFIED_EVIDENCE,JSON.stringify({kind:'snapshot-cleanup-custody',legacy,fault:rootFault?'private-hardlink':'parent-permissions',snapshot,result})+'\n');
+  }finally{if(work&&originalMode!==undefined&&existsSync(work))chmodSync(work,originalMode);if(extraLink&&existsSync(extraLink))unlinkSync(extraLink);}
  });
  it('joins an EOF-departed save owner after the same held ACK without replay',async()=>{
   const f=await fixture('Native',legacy);f.fake.queueSuccess('SaveReplayBuffer',{},60000);const child=spawn(binary,[],{cwd:root,env:f.env,stdio:['pipe','pipe','pipe']});let exited=false,buffer='',parseError:unknown;const replies=new Map<number,unknown>();const closed=once(child,'close');void closed.catch(()=>{});child.once('close',()=>{exited=true;});child.stdin.on('error',()=>undefined);child.stderr.on('data',()=>undefined);child.stdout.on('data',(chunk:Buffer)=>{buffer+=chunk.toString('utf8');if(buffer.length>1024*1024){parseError='Raw reply capture exceeded1MiB';return;}let end:number;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);try{const message=JSON.parse(line);if(typeof message.id==='number')replies.set(message.id,message);}catch(error){parseError=error;}}});

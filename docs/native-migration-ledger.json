@@ -564,8 +564,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-03T08:56:14.084Z",
-    "sourceRevision": "33b711d57355751a9578b9a19dde9ee84abd9250",
+    "at": "2026-11-03T09:31:25.903Z",
+    "sourceRevision": "e09c4b3a1314cf039685f4b6347ac88c1a9b1466",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -743,8 +743,8 @@
       "native/src/record_impact.rs": "b7478c90d2797b4ec1a6e41c6d5d5f164548f1461ba7206b7e199955f133c6b5",
       "native/src/record_stop_transport.rs": "5f798d2ceb19a2ff5a83582ccf6b56378422571456496c882de8d4f3a6081108",
       "native/src/replay_events.rs": "82036b9a9cd4e941317b961d9ae8a35bec581f1b103afd636a92391116e06a6b",
-      "native/src/replay_files.rs": "2e80052e415a8c3621157314803641e074a3f93a49aa618eb5f725837a28d5df",
-      "native/src/replay_save.rs": "788a3fd6440a9645090307408cdf15def3693a11836fbf2208bdda5e041fa800",
+      "native/src/replay_files.rs": "7983343e1cf2c81ef4d1251e9fb10bbb3cc1e862eb4d96088118c3948e243821",
+      "native/src/replay_save.rs": "b884e37990a922feb036a526fdd77df4b96cb0d6057f2089ea819f21d4f6fc0f",
       "native/src/resource_catalog.rs": "dc1493741f67582d09bb3169c2d8fd3220a3c9e86cc57e13292a94455b2669fc",
       "native/src/resource_events.rs": "bee2e8ea3b98ba420d78fff3e7fab952e006b9ecd5921ef19677dafaee474d61",
       "native/src/resource_notifications.rs": "4fd3057434b0bd16d409724e92d2733124d99852f39d3f19ca28c3cd376023e6",

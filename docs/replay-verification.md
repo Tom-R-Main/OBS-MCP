@@ -28,13 +28,13 @@ The approved root limits this service's file inspection; it does not change OBS'
 
 Verification reads an identity-checked source descriptor into an exclusive private snapshot while hashing it. Probe and decode inspect that snapshot. The descriptor and copy remain owned across final OBS corroboration; the source bytes and named-file identity are checked again immediately before completing the result. These are observations at checked boundaries, not a filesystem sandbox against a hostile same-user process or a promise that the file can never change afterward.
 
-The original 1–50 second budget covers initialization admission, the save, saved-event wait and verification. Cancellation does not abandon a dispatched acknowledgement or an owned helper. Cleanup may take its bounded joining grace beyond the work deadline. An unconfirmed helper/pipe shutdown retains its private snapshot and unfinished journal; another verified save refuses rather than discarding evidence or reusing its permission.
+The original 1–50 second budget covers initialization admission, the save, saved-event wait and verification. The Save acknowledgement has a separate cap of ten seconds starting at Save admission, bounded by the time remaining in that original budget. Cancellation does not abandon a dispatched acknowledgement or an owned helper. Cleanup may take its bounded joining grace beyond the work deadline. An unconfirmed helper/pipe shutdown or snapshot cleanup retains its private snapshot and unfinished journal; another verified save refuses rather than discarding evidence or reusing its permission.
 
 ## Restart and failure evidence
 
 Generic transport receipts keep their existing schema and `postconditionObserved:false`. Separate version-1 replay observations live under `replay-verifications` in the approved state directory. Immutable `ID.started.json` and `ID.result.json` records bind the operation to its endpoint hash; an exclusive `active` directory prevents overlapping verified saves in that namespace.
 
-A process interruption can leave `active` and started evidence behind. Restart does not clear them or repeat the save. Inspect OBS and retained evidence before choosing a separate recovery action. This tranche deliberately supplies no automatic reset, adoption or journal-clearing command. A finalized verification observation is historical evidence, not a capability to reuse or overwrite that file.
+A process interruption or unconfirmed snapshot cleanup can leave `active` and started evidence behind. Snapshot retirement is explicit; a destructor never retries deletion after uncertainty. Restart does not clear them or repeat the save. Inspect OBS and retained evidence before choosing a separate recovery action. This tranche deliberately supplies no automatic reset, adoption or journal-clearing command. A finalized verification observation is historical evidence, not a capability to reuse or overwrite that file.
 
 ## Verification scope
 

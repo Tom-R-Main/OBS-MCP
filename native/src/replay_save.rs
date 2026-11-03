@@ -305,6 +305,8 @@ pub async fn execute(
             }
         };
     let mut cleanup_unconfirmed = false;
+    // Retain explicit cleanup custody across final OBS/event readback awaits.
+    let mut verified_snapshot = None;
     let workflow=async {
         if cancel.is_cancelled()||Instant::now()>=deadline{return Err("Replay operation cancelled or original deadline expired before dispatch".into());}
         let read=|name:&'static str|{let session=session.clone();async move {let remaining=deadline.saturating_duration_since(Instant::now()).min(Duration::from_secs(2));if remaining.is_zero(){return Err("Replay original deadline expired".to_owned());}session.request(session.token(),name,Value::Null,remaining).await.map_err(|e|format!("Replay prerequisite/readback {name} failed: {e}"))}};
@@ -315,25 +317,36 @@ pub async fn execute(
         let subscription=events.subscribe(deadline)?;
         let arm=subscription.clone();
         let save=generic_requests::Call::parse("obs-save-replay-buffer",&json!({})).expect("fixed replay save arguments");
-        let remaining=deadline.saturating_duration_since(admitted).min(Duration::from_secs(10));
-        let _transport=generic_requests::execute_with_dispatch_hook(writer,save,session.clone(),control,clock,caller,cancel.clone(),id.clone(),remaining,admitted,GenericServices::default(),Some(Arc::new(move||arm.arm()))).await;
+        let save_admitted=Instant::now();
+        let remaining=deadline.saturating_duration_since(save_admitted).min(Duration::from_secs(10));
+        if remaining.is_zero(){return Err("Replay original deadline expired before save admission".into());}
+        let _transport=generic_requests::execute_with_dispatch_hook(writer,save,session.clone(),control,clock,caller,cancel.clone(),id.clone(),remaining,save_admitted,GenericServices::default(),Some(Arc::new(move||arm.arm()))).await;
         facts["saveEventObserved"]=json!(subscription.observed());
         let receipt=view.read_any(&id).map_err(|_|"Replay transport receipt could not be inspected")?;
         facts["requestAccepted"]=receipt["requestAccepted"].clone();
         if facts["requestAccepted"]!=true{return Err("Replay save was rejected, not dispatched, or has an Unknown acknowledgement; no retry or verified file is granted".into());}
         let path=tokio::select!{path=subscription.candidate()=>path?,_=cancel.cancelled()=>return Err("Replay verification cancelled after save dispatch; its acknowledgement remains retained".into())};facts["saveEventObserved"]=json!(true);
         if path==previous{return Err("Replay saved path did not change from the previous replay; freshness is unverified".into());}
-        let snapshot=verifier.snapshot(PathBuf::from(&path),baseline,id.clone(),deadline,cancel.clone()).await?;
+        let snapshot=match verifier.snapshot(PathBuf::from(&path),baseline,id.clone(),deadline,cancel.clone()).await{Ok(snapshot)=>snapshot,Err(error)=>{cleanup_unconfirmed|=error.cleanup_unconfirmed;return Err(error.message);}};
         facts["newPathObserved"]=json!(true);
-        let verified=match verifier.verify(snapshot,deadline,cancel.clone()).await{Ok(file)=>file,Err(error)=>{cleanup_unconfirmed=error.cleanup_unconfirmed;return Err(error.message);}};
+        verified_snapshot=Some(match verifier.verify(snapshot,deadline,cancel.clone()).await{Ok(file)=>file,Err(error)=>{cleanup_unconfirmed|=error.cleanup_unconfirmed;return Err(error.message);}});
         facts["strictDecode"]=json!(true);
         if read("GetLastReplayBufferReplay").await?["savedReplayPath"]!=path{return Err("Current replay filename disagrees with the saved event".into());}
         subscription.confirm(&path).await?;
-        let file=verifier.finish(verified,deadline,cancel.clone()).await.map_err(|error|error.message)?;
+        let file=match verifier.finish(verified_snapshot.take().expect("retained verified snapshot"),deadline,cancel.clone()).await{Ok(file)=>file,Err(error)=>{cleanup_unconfirmed|=error.cleanup_unconfirmed;return Err(error.message);}};
         facts["file"]=file;facts["fileStableDuringVerification"]=json!(true);facts["status"]=json!("verified");
         Ok::<(),String>(())
     }.await;
-    let issue = workflow.err();
+    let mut issue = workflow.err();
+    if let Some(snapshot) = verified_snapshot.take()
+        && let Err(cleanup) = verifier.discard(snapshot)
+    {
+        cleanup_unconfirmed |= cleanup.cleanup_unconfirmed;
+        issue = Some(match issue {
+            Some(primary) => format!("{primary}; {}", cleanup.message),
+            None => cleanup.message,
+        });
+    }
     if cleanup_unconfirmed {
         let mut outcome = result(
             facts,

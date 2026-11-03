@@ -41,6 +41,7 @@ pub struct Snapshot {
     bytes: u64,
     cleanup_allowed: bool,
 }
+#[derive(Debug)]
 pub struct VerifyError {
     pub message: String,
     pub cleanup_unconfirmed: bool,
@@ -60,6 +61,14 @@ impl From<String> for VerifyError {
 impl From<&str> for VerifyError {
     fn from(message: &str) -> Self {
         message.to_owned().into()
+    }
+}
+impl From<media_verification::MediaError> for VerifyError {
+    fn from(error: media_verification::MediaError) -> Self {
+        Self {
+            cleanup_unconfirmed: error.cleanup_issue().is_some(),
+            message: error.to_string(),
+        }
     }
 }
 #[cfg(unix)]
@@ -259,24 +268,72 @@ impl Verifier {
         id: String,
         deadline: Instant,
         cancel: crate::stage_transport::Cancellation,
-    ) -> Result<Snapshot, String> {
+    ) -> Result<Snapshot, VerifyError> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || {
-            budget(deadline,&cancel)?;
-            if baseline.names.contains(&path){return Err("Replay filename already existed before the save attempt; overwrite freshness is unverified".into());}
-            let before=this.source(&path)?;let mut source=File::open(&path).map_err(|_|"Replay file cannot be opened")?;
-            if !unchanged(&before,&source.metadata().map_err(|_|"Replay descriptor is unavailable")?){return Err("Replay source changed before snapshot".into());}
-            let copy=this.work.join(format!("replay-{id}.snapshot"));
-            let mut options=OpenOptions::new();options.create_new(true).write(true).read(true);
-            #[cfg(unix)] {use std::os::unix::fs::OpenOptionsExt;options.mode(0o600);}
-            let mut target=options.open(&copy).map_err(|_|"Private replay snapshot could not be created")?;
-            let mut snapshot=Snapshot{original:path,source:source.try_clone().map_err(|_|"Replay descriptor clone failed")?,before:before.clone(),path:copy,identity:target.metadata().map_err(|_|"Replay snapshot identity unavailable")?,hash:String::new(),bytes:0,cleanup_allowed:true};
-            let mut hash=Sha256::new();let mut buffer=[0u8;64*1024];
-            loop {budget(deadline,&cancel)?;let size=source.read(&mut buffer).map_err(|_|"Replay snapshot read failed")?;if size==0{break;}snapshot.bytes+=size as u64;if snapshot.bytes>MAX_BYTES{return Err("Replay snapshot exceeds 512 MiB".into());}target.write_all(&buffer[..size]).map_err(|_|"Replay snapshot write failed")?;hash.update(&buffer[..size]);}
-            snapshot.hash=format!("{:x}",hash.finalize());snapshot.identity=target.metadata().map_err(|_|"Replay snapshot identity unavailable")?;
-            if snapshot.bytes!=before.len(){return Err("Replay grew or shrank during snapshot".into());}
-            this.recheck(&mut snapshot,deadline,&cancel)?;Ok(snapshot)
-        }).await.map_err(|_|"Replay snapshot worker did not join")?
+            budget(deadline, &cancel)?;
+            if baseline.names.contains(&path) {
+                return Err("Replay filename already existed before the save attempt; overwrite freshness is unverified".into());
+            }
+            let before = this.source(&path)?;
+            let mut source = File::open(&path).map_err(|_| "Replay file cannot be opened")?;
+            if !unchanged(&before, &source.metadata().map_err(|_| "Replay descriptor is unavailable")?) {
+                return Err("Replay source changed before snapshot".into());
+            }
+            // Clone before creating a private file so this failure has no cleanup duty.
+            let retained_source = source.try_clone().map_err(|_| "Replay descriptor clone failed")?;
+            let copy = this.work.join(format!("replay-{id}.snapshot"));
+            let mut options = OpenOptions::new();
+            options.create_new(true).write(true).read(true);
+            #[cfg(unix)] {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut target = options.open(&copy).map_err(|_| "Private replay snapshot could not be created")?;
+            let copy_identity = target.metadata().map_err(|_| VerifyError {
+                message: "Replay snapshot identity unavailable; cleanup withheld".into(),
+                cleanup_unconfirmed: true,
+            })?;
+            let mut snapshot = Snapshot {
+                original: path,
+                source: retained_source,
+                before: before.clone(),
+                path: copy,
+                identity: copy_identity,
+                hash: String::new(),
+                bytes: 0,
+                cleanup_allowed: true,
+            };
+            let copied = (|| -> Result<(), VerifyError> {
+                let mut hash = Sha256::new();
+                let mut buffer = [0u8; 64 * 1024];
+                loop {
+                    budget(deadline, &cancel)?;
+                    let size = source.read(&mut buffer).map_err(|_| "Replay snapshot read failed")?;
+                    if size == 0 { break; }
+                    snapshot.bytes += size as u64;
+                    if snapshot.bytes > MAX_BYTES { return Err("Replay snapshot exceeds 512 MiB".into()); }
+                    target.write_all(&buffer[..size]).map_err(|_| "Replay snapshot write failed")?;
+                    hash.update(&buffer[..size]);
+                }
+                snapshot.hash = format!("{:x}", hash.finalize());
+                snapshot.identity = target.metadata().map_err(|_| "Replay snapshot identity unavailable")?;
+                if snapshot.bytes != before.len() { return Err("Replay grew or shrank during snapshot".into()); }
+                this.recheck(&mut snapshot, deadline, &cancel)?;
+                Ok(())
+            })();
+            // No helper can use this descriptor, and close it before unlinking.
+            drop(target);
+            match copied {
+                Ok(()) => Ok(snapshot),
+                Err(error) => Err(snapshot.retire_error(error)),
+            }
+        })
+        .await
+        .map_err(|_| VerifyError {
+            message: "Replay snapshot worker did not join; cleanup is unconfirmed".into(),
+            cleanup_unconfirmed: true,
+        })?
     }
     fn recheck(
         &self,
@@ -336,6 +393,18 @@ impl Verifier {
         deadline: Instant,
         cancel: crate::stage_transport::Cancellation,
     ) -> Result<VerifiedSnapshot, VerifyError> {
+        let result = self.verify_snapshot(&mut snapshot, deadline, cancel).await;
+        match result {
+            Ok(evidence) => Ok(VerifiedSnapshot { snapshot, evidence }),
+            Err(error) => Err(snapshot.retire_error(error)),
+        }
+    }
+    async fn verify_snapshot(
+        &self,
+        snapshot: &mut Snapshot,
+        deadline: Instant,
+        cancel: crate::stage_transport::Cancellation,
+    ) -> Result<Value, VerifyError> {
         budget(deadline, &cancel)?;
         self.check()?;
         let options = || ProcessOptions {
@@ -363,16 +432,9 @@ impl Verifier {
             options(),
             1024 * 1024,
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(VerifyError::from)?;
         let data = tokio::select! {result=probe.finish()=>result,_=cancel.cancelled()=>{probe.cancel();probe.finish().await}};
-        let data = data.map_err(|error| {
-            let cleanup_unconfirmed = error.cleanup_issue().is_some();
-            snapshot.cleanup_allowed = !cleanup_unconfirmed;
-            VerifyError {
-                message: error.to_string(),
-                cleanup_unconfirmed,
-            }
-        })?;
+        let data = data.map_err(VerifyError::from)?;
         drop(probe);
         budget(deadline, &cancel)?;
         let data: Value =
@@ -417,20 +479,13 @@ impl Verifier {
             &media_verification::strict_decode_args(&snapshot.path),
             options(),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(VerifyError::from)?;
         let decoded = tokio::select! {result=decode.finish()=>result,_=cancel.cancelled()=>{decode.cancel();decode.finish().await}};
-        decoded.map_err(|error| {
-            let cleanup_unconfirmed = error.cleanup_issue().is_some();
-            snapshot.cleanup_allowed = !cleanup_unconfirmed;
-            VerifyError {
-                message: error.to_string(),
-                cleanup_unconfirmed,
-            }
-        })?;
+        decoded.map_err(VerifyError::from)?;
         drop(decode);
         budget(deadline, &cancel)?;
         let evidence = json!({"path":snapshot.original,"sha256":snapshot.hash,"bytes":snapshot.bytes,"durationSeconds":duration,"audioStreams":audio,"videoStreams":1});
-        Ok(VerifiedSnapshot { snapshot, evidence })
+        Ok(evidence)
     }
     /// The source descriptor and private copy remain owned across final OBS
     /// corroboration. Rehash the original only after that asynchronous boundary.
@@ -445,30 +500,163 @@ impl Verifier {
             evidence,
         } = verified;
         let this = self.clone();
-        let (snapshot, result) = tokio::task::spawn_blocking(move || {
+        let (mut snapshot, result) = tokio::task::spawn_blocking(move || {
             let result = this.recheck(&mut snapshot, deadline, &cancel);
             (snapshot, result)
         })
         .await
-        .map_err(|_| "Replay recheck worker did not join")?;
-        result?;
-        let current = identity(&snapshot.path)?;
-        if !same(&current, &snapshot.identity) || !independent(&current) {
-            return Err("Replay snapshot cleanup identity is unconfirmed".into());
+        .map_err(|_| VerifyError {
+            message: "Replay recheck worker did not join; cleanup is unconfirmed".into(),
+            cleanup_unconfirmed: true,
+        })?;
+        match result {
+            Ok(()) => {
+                snapshot.cleanup()?;
+                Ok(evidence)
+            }
+            Err(error) => Err(snapshot.retire_error(error.into())),
         }
-        fs::remove_file(&snapshot.path).map_err(|_| "Replay snapshot cleanup is unconfirmed")?;
-        Ok(evidence)
+    }
+    /// Retire a verified copy when final OBS corroboration refuses publication.
+    /// Its cleanup fate must be combined with the caller's primary error.
+    pub fn discard(&self, verified: VerifiedSnapshot) -> Result<(), VerifyError> {
+        let mut snapshot = verified.snapshot;
+        snapshot.cleanup()
     }
 }
-impl Drop for Snapshot {
-    fn drop(&mut self) {
-        if !self.cleanup_allowed {
-            return;
+impl Snapshot {
+    fn cleanup(&mut self) -> Result<(), VerifyError> {
+        // Disable retries before even looking up the path: failed identity or
+        // unlink evidence must remain sticky if permissions later recover.
+        let allowed = std::mem::replace(&mut self.cleanup_allowed, false);
+        if !allowed {
+            return Err(VerifyError {
+                message: "Replay snapshot cleanup withheld because helper or filesystem cleanup is unconfirmed".into(),
+                cleanup_unconfirmed: true,
+            });
         }
-        if fs::symlink_metadata(&self.path).is_ok_and(|info| {
-            same(&info, &self.identity) && info.is_file() && !info.file_type().is_symlink()
-        }) {
-            let _ = fs::remove_file(&self.path);
+        let current = identity(&self.path).map_err(|_| VerifyError {
+            message: "Replay snapshot cleanup identity is unavailable; cleanup withheld".into(),
+            cleanup_unconfirmed: true,
+        })?;
+        if !same(&current, &self.identity) || !independent(&current) {
+            return Err(VerifyError {
+                message: "Replay snapshot cleanup identity is unconfirmed; cleanup withheld".into(),
+                cleanup_unconfirmed: true,
+            });
         }
+        fs::remove_file(&self.path).map_err(|_| VerifyError {
+            message: "Replay snapshot cleanup is unconfirmed".into(),
+            cleanup_unconfirmed: true,
+        })
+    }
+    fn retire_error(&mut self, mut error: VerifyError) -> VerifyError {
+        if error.cleanup_unconfirmed {
+            self.cleanup_allowed = false;
+        }
+        if let Err(cleanup) = self.cleanup() {
+            error.message = format!("{}; {}", error.message, cleanup.message);
+            error.cleanup_unconfirmed = true;
+        }
+        error
+    }
+}
+// Snapshot deliberately has no filesystem-mutating Drop. All normal return
+// paths explicitly retire it and report cleanup fate. Abandonment (e.g. worker
+// panic) retains the file; no destructor may retry after uncertainty.
+
+#[cfg(all(test, unix))]
+mod cleanup_tests {
+    use super::*;
+
+    struct Fixture {
+        root: PathBuf,
+    }
+    impl Fixture {
+        fn new() -> Self {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("target")
+                .join(format!(
+                    "replay-cleanup-{}",
+                    crate::runtime_identity::uuid_v4().unwrap()
+                ));
+            fs::create_dir_all(&root).unwrap();
+            Self { root }
+        }
+        fn snapshot(&self) -> Snapshot {
+            let original = self.root.join("original");
+            let path = self.root.join("snapshot");
+            fs::write(&original, b"source").unwrap();
+            fs::write(&path, b"private").unwrap();
+            Snapshot {
+                source: File::open(&original).unwrap(),
+                before: identity(&original).unwrap(),
+                original,
+                identity: identity(&path).unwrap(),
+                path,
+                hash: String::new(),
+                bytes: 7,
+                cleanup_allowed: true,
+            }
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.root).unwrap();
+        }
+    }
+
+    #[test]
+    fn confirmed_cleanup_removes_only_owned_snapshot() {
+        let fixture = Fixture::new();
+        let mut snapshot = fixture.snapshot();
+        snapshot.cleanup().unwrap();
+        assert!(!snapshot.path.exists());
+        assert!(snapshot.original.exists());
+    }
+
+    #[test]
+    fn cleanup_identity_uncertainty_retains_original_even_after_identity_restored() {
+        let fixture = Fixture::new();
+        let mut snapshot = fixture.snapshot();
+        let held = fixture.root.join("held");
+        fs::rename(&snapshot.path, &held).unwrap();
+        fs::write(&snapshot.path, b"foreign").unwrap();
+        let error = snapshot.retire_error("primary verification failed".into());
+        assert!(error.cleanup_unconfirmed);
+        assert!(error.message.starts_with("primary verification failed;"));
+        assert_eq!(fs::read(&snapshot.path).unwrap(), b"foreign");
+        // Restore the exact original inode; neither a repeated cleanup nor Drop
+        // may turn recovered access into authority to erase retained evidence.
+        fs::remove_file(&snapshot.path).unwrap();
+        fs::rename(&held, &snapshot.path).unwrap();
+        assert!(snapshot.cleanup().unwrap_err().cleanup_unconfirmed);
+        let path = snapshot.path.clone();
+        drop(snapshot);
+        assert_eq!(fs::read(path).unwrap(), b"private");
+    }
+
+    #[test]
+    fn unconfirmed_helper_cleanup_never_attempts_snapshot_unlink() {
+        let fixture = Fixture::new();
+        let mut snapshot = fixture.snapshot();
+        let error = snapshot.retire_error(VerifyError {
+            message: "decoder failed with an unjoined pipe".into(),
+            cleanup_unconfirmed: true,
+        });
+        assert!(error.cleanup_unconfirmed);
+        let path = snapshot.path.clone();
+        drop(snapshot);
+        assert_eq!(fs::read(path).unwrap(), b"private");
+    }
+
+    #[test]
+    fn confirmed_error_retirement_cleans_copy_and_preserves_primary_failure() {
+        let fixture = Fixture::new();
+        let mut snapshot = fixture.snapshot();
+        let error = snapshot.retire_error("invalid probe JSON".into());
+        assert_eq!(error.message, "invalid probe JSON");
+        assert!(!error.cleanup_unconfirmed);
+        assert!(!snapshot.path.exists());
     }
 }
