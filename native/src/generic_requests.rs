@@ -9,7 +9,10 @@ use crate::{
     operation_store::{GenericKind as K, GenericPhase as P, OperationStore},
     scene_audit::ScreenshotLimit,
     scene_item_transform_mutation as transform,
-    session::{BeforeDispatch, Invalidation, RequestError, SafetyStopRequest, SessionHandle},
+    session::{
+        BeforeDispatch, ConnectionToken, Invalidation, RequestError, SafetyStopRequest,
+        SessionHandle,
+    },
     stage_transport::Cancellation,
 };
 use serde_json::{Map, Value, json};
@@ -907,9 +910,120 @@ pub async fn execute_with_services(
     )
     .await
 }
+/// Waits, after an accepted safety Stop, for OBS to report the output
+/// inactive. It holds no receipt port, dispatch slot or queue capacity, so
+/// the Service runs it apart from the single safety-stop dispatch job.
+pub struct StopConfirmation {
+    session: SessionHandle,
+    dispatched_on: ConnectionToken,
+    kind: SafetyStopRequest,
+    deadline: Instant,
+    budget: Duration,
+    cancel: Cancellation,
+    success: Value,
+}
+impl StopConfirmation {
+    /// The caller's cancellation; cancelling it ends confirmation as unconfirmed.
+    pub fn cancellation(&self) -> Cancellation {
+        self.cancel.clone()
+    }
+    pub async fn run(self) -> Value {
+        match confirm_stopped(
+            &self.session,
+            self.dispatched_on,
+            self.kind,
+            self.deadline,
+            self.budget,
+            &self.cancel,
+        )
+        .await
+        {
+            Some(text) => error(text),
+            None => self.success,
+        }
+    }
+}
+/// Either the finished tool result or, for an accepted safety Stop, the
+/// confirmation still to run.
+pub enum SafetyOutcome {
+    Done(Value),
+    Confirm(Box<StopConfirmation>),
+}
+/// The Service's safety-stop dispatch: returns once OBS answers the Stop,
+/// handing back any confirmation instead of awaiting it.
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_safety_stop(
+    store: OperationStore,
+    call: Call,
+    session: SessionHandle,
+    control: SharedControl,
+    clock: Clock,
+    caller: String,
+    cancel: Cancellation,
+    id: String,
+    timeout: Duration,
+    admitted_at: Instant,
+    services: GenericServices,
+) -> SafetyOutcome {
+    let mut deferred = None;
+    let value = execute_inner(
+        store,
+        call,
+        session,
+        control,
+        clock,
+        caller,
+        cancel,
+        id,
+        timeout,
+        admitted_at,
+        services,
+        None,
+        Some(&mut deferred),
+    )
+    .await;
+    match deferred {
+        Some(confirmation) => SafetyOutcome::Confirm(Box::new(confirmation)),
+        None => SafetyOutcome::Done(value),
+    }
+}
 pub(crate) type DispatchObservation = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_with_dispatch_hook(
+    store: OperationStore,
+    call: Call,
+    session: SessionHandle,
+    control: SharedControl,
+    clock: Clock,
+    caller: String,
+    cancel: Cancellation,
+    id: String,
+    timeout: Duration,
+    admitted_at: Instant,
+    services: GenericServices,
+    observation: Option<DispatchObservation>,
+) -> Value {
+    execute_inner(
+        store,
+        call,
+        session,
+        control,
+        clock,
+        caller,
+        cancel,
+        id,
+        timeout,
+        admitted_at,
+        services,
+        observation,
+        None,
+    )
+    .await
+}
+/// `deferred`: when Some, an accepted safety Stop's confirmation is stored
+/// there instead of awaited, and the returned Value is not the tool result.
+#[allow(clippy::too_many_arguments)]
+async fn execute_inner(
     mut store: OperationStore,
     call: Call,
     session: SessionHandle,
@@ -922,6 +1036,7 @@ pub(crate) async fn execute_with_dispatch_hook(
     admitted_at: Instant,
     services: GenericServices,
     observation: Option<DispatchObservation>,
+    deferred: Option<&mut Option<StopConfirmation>>,
 ) -> Value {
     if call.is_opaque() {
         let capabilities = services.readback.and_then(|readback| readback.capabilities);
@@ -1069,6 +1184,7 @@ pub(crate) async fn execute_with_dispatch_hook(
         }
         Ok(())
     };
+    let dispatched_on = session.token();
     let response = if let Some(kind) = safety {
         session
             .safety_stop_checked(session.token(), kind, remaining, guard)
@@ -1105,6 +1221,24 @@ pub(crate) async fn execute_with_dispatch_hook(
     }
     match response {
         Ok(response) => {
+            if let Some(kind) = call.safety_stop_kind() {
+                let confirmation = StopConfirmation {
+                    session: session.clone(),
+                    dispatched_on,
+                    kind,
+                    deadline,
+                    budget: timeout,
+                    cancel: readback_cancel.clone(),
+                    success: call.success(response),
+                };
+                return match deferred {
+                    Some(slot) => {
+                        *slot = Some(confirmation);
+                        Value::Null
+                    }
+                    None => confirmation.run().await,
+                };
+            }
             if let Some(follow_up) = call.follow_up {
                 let context = services
                     .readback
@@ -1151,6 +1285,83 @@ pub(crate) async fn execute_with_dispatch_hook(
             let message=e.obs_failure_message(call.kind.request_type()).or_else(||session.authorized_disconnect_message(&e)).unwrap_or_else(||match e {RequestError::Unknown(Invalidation::DeadlineAfterDispatch)=>format!("Request {} timed out after {}ms",call.kind.request_type(),timeout.as_millis()),RequestError::BeforeDispatch(reason)=>match reason{BeforeDispatch::GuardRefused(reason)=>reason,BeforeDispatch::Capacity|BeforeDispatch::ByteCapacity=>"OBS request was not sent: request capacity or encoded-byte policy unavailable".into(),BeforeDispatch::InvalidRequest=>"OBS request was not sent: native request or encoding policy refused it".into(),BeforeDispatch::Deadline=>"OBS request was not sent: original operation deadline expired".into(),BeforeDispatch::Cancelled=>"OBS request was not sent: cancelled before dispatch".into(),BeforeDispatch::StaleConnection=>"OBS request was not sent: connection identity changed".into(),BeforeDispatch::Closed(_)=>"OBS request was not sent: admitted connection is unavailable".into(),BeforeDispatch::IdentityExhausted=>"OBS request was not sent: request identity exhausted".into()},_=>"OBS request outcome is uncertain; inspect obs-observe before another change".into()});
             call.failure(message)
         }
+    }
+}
+
+/// Status tool and how messages name each stopped output.
+fn stop_definition(kind: SafetyStopRequest) -> (&'static str, &'static str, bool) {
+    match kind {
+        SafetyStopRequest::Stream => ("obs-get-stream-status", "streaming", true),
+        SafetyStopRequest::VirtualCam => {
+            ("obs-get-virtual-cam-status", "the virtual camera", false)
+        }
+        SafetyStopRequest::ReplayBuffer => {
+            ("obs-get-replay-buffer-status", "the replay buffer", false)
+        }
+    }
+}
+const STOP_POLL: Duration = Duration::from_millis(100);
+/// No status read is started with less than this left; the stop is then
+/// reported unconfirmed. A fully sent status read that goes unanswered past
+/// its deadline is retired locally, like a typed observation, so it never
+/// costs the shared connection.
+const STATUS_READ_MIN: Duration = Duration::from_millis(500);
+/// OBS acknowledges Stop* before the output stops: about 1.1 s for a stream,
+/// plus any stream delay, and 0.25 s for the replay buffer on OBS 32.2.2. A
+/// stop counts as complete only when a status read sent after the stop, on
+/// the connection that carried it and on the safety lane (so it never waits
+/// behind ordinary work), reports the output inactive. State events
+/// are not used, so an event from an earlier stop can never confirm this one.
+/// The admitted operation deadline bounds every read; it is never extended.
+/// Returns None when confirmed, otherwise the error text.
+async fn confirm_stopped(
+    session: &SessionHandle,
+    dispatched_on: ConnectionToken,
+    kind: SafetyStopRequest,
+    deadline: Instant,
+    budget: Duration,
+    cancel: &Cancellation,
+) -> Option<String> {
+    let (status_tool, noun, delay_note) = stop_definition(kind);
+    let request_type = kind.request_type();
+    let unconfirmed = || {
+        let seconds = crate::observation::js_string(Some(&json!(budget.as_secs_f64())));
+        format!(
+            "OBS accepted {request_type}, but the service did not observe {noun} stop within {seconds}s.{} This is not evidence that it is still running. Check {status_tool} before changing related settings; do not resend the stop automatically.",
+            if delay_note {
+                " A stream delay keeps the stream live for the configured delay after a stop."
+            } else {
+                ""
+            }
+        )
+    };
+    loop {
+        let now = Instant::now();
+        if cancel.is_cancelled() {
+            return Some(unconfirmed());
+        }
+        let Some(remaining) = deadline
+            .checked_duration_since(now)
+            .filter(|d| *d >= STATUS_READ_MIN)
+        else {
+            return Some(unconfirmed());
+        };
+        match session
+            .safety_status_checked(dispatched_on, kind, remaining)
+            .await
+        {
+            Ok(status) if status.get("outputActive") == Some(&Value::Bool(false)) => return None,
+            Ok(_) => {}
+            Err(_) if Instant::now() >= deadline || cancel.is_cancelled() => {
+                return Some(unconfirmed());
+            }
+            Err(_) => {
+                return Some(format!(
+                    "OBS accepted {request_type}, but the output status could not be read afterwards on the same connection, so whether {noun} stopped is unknown. Check {status_tool}: after a reconnect it shows current state, not this request's outcome. Do not resend the stop automatically."
+                ));
+            }
+        }
+        tokio::time::sleep_until((Instant::now() + STOP_POLL).min(deadline)).await;
     }
 }
 

@@ -519,3 +519,28 @@ it('blocks a queued setter on fresh unrelated uncertainty while continuous owned
  await held;expect((await setter).isError).toBe(true);expect(count(native,'SetInputMute')).toBe(0);expect(receipts(native).filter(receipt=>receipt.version===2).map(receipt=>receipt.phase).sort()).toEqual(['not-dispatched','unknown']);
  await vi.waitFor(()=>expect(count(native,'StopRecord')).toBe(1),{timeout:4000});expect(native.recording()).toBe(false);expect(count(native,'StartRecord')).toBe(1);expect(native.fake.connectionCount).toBe(1);const blocked=await native.client.callTool({name:'obs-set-input-audio-balance',arguments:{inputName:'Application',inputAudioBalance:0.5}});expect(blocked.isError).toBe(true);expect(count(native,'SetInputAudioBalance')).toBe(0);
 });
+
+describe('silence preflight leaves out inputs OBS reports inactive, identically on both servers',()=>{
+ const noGlobals={desktop1:null,desktop2:null,mic1:null,mic2:null,mic3:null,mic4:null};
+ const activityFixture=(active:boolean|'unreadable',special:Record<string,unknown>=noGlobals)=>(session:Session)=>{
+  session.fake.respondWith('GetInputMute',()=>({inputMuted:false}));
+  session.fake.respondWith('GetInputAudioTracks',()=>({inputAudioTracks:{1:true,2:false,3:false,4:false,5:false,6:false}}));
+  session.fake.respondWith('GetSourceActive',()=>{if(active==='unreadable')throw new FakeOBSRequestError(600,'activity unavailable');return {videoActive:active,videoShowing:active};});
+  session.fake.respondWith('GetSpecialInputs',()=>special);
+ };
+ for(const[label,active,special,status]of[
+  ['inactive input',false,undefined,'pass'],
+  ['active input',true,undefined,'fail'],
+  ['unreadable activity','unreadable',undefined,'fail'],
+  ['inactive global input',false,{...noGlobals,desktop1:'Application'},'fail'],
+  ['malformed global-audio list',false,{...noGlobals,desktop1:17},'fail'],
+  ['incomplete global-audio list',false,{desktop1:null,mic1:null},'fail'],
+ ] as const)it(label,async()=>{
+  const oracle=await start(false,false,true,{},activityFixture(active,special));const native=await start(true,false,true,{},activityFixture(active,special));
+  const result=await same(oracle,native,'obs-preflight',{expectSilent:true,minFreeDiskMb:0});
+  const audio=(result.structuredContent as {checks:{id:string;status:string;message:string}[]}).checks.find(check=>check.id==='audio')!;
+  expect(audio.status).toBe(status);
+  expect(audio.message.includes('OBS reports them inactive')).toBe(status==='pass');
+  expect(count(native,'GetSourceActive')).toBeGreaterThan(0);
+ });
+});

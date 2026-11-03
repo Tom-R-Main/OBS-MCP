@@ -307,6 +307,7 @@ enum CommandKind {
     Observation(ReadRequest),
     ReservedControl(StopControl),
     SafetyStop(SafetyStopRequest),
+    SafetyStatus(SafetyStopRequest),
     ManualRecordStop,
     Transform,
     Batch {
@@ -331,6 +332,15 @@ impl SafetyStopRequest {
             Self::ReplayBuffer => "StopReplayBuffer",
         }
     }
+    /// The status read that confirms this Stop, carried on the same lane so
+    /// confirmation never waits behind ordinary work.
+    pub fn status_request_type(self) -> &'static str {
+        match self {
+            Self::Stream => "GetStreamStatus",
+            Self::VirtualCam => "GetVirtualCamStatus",
+            Self::ReplayBuffer => "GetReplayBufferStatus",
+        }
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Lane {
@@ -351,7 +361,9 @@ impl CommandKind {
     fn lane(&self) -> Lane {
         match self {
             Self::ReservedControl(_) => Lane::OwnedStop,
-            Self::SafetyStop(_) | Self::ManualRecordStop => Lane::SafetyStop,
+            Self::SafetyStop(_) | Self::SafetyStatus(_) | Self::ManualRecordStop => {
+                Lane::SafetyStop
+            }
             _ => Lane::Normal,
         }
     }
@@ -376,6 +388,7 @@ enum SingleRequest<'a> {
     Transform,
     Reserved(StopControl),
     SafetyStop(SafetyStopRequest),
+    SafetyStatus(SafetyStopRequest),
     ManualRecordStop,
 }
 impl SingleRequest<'_> {
@@ -386,6 +399,7 @@ impl SingleRequest<'_> {
             Self::Transform => "GetSceneItemTransform",
             Self::Reserved(control) => control.request_type(),
             Self::SafetyStop(kind) => kind.request_type(),
+            Self::SafetyStatus(kind) => kind.status_request_type(),
             Self::ManualRecordStop => "StopRecord",
         }
     }
@@ -1277,6 +1291,32 @@ impl SessionHandle {
         }
     }
 
+    /// The status read confirming an accepted safety Stop, on the safety lane
+    /// and the Stop's own connection. It reads state only and grants no effect.
+    pub async fn safety_status_checked(
+        &self,
+        expected: ConnectionToken,
+        kind: SafetyStopRequest,
+        duration: Duration,
+    ) -> Result<Value, RequestError> {
+        let deadline = request_deadline(duration)?;
+        match self
+            .single_until(
+                expected,
+                SingleRequest::SafetyStatus(kind),
+                Value::Null,
+                deadline,
+                || Ok(()),
+            )
+            .await?
+        {
+            ReplyData::Single(value) => Ok(value),
+            _ => Err(RequestError::Unknown(
+                Invalidation::ResponseIdentityMismatch,
+            )),
+        }
+    }
+
     /// Closed library prerequisite. Only the dedicated record-stop driver may
     /// call this path with its mandatory actual-send impact/custody guard.
     pub(crate) async fn manual_record_stop_checked_until<F>(
@@ -1323,7 +1363,9 @@ impl SessionHandle {
         let request_type = request.request_type();
         let lane = match request {
             SingleRequest::Reserved(_) => Lane::OwnedStop,
-            SingleRequest::SafetyStop(_) | SingleRequest::ManualRecordStop => Lane::SafetyStop,
+            SingleRequest::SafetyStop(_)
+            | SingleRequest::SafetyStatus(_)
+            | SingleRequest::ManualRecordStop => Lane::SafetyStop,
             _ => Lane::Normal,
         };
         if expected != self.token {
@@ -1363,6 +1405,7 @@ impl SessionHandle {
                 SingleRequest::Transform => CommandKind::Transform,
                 SingleRequest::Reserved(control) => CommandKind::ReservedControl(control),
                 SingleRequest::SafetyStop(kind) => CommandKind::SafetyStop(kind),
+                SingleRequest::SafetyStatus(kind) => CommandKind::SafetyStatus(kind),
                 SingleRequest::ManualRecordStop => CommandKind::ManualRecordStop,
                 SingleRequest::Ordinary(name) => CommandKind::Single(name.to_owned()),
             },
@@ -1715,6 +1758,7 @@ fn response(
         CommandKind::Transform if !batch => "GetSceneItemTransform",
         CommandKind::ReservedControl(control) if !batch => control.request_type(),
         CommandKind::SafetyStop(kind) if !batch => kind.request_type(),
+        CommandKind::SafetyStatus(kind) if !batch => kind.status_request_type(),
         CommandKind::ManualRecordStop if !batch => "StopRecord",
         CommandKind::Batch {
             request_types,
@@ -2009,15 +2053,21 @@ fn unknown_active(active: &mut ActiveCommands, reason: &Invalidation) {
     }
 }
 
-/// Only response custody of an already fully flushed typed observation may
-/// expire locally. Effects, arbitrary requests and incomplete writes retain the
-/// conservative session-wide Unknown/retirement policy.
+/// Only response custody of an already fully flushed typed observation, or of
+/// the fixed no-data status read confirming a safety Stop, may expire locally.
+/// Effects, arbitrary requests and incomplete writes retain the conservative
+/// session-wide Unknown/retirement policy.
 fn retire_observations(active: &mut ActiveCommands) -> bool {
     let mut retired = false;
     let now = Instant::now();
     for slot in active {
         let reason = slot.as_ref().and_then(|command| {
-            if !command.flushed || !matches!(command.kind, CommandKind::Observation(_)) {
+            if !command.flushed
+                || !matches!(
+                    command.kind,
+                    CommandKind::Observation(_) | CommandKind::SafetyStatus(_)
+                )
+            {
                 return None;
             }
             if now >= command.deadline {

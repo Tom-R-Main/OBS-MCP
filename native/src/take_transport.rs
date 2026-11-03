@@ -254,6 +254,8 @@ impl Adapter for PreflightReader {
             hostname: Some(self.0.hostname.clone()),
             platform: self.0.platform.clone(),
             pending_output_settings: self.0.pending_settings.load(Ordering::Acquire),
+            reads_activity: self.0.requests.contains("GetSourceActive")
+                && self.0.requests.contains("GetSpecialInputs"),
         }
     }
     fn read(&self, request: ReadRequest, data: Option<Value>) -> ReadFuture<'_, Value> {

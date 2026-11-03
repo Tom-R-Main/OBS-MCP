@@ -7,7 +7,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 import { registerObsRequestTool } from "./request-tool.js";
-import { startOutputAndConfirm, STREAM_OUTPUT } from "./output-start.js";
+import { confirmOutputStopped, startOutputAndConfirm, STREAM_OUTPUT, STREAM_STOP } from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
   // GetStreamStatus tool
@@ -34,8 +34,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   registerObsRequestTool(server, client, {
     name: "obs-stop-stream",
     title: "Stop Stream",
-    description: "Stop streaming in OBS",
+    description: "Stop streaming in OBS and wait until OBS reports the stream inactive",
     requestType: "StopStream",
+    confirm: (client, startedAt) => confirmOutputStopped(client, STREAM_STOP, startedAt),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     successMessage: () => "Successfully stopped streaming",
   });

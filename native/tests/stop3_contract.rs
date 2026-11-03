@@ -87,6 +87,8 @@ enum Mode {
     Ack,
     LoseAck,
     HoldRead,
+    /// Every status read reports the output still active.
+    StillActive,
 }
 struct Peer {
     endpoint: String,
@@ -136,12 +138,20 @@ impl Peer {
                     let _ = socket.close(None).await;
                     return;
                 }
+                if matches!(mode, Mode::StillActive)
+                    && frame["d"]["requestType"]
+                        .as_str()
+                        .is_some_and(|kind| kind.ends_with("Status"))
+                {
+                    // Slow enough that a read sent near the deadline outlives it.
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                }
                 if matches!(mode, Mode::HoldRead) && frame["d"]["requestType"] == "GetRecordStatus"
                 {
                     seen_tx.take().unwrap().send(()).unwrap();
                     let _ = release_rx.take().unwrap().await;
                 }
-                let response = json!({"op":7,"d":{"requestType":frame["d"]["requestType"],"requestId":frame["d"]["requestId"],"requestStatus":{"result":true,"code":100},"responseData":{"ignored":true}}});
+                let response = json!({"op":7,"d":{"requestType":frame["d"]["requestType"],"requestId":frame["d"]["requestId"],"requestStatus":{"result":true,"code":100},"responseData":if frame["d"]["requestType"].as_str().is_some_and(|kind| kind.ends_with("Status")) {json!({"outputActive":matches!(mode, Mode::StillActive)})} else {json!({"ignored":true})}}});
                 if socket
                     .send(Message::Text(response.to_string().into()))
                     .await
@@ -199,7 +209,7 @@ fn three_fixed_ack_only_stops_have_no_argument_or_followup_authority() {
     }
 }
 #[tokio::test]
-async fn exact_three_no_data_rpcs_publish_only_ack_acceptance_without_status_reads() {
+async fn exact_three_no_data_rpcs_publish_ack_acceptance_confirmed_by_one_status_read() {
     let scratch = Scratch::new();
     let peer = Peer::new(Mode::Ack).await;
     let (session, events) = ObsSession::connect(&peer.endpoint, None, SessionOptions::default())
@@ -251,11 +261,20 @@ async fn exact_three_no_data_rpcs_publish_only_ack_acceptance_without_status_rea
             data
         })
         .collect::<Vec<_>>();
+    // Each accepted Stop is followed by one no-data status read that confirms it.
+    let status = |request: &str| match request {
+        "StopStream" => "GetStreamStatus",
+        "StopVirtualCam" => "GetVirtualCamStatus",
+        _ => "GetReplayBufferStatus",
+    };
     assert_eq!(
         wire,
         cases()
             .iter()
-            .map(|(_, request, _, _)| json!({"requestType":request}))
+            .flat_map(|(_, request, _, _)| [
+                json!({"requestType":request}),
+                json!({"requestType":status(request)})
+            ])
             .collect::<Vec<_>>()
     );
     session.shutdown().await.unwrap();
@@ -302,6 +321,52 @@ async fn lost_stop_ack_is_unknown_without_replay_or_uncertainty_bypass() {
     drop(events);
     peer.task.await.unwrap();
     assert_eq!(peer.wire.lock().unwrap().len(), 1);
+}
+#[tokio::test]
+async fn unconfirmed_stop_reports_without_sending_a_read_that_could_outlive_the_deadline() {
+    // A request whose deadline passes after dispatch invalidates the session,
+    // so polling must stop with time left instead of racing the deadline.
+    let scratch = Scratch::new();
+    let peer = Peer::new(Mode::StillActive).await;
+    let (session, events) = ObsSession::connect(&peer.endpoint, None, SessionOptions::default())
+        .await
+        .unwrap();
+    let broker =
+        ReceiptBroker::new(OperationStore::new(&scratch.0, &peer.endpoint).unwrap()).unwrap();
+    let control = Arc::new(Mutex::new(ControlDomain::default()));
+    let call = Call::parse("obs-stop-replay-buffer", &json!({})).unwrap();
+    let port = broker.scope(ScopeKind::Generic(call.kind())).unwrap();
+    let budget = std::time::Duration::from_millis(1_000);
+    let result = generic_requests::execute(
+        port,
+        call,
+        session.handle(),
+        control,
+        now(),
+        "stop3-contract".into(),
+        Cancellation::new(),
+        id(1),
+        budget,
+        Instant::now(),
+    )
+    .await;
+    assert_eq!(result["isError"], true);
+    let text = result["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.contains("did not observe the replay buffer stop within 1s"),
+        "{text}"
+    );
+    assert!(session.handle().invalidation().is_none());
+    let handle = session.handle();
+    assert!(
+        handle
+            .request(handle.token(), "GetVersion", Value::Null, WAIT)
+            .await
+            .is_ok()
+    );
+    session.shutdown().await.unwrap();
+    drop(events);
+    peer.task.await.unwrap();
 }
 #[tokio::test]
 async fn queued_generic_stop_preserves_foreign_lease_exemption_but_not_priority() {
@@ -376,5 +441,6 @@ async fn queued_generic_stop_preserves_foreign_lease_exemption_but_not_priority(
     session.shutdown().await.unwrap();
     drop(events);
     peer.task.await.unwrap();
-    assert_eq!(peer.wire.lock().unwrap().len(), 2);
+    // The held read, the Stop, and the status read that confirmed it.
+    assert_eq!(peer.wire.lock().unwrap().len(), 3);
 }

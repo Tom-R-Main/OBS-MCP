@@ -193,7 +193,7 @@ class Footprint {
   }
 }
 
-/** Waits for an output to report inactive. Stop requests return before OBS finishes stopping. */
+/** Waits for an output to report inactive, for cleanup paths that did not get a confirmed stop. */
 async function waitInactive(session: Session, statusTool: string): Promise<void> {
   await vi.waitFor(async () => expect((await session.call(statusTool)).outputActive).toBe(false), { timeout: 15_000, interval: 250 });
 }
@@ -321,7 +321,8 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
       const status = await session.call("obs-get-stream-status");
       expect(status.outputSkippedFrames, JSON.stringify(status)).toBe(0);
       await session.call("obs-stop-stream");
-      await waitInactive(session, "obs-get-stream-status");
+      // The stop returns only once OBS reports the output inactive.
+      expect((await session.call("obs-get-stream-status")).outputActive).toBe(false);
       await vi.waitFor(() => expect(sink?.exitCode ?? sink?.signalCode).not.toBeNull(), { timeout: 10_000 });
 
       // What the ingest received, moment by moment. The stream starts at 0 s in the file.
@@ -484,7 +485,8 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
         await stopChild(device);
       }
       await session.call("obs-stop-virtual-cam");
-      await waitInactive(session, "obs-get-virtual-cam-status");
+      // The stop returns only once OBS reports the output inactive.
+      expect((await session.call("obs-get-virtual-cam-status")).outputActive).toBe(false);
     }, 120_000);
   });
 
@@ -524,7 +526,8 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
       const saved = await session.call("obs-save-replay-verified");
       const after = await session.call("obs-get-stats");
       await session.call("obs-stop-replay-buffer");
-      await waitInactive(session, "obs-get-replay-buffer-status");
+      // The stop returns only once OBS reports the output inactive.
+      expect((await session.call("obs-get-replay-buffer-status")).outputActive).toBe(false);
 
       expect(saved.status, JSON.stringify(saved)).toBe("verified");
       const file = isObject(saved.file) ? saved.file : {};
@@ -635,7 +638,7 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
       session = await Session.open({ recordingRoot });
       footprint = new Footprint(session);
       await footprint.begin();
-      await footprint.own({ scenes: ["Sam · Product Demo"], inputs: ["Sam App Window"] });
+      await footprint.own({ scenes: ["Sam · Product Demo", "Sam · Backstage"], inputs: ["Sam App Window", "Sam Backstage Music"] });
       app = spawn("python3", [join(projectRoot, "test/support/demo-app.py"), title, go(), "120"], { stdio: "ignore" });
       await sleep(4_000); // let the window appear and settle before discovery
     }, 60_000);
@@ -664,7 +667,15 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
       expect(String(captured!.result.message)).toContain(title);
       const prepared = await session.call("obs-prepare-demo", { sceneCollection: collection, sceneName: "Sam · Product Demo", inputName: "Sam App Window" });
       expect(prepared.status, JSON.stringify(prepared)).toBe("already-prepared");
-      expect((await session.call("obs-preflight", { expectSilent: true })).ready).toBe(true);
+      // Unmuted audio left in a scene that isn't live: OBS doesn't mix it, so it must not block a silent take.
+      await session.call("obs-create-scene", { sceneName: "Sam · Backstage" });
+      await session.call("obs-create-input", { sceneName: "Sam · Backstage", inputName: "Sam Backstage Music", inputKind: "ffmpeg_source", inputSettings: media(fixtures.camera) });
+      await sleep(1_000);
+      const preflight = await session.call("obs-preflight", { expectSilent: true });
+      const audio = (preflight.checks as { id: string; status: string; message: string }[]).find(({ id }) => id === "audio");
+      expect(preflight.ready, JSON.stringify(preflight.checks)).toBe(true);
+      expect(audio?.message).toContain("OBS reports them inactive");
+      expect(audio?.message).toContain("Sam Backstage Music");
 
       await session.call("obs-take-start", { chapter: "Sign in", expectSilent: true, maxDurationSeconds: 120 });
       writeFileSync(go(), "");

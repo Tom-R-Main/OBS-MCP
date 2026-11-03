@@ -205,18 +205,28 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean, req
     .filter(isObject)
     .map(({ inputName }) => inputName)
     .filter((name): name is string => typeof name === "string");
-  // One round trip for every input's mute state and tracks. Video-only inputs
-  // fail both requests, which the batch reports without failing the rest.
+  // One round trip for every input's mute state, tracks and activity.
+  // Video-only inputs fail the audio requests, which the batch reports
+  // without failing the rest.
+  // Activity is optional evidence: an OBS known not to offer it keeps every
+  // input counted, exactly as before activity was read. Unknown capabilities
+  // still try; a failed activity read leaves that input counted.
+  const readsActivity = client.supportsRequest("GetSourceActive") !== false && client.supportsRequest("GetSpecialInputs") !== false;
+  const stride = readsActivity ? 3 : 2;
   const results = await client.sendBatch(names.flatMap((inputName) => [
     { requestType: "GetInputMute", requestData: { inputName } },
     { requestType: "GetInputAudioTracks", requestData: { inputName } },
+    ...(readsActivity ? [{ requestType: "GetSourceActive", requestData: { sourceName: inputName } }] : []),
   ]));
+  const global = readsActivity ? await globalAudioInputs(client) : undefined;
   const audible: string[] = [];
   const unreadable: string[] = [];
+  const offProgram: string[] = [];
 
   names.forEach((inputName, index) => {
-    const mute = results[index * 2];
-    const trackResult = results[index * 2 + 1];
+    const mute = results[index * stride];
+    const trackResult = results[index * stride + 1];
+    const activity = readsActivity ? results[index * stride + 2] : undefined;
     if (!mute?.ok) {
       if (mute?.code !== 604) unreadable.push(inputName);
       return;
@@ -236,19 +246,60 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean, req
     const enabled = isObject(inputAudioTracks)
       ? tracks.filter((track) => inputAudioTracks[String(track)] === true)
       : tracks;
-    if (enabled.length > 0) audible.push(`${inputName} (track ${enabled.join(", ")})`);
+    if (enabled.length === 0) return;
+    if (inactive(activity) && global !== undefined && !global.has(inputName)) {
+      offProgram.push(inputName);
+      return;
+    }
+    audible.push(`${inputName} (track ${enabled.join(", ")})`);
   });
 
+  const excluded = offProgram.length === 0 ? "" : ` ${OFF_PROGRAM_NOTE}${offProgram.join(", ")}.`;
   if (audible.length === 0) {
     if (unreadable.length > 0) return { id: "audio", status: "unknown", message: `Could not read audio state for: ${unreadable.join(", ")}` };
-    return { id: "audio", status: "pass", message: "No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured." };
+    return { id: "audio", status: "pass", message: `No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured.${excluded}` };
   }
   return {
     id: "audio",
     status: expectSilent ? "fail" : "warn",
     message: `Configured unmuted audio routes (or conservative routing assumptions) on selected recording tracks: ${audible.join("; ")}. `
-      + "Signal levels and monitoring/loopback paths were not measured. Mute these inputs or clear their recorded-track routing to meet the conservative silence policy",
+      + `Signal levels and monitoring/loopback paths were not measured. Mute these inputs or clear their recorded-track routing to meet the conservative silence policy${excluded ? `.${excluded}` : ""}`,
   };
+}
+
+/**
+ * OBS mixes only active sources: the program scene's visible tree and the
+ * global audio channels (libobs/obs-audio.c). An input OBS reports inactive is
+ * left out of the silence policy; any unreadable activity keeps it counted.
+ */
+const OFF_PROGRAM_NOTE = "Not counted because OBS reports them inactive (not on program, hidden, or only in preview), so it does not mix them now; switching scenes during the take can make them audible: ";
+
+function inactive(result: { ok: boolean; responseData?: unknown } | undefined): boolean {
+  return result?.ok === true && isObject(result.responseData) && result.responseData.videoActive === false;
+}
+
+/** The six global audio slots GetSpecialInputs reports, each a name or null. */
+const SPECIAL_INPUT_FIELDS = ["desktop1", "desktop2", "mic1", "mic2", "mic3", "mic4"] as const;
+
+/**
+ * Global audio inputs are always counted. Undefined when OBS cannot say which
+ * they are, including any missing or malformed slot, so nothing is left out.
+ */
+async function globalAudioInputs(client: OBSWebSocketClient): Promise<Set<string> | undefined> {
+  try {
+    const special: unknown = await client.sendRequest("GetSpecialInputs");
+    if (!isObject(special)) return undefined;
+    const names = new Set<string>();
+    for (const field of SPECIAL_INPUT_FIELDS) {
+      const value = special[field];
+      if (value === null) continue;
+      if (typeof value !== "string") return undefined;
+      if (value.length > 0) names.add(value);
+    }
+    return names;
+  } catch {
+    return undefined;
+  }
 }
 
 async function checkSceneItems(client: OBSWebSocketClient): Promise<PreflightCheck> {

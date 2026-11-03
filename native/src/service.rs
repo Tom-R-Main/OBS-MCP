@@ -1167,7 +1167,11 @@ async fn run(
     let mut jobs = JoinSet::new();
     let mut waiting_generics: VecDeque<QueuedGeneric> = VecDeque::new();
     let mut waiting_bytes = 0usize;
-    let mut safety_jobs: JoinSet<(Reply, Value, bool)> = JoinSet::new();
+    let mut safety_jobs: JoinSet<(Reply, generic_requests::SafetyOutcome, bool)> = JoinSet::new();
+    // Accepted safety Stops awaiting OBS's inactive status. They hold no
+    // dispatch slot, so other safety Stops and Record Stop proceed meanwhile.
+    let mut stop_confirmations: JoinSet<(Reply, Value)> = JoinSet::new();
+    let mut confirmation_cancel = HashMap::<tokio::task::Id, Cancellation>::new();
     let mut safety_cancel: Option<Cancellation> = None;
     let mut waiting_safety: VecDeque<QueuedSafety> = VecDeque::new();
     let mut safety_waiting_bytes = 0usize;
@@ -1194,6 +1198,9 @@ async fn run(
     loop {
         if closing {
             if let Some(cancel) = &safety_cancel {
+                cancel.cancel();
+            }
+            for cancel in confirmation_cancel.values() {
                 cancel.cancel();
             }
             for cancel in media_cancel.values() {
@@ -1244,6 +1251,7 @@ async fn run(
         }
         if closing
             && safety_jobs.is_empty()
+            && stop_confirmations.is_empty()
             && jobs.is_empty()
             && observations.is_empty()
             && media_jobs.is_empty()
@@ -1262,7 +1270,24 @@ async fn run(
         tokio::select! {
             result=safety_jobs.join_next(),if !safety_jobs.is_empty()=>{
                 safety_cancel=None;
-                match result {Some(Ok((reply,result,failed)))=>{broken|=failed;let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
+                match result {
+                    Some(Ok((reply,generic_requests::SafetyOutcome::Done(result),failed)))=>{broken|=failed;let _=reply.send(Ok(result));},
+                    Some(Ok((reply,generic_requests::SafetyOutcome::Confirm(confirmation),failed)))=>{
+                        broken|=failed;
+                        let cancel=confirmation.cancellation();
+                        if closing {cancel.cancel();}
+                        let handle=stop_confirmations.spawn(async move {(reply,confirmation.run().await)});
+                        confirmation_cancel.insert(handle.id(),cancel);
+                    },
+                    _=>{workers_joined=false;broken=true;}
+                }
+            },
+            result=stop_confirmations.join_next_with_id(),if !stop_confirmations.is_empty()=>{
+                match result {
+                    Some(Ok((id,(reply,result))))=>{confirmation_cancel.remove(&id);let _=reply.send(Ok(result));},
+                    Some(Err(error))=>{confirmation_cancel.remove(&error.id());workers_joined=false;broken=true;},
+                    None=>{},
+                }
             },
             result=snapshot_jobs.join_next(),if !snapshot_jobs.is_empty()=>{
                 match result {Some(Ok((id,owners,reply,result)))=>{workflow_cancel.remove(&id);preparation=Some(*owners);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
@@ -1540,10 +1565,10 @@ async fn run(
                         });
                     },
                     Command::Summary(reply)=>{
-                        let mut result=receipt_view.summary();result["jobsPending"]=json!(!jobs.is_empty()||!safety_jobs.is_empty()||!snapshot_jobs.is_empty()||!waiting_generics.is_empty()||!waiting_safety.is_empty());result["queuedSafetyStops"]=json!(waiting_safety.len());result["queuedSafetyArgumentBytes"]=json!(safety_waiting_bytes);result["safetyStopPending"]=json!(!safety_jobs.is_empty());result["queuedCommands"]=json!(waiting_generics.len());result["queuedArgumentBytes"]=json!(waiting_bytes);result["outputSettingsPending"]=json!(pending_output_settings.load(Ordering::Acquire));let _=reply.send(Ok(result));
+                        let mut result=receipt_view.summary();result["jobsPending"]=json!(!jobs.is_empty()||!safety_jobs.is_empty()||!stop_confirmations.is_empty()||!snapshot_jobs.is_empty()||!waiting_generics.is_empty()||!waiting_safety.is_empty());result["queuedSafetyStops"]=json!(waiting_safety.len());result["queuedSafetyArgumentBytes"]=json!(safety_waiting_bytes);result["safetyStopPending"]=json!(!safety_jobs.is_empty());result["queuedCommands"]=json!(waiting_generics.len());result["queuedArgumentBytes"]=json!(waiting_bytes);result["outputSettingsPending"]=json!(pending_output_settings.load(Ordering::Acquire));let _=reply.send(Ok(result));
                     },
                     Command::Handoff(reply)=>{
-                        let refusal=if broken {Some(ServiceError::Uncertain)} else if borrower.is_some()||!jobs.is_empty()||!safety_jobs.is_empty()||!waiting_safety.is_empty()||!observations.is_empty()||!media_jobs.is_empty()||!snapshot_jobs.is_empty()||!waiting_generics.is_empty() {Some(ServiceError::Busy)} else if machine.as_ref().is_some_and(|machine|machine.token_count()!=0) {Some(ServiceError::StageToken)} else if uncertainty(&broker) {Some(ServiceError::Uncertain)} else if broker.admission().map_or(true,|state|state.generic_v2_present) || completed.is_some() || control.lock().unwrap().active_lease((clock)().epoch_ms).is_some() || options.connection.as_ref().is_some_and(|connection|preparation.as_mut().is_some_and(|owners|owners.blocks_handoff(&connection.url))) || options.connection.as_ref().is_some_and(|connection|{let summary=demo::inspect_recovery_summary(receipt_view.state_root(),1024*1024,&connection.url);summary["status"]!="observed" || summary["operations"].as_array().is_none_or(|items|!items.is_empty())}) {Some(ServiceError::RetainedState)} else {None};
+                        let refusal=if broken {Some(ServiceError::Uncertain)} else if borrower.is_some()||!jobs.is_empty()||!safety_jobs.is_empty()||!stop_confirmations.is_empty()||!waiting_safety.is_empty()||!observations.is_empty()||!media_jobs.is_empty()||!snapshot_jobs.is_empty()||!waiting_generics.is_empty() {Some(ServiceError::Busy)} else if machine.as_ref().is_some_and(|machine|machine.token_count()!=0) {Some(ServiceError::StageToken)} else if uncertainty(&broker) {Some(ServiceError::Uncertain)} else if broker.admission().map_or(true,|state|state.generic_v2_present) || completed.is_some() || control.lock().unwrap().active_lease((clock)().epoch_ms).is_some() || options.connection.as_ref().is_some_and(|connection|preparation.as_mut().is_some_and(|owners|owners.blocks_handoff(&connection.url))) || options.connection.as_ref().is_some_and(|connection|{let summary=demo::inspect_recovery_summary(receipt_view.state_root(),1024*1024,&connection.url);summary["status"]!="observed" || summary["operations"].as_array().is_none_or(|items|!items.is_empty())}) {Some(ServiceError::RetainedState)} else {None};
                         if let Some(error)=refusal {let _=reply.send(Err(error));} else {handoff=Some(reply);closing=true;closed.store(true,Ordering::Release);}
                     },
                     Command::Take(call,reply)=>{
@@ -1659,7 +1684,7 @@ async fn run(
                                 (true,true,None)=>crate::output_stop_result::record_error("Recording-impact custody is unavailable; inspect obs-observe before another change"),
                                 _=>outcome.result,
                             };
-                            (queued.reply,result,failed)
+                            (queued.reply,generic_requests::SafetyOutcome::Done(result),failed)
                         });
                     },
                     Command::Generic(call,caller,cancel,admitted_at,reply)=>{
@@ -1679,6 +1704,7 @@ async fn run(
                         if broken{let _=reply.send(Err(ServiceError::Uncertain));continue;}
                         if cancel.is_cancelled()||admitted_at.elapsed()>=call.execution_budget(options.operation_timeout){let _=reply.send(Ok(call.cancelled_or_expired()));continue;}
                         if let Some(kind)=call.safety_stop_kind() {
+                            if stop_confirmations.len()>=SAFETY_QUEUE_ITEMS {let _=reply.send(Err(ServiceError::Capacity));continue;}
                             if !safety_jobs.is_empty() {
                                 let bytes=call.retained_bytes().and_then(|bytes|bytes.checked_add(caller.len()));
                                 if waiting_safety.len()>=SAFETY_QUEUE_ITEMS||bytes.is_none_or(|bytes|bytes>SAFETY_QUEUE_BYTES.saturating_sub(safety_waiting_bytes)){let _=reply.send(Err(ServiceError::Capacity));}else{let bytes=bytes.unwrap();safety_waiting_bytes+=bytes;waiting_safety.push_back(QueuedSafety::Generic(QueuedGeneric{call,caller,cancel,at:admitted_at,reply,bytes}));}continue;
@@ -1686,7 +1712,7 @@ async fn run(
                             let writer=match broker.scope(ScopeKind::SafetyStop(kind)){Ok(port)=>port,Err(_)=>{let _=reply.send(Err(ServiceError::Uncertain));continue;}};
                             let physical=physical.clone();let control=control.clone();let clock=clock.clone();let id=(identities.lock().unwrap())();let duration=options.operation_timeout.min(Duration::from_secs(10));safety_cancel=Some(cancel.clone());
                             let services=generic_requests::GenericServices{pending_output_settings:Some(pending_output_settings.clone()),readback:None};
-                            safety_jobs.spawn(async move {(reply,generic_requests::execute_with_services(writer,call,physical,control,clock,caller,cancel,id,duration,admitted_at,services).await,false)});
+                            safety_jobs.spawn(async move {(reply,generic_requests::execute_safety_stop(writer,call,physical,control,clock,caller,cancel,id,duration,admitted_at,services).await,false)});
                             continue;
                         }
                         if take_initializing||jobs.len()>take_jobs||!safety_jobs.is_empty()||!waiting_safety.is_empty() {

@@ -48,6 +48,8 @@ type RequestToolDefinition = {
   successMessage?: (args: Record<string, any>) => string;
   /** Returns a refusal message when the request must not reach OBS. */
   guard?: (client: OBSWebSocketClient, args: Record<string, unknown>) => Promise<string | undefined>;
+  /** Runs after OBS accepts the request; returns an error message when its effect is not confirmed. */
+  confirm?: (client: OBSWebSocketClient, startedAt: number) => Promise<string | undefined>;
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -74,6 +76,7 @@ async function executeRequest(
   definition: RequestToolDefinition,
   requestData?: Record<string, unknown>,
 ) {
+  const startedAt = Date.now();
   try {
     const refusal = await definition.guard?.(client, requestData ?? {});
     if (refusal) {
@@ -83,6 +86,8 @@ async function executeRequest(
       };
     }
     const response = await client.sendRequest(definition.requestType, requestData);
+    const unconfirmed = await definition.confirm?.(client, startedAt);
+    if (unconfirmed) return { content: [{ type: "text" as const, text: unconfirmed }], isError: true };
     const structuredContent = structuredResponse(definition, response, requestData ?? {});
     return {
       content: [{

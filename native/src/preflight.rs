@@ -115,6 +115,9 @@ pub struct ConnectionContext {
     pub hostname: Option<String>,
     pub platform: Option<String>,
     pub pending_output_settings: bool,
+    /// OBS is not known to lack GetSourceActive or GetSpecialInputs. When it
+    /// does, the audio check counts every input, as before activity was read.
+    pub reads_activity: bool,
 }
 impl ConnectionContext {
     pub fn is_local(&self) -> bool {
@@ -505,12 +508,16 @@ async fn audio(
         .iter()
         .map(|input| input["inputName"].as_str().unwrap())
         .collect::<Vec<_>>();
+    // Activity is optional evidence: an OBS that does not advertise it keeps
+    // every input counted, exactly as before activity was read.
+    let reads_activity = adapter.connection_context().reads_activity;
+    let stride = if reads_activity { 3 } else { 2 };
     let results = adapter
         .batch(
             names
                 .iter()
                 .flat_map(|name| {
-                    [
+                    let mut calls = vec![
                         Call {
                             request: ReadRequest::InputMute,
                             data: json!({"inputName":name}),
@@ -519,14 +526,26 @@ async fn audio(
                             request: ReadRequest::InputAudioTracks,
                             data: json!({"inputName":name}),
                         },
-                    ]
+                    ];
+                    if reads_activity {
+                        calls.push(Call {
+                            request: ReadRequest::SourceActive,
+                            data: json!({"sourceName":name}),
+                        });
+                    }
+                    calls
                 })
                 .collect(),
         )
         .await?;
-    let (mut audible, mut unreadable) = (vec![], vec![]);
+    let global = if reads_activity {
+        global_audio_inputs(adapter).await
+    } else {
+        None
+    };
+    let (mut audible, mut unreadable, mut off_program) = (vec![], vec![], vec![]);
     for (index, name) in names.iter().enumerate() {
-        let mute = results.get(index * 2);
+        let mute = results.get(index * stride);
         if !mute.is_some_and(|result| result.ok) {
             if mute.and_then(|result| result.code) != Some(604) {
                 unreadable.push(*name);
@@ -547,7 +566,7 @@ async fn audio(
             continue;
         }
         let route = results
-            .get(index * 2 + 1)
+            .get(index * stride + 1)
             .filter(|result| result.ok && result.response_data.is_object())
             .and_then(|result| result.response_data.get("inputAudioTracks"))
             .and_then(Value::as_object);
@@ -569,16 +588,38 @@ async fn audio(
             .filter(|track| route.get(&track.to_string()) == Some(&Value::Bool(true)))
             .map(u8::to_string)
             .collect::<Vec<_>>();
-        if !enabled.is_empty() {
-            audible.push(format!("{name} (track {})", enabled.join(", ")));
+        if enabled.is_empty() {
+            continue;
         }
+        let inactive = reads_activity
+            && results.get(index * stride + 2).is_some_and(|result| {
+                result.ok
+                    && result.response_data.is_object()
+                    && result.response_data.get("videoActive") == Some(&Value::Bool(false))
+            });
+        if inactive
+            && global
+                .as_ref()
+                .is_some_and(|global| !global.contains(*name))
+        {
+            off_program.push(*name);
+            continue;
+        }
+        audible.push(format!("{name} (track {})", enabled.join(", ")));
     }
+    let excluded = if off_program.is_empty() {
+        String::new()
+    } else {
+        format!(" {OFF_PROGRAM_NOTE}{}.", off_program.join(", "))
+    };
     Ok(vec![if audible.is_empty() {
         if unreadable.is_empty() {
             check(
                 "audio",
                 Status::Pass,
-                "No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured.",
+                format!(
+                    "No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured.{excluded}"
+                ),
             )
         } else {
             check(
@@ -596,11 +637,40 @@ async fn audio(
                 Status::Warn
             },
             format!(
-                "Configured unmuted audio routes (or conservative routing assumptions) on selected recording tracks: {}. Signal levels and monitoring/loopback paths were not measured. Mute these inputs or clear their recorded-track routing to meet the conservative silence policy",
-                audible.join("; ")
+                "Configured unmuted audio routes (or conservative routing assumptions) on selected recording tracks: {}. Signal levels and monitoring/loopback paths were not measured. Mute these inputs or clear their recorded-track routing to meet the conservative silence policy{}",
+                audible.join("; "),
+                if excluded.is_empty() {
+                    String::new()
+                } else {
+                    format!(".{excluded}")
+                }
             ),
         )
     }])
+}
+/// OBS mixes only active sources: the program scene's visible tree and the
+/// global audio channels (libobs/obs-audio.c). An input OBS reports inactive is
+/// left out of the silence policy; any unreadable activity keeps it counted.
+const OFF_PROGRAM_NOTE: &str = "Not counted because OBS reports them inactive (not on program, hidden, or only in preview), so it does not mix them now; switching scenes during the take can make them audible: ";
+/// The six global audio slots GetSpecialInputs reports, each a name or null.
+const SPECIAL_INPUT_FIELDS: [&str; 6] = ["desktop1", "desktop2", "mic1", "mic2", "mic3", "mic4"];
+/// Global audio inputs are always counted. None when OBS cannot say which they
+/// are, including any missing or malformed slot, so nothing is left out.
+async fn global_audio_inputs(adapter: &impl Adapter) -> Option<std::collections::HashSet<String>> {
+    let special = adapter.read(ReadRequest::SpecialInputs, None).await.ok()?;
+    let special = special.as_object()?;
+    let mut names = std::collections::HashSet::new();
+    for field in SPECIAL_INPUT_FIELDS {
+        match special.get(field)? {
+            Value::Null => {}
+            Value::String(name) if name.is_empty() => {}
+            Value::String(name) => {
+                names.insert(name.clone());
+            }
+            _ => return None,
+        }
+    }
+    Some(names)
 }
 async fn scene_items(adapter: &impl Adapter) -> Result<Vec<Check>, ReadError> {
     let program = object_read(adapter, ReadRequest::CurrentProgramScene, None).await?;

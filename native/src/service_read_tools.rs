@@ -376,6 +376,11 @@ impl Adapter for Scope {
             hostname: Some(self.hostname.clone()),
             platform: self.platform.clone(),
             pending_output_settings: self.pending.load(Ordering::Acquire),
+            // Unknown capabilities still try, as other reads do; a failed
+            // activity read leaves that input counted.
+            reads_activity: self.capabilities.as_ref().is_none_or(|known| {
+                known.contains("GetSourceActive") && known.contains("GetSpecialInputs")
+            }),
         }
     }
     fn read(&self, request: ReadRequest, data: Option<Value>) -> preflight::ReadFuture<'_, Value> {
