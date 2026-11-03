@@ -420,6 +420,9 @@ impl Operation {
             if args.apply {
                 trim::require_sdr_input(&info)?;
             }
+            if info.audio_streams > 1 {
+                trim::qualified_audio_tracks(&info)?;
+            }
         }
         if self.chapters.is_none() {
             self.chapters = Some(if info.chapters.is_empty() {
@@ -523,7 +526,7 @@ impl Operation {
                     "Grayscale sample ended with an incomplete frame",
                 ));
             }
-            let idle = trim::detect_idle(&samples.spans, &samples.stderr, &info);
+            let idle = trim::analyze_sampled_idle(&samples, &info)?;
             self.plan = Some(trim::timeline(
                 source
                     .path
@@ -612,19 +615,41 @@ impl Operation {
                     name: c.name.clone(),
                 })
                 .collect::<Vec<_>>();
-            let encode = trim::encode_command(
-                &source.path,
-                stage.partial_path(),
-                &self.config.work.join("unused-chapters.ffmetadata"),
-                trim::EncodePlan {
-                    frame_rate: info.frame_rate.as_deref(),
-                    keep: &plan.keep,
-                    audio_streams: info.audio_streams,
-                    chapters: &chapters,
-                    duration: plan.trimmed_seconds,
-                },
-                encoders,
-            )?;
+            let encode_plan = trim::EncodePlan {
+                frame_rate: info.frame_rate.as_deref(),
+                keep: &plan.keep,
+                audio_streams: info.audio_streams,
+                chapters: &chapters,
+                duration: plan.trimmed_seconds,
+            };
+            let encode = if info.audio_streams > 1 {
+                if output
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_none_or(|value| !value.eq_ignore_ascii_case("mp4"))
+                {
+                    return Err(err(
+                        ErrorKind::Evidence,
+                        "Track-preserving trim requires an MP4 output",
+                    ));
+                }
+                trim::encode_track_preserving_command(
+                    &source.path,
+                    stage.partial_path(),
+                    &self.config.work.join("unused-chapters.ffmetadata"),
+                    encode_plan,
+                    encoders,
+                    &info,
+                )?
+            } else {
+                trim::encode_command(
+                    &source.path,
+                    stage.partial_path(),
+                    &self.config.work.join("unused-chapters.ffmetadata"),
+                    encode_plan,
+                    encoders,
+                )?
+            };
             let times = trim::seam_sample_times(&plan.seams, plan.trimmed_seconds);
             let preview = if args.contact_sheet && !times.is_empty() {
                 Some(SheetRequest {
@@ -685,8 +710,16 @@ impl Operation {
         content.insert(0, json!({"type":"text","text":text}));
         report["content"] = Value::Array(content);
         let result = &exported.verified;
+        let verification_scope = if info.audio_streams > 1 {
+            "Cut-plan duration (0.25s tolerance), dimensions, ordered audio track descriptors, chapters and complete all-stream decode; lossy H.264/AAC transcode, editorial content requires review"
+        } else {
+            "Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review"
+        };
         let structured = report["structuredContent"].as_object_mut().unwrap();
-        structured.extend(json!({"committed":true,"outputPath":output,"sha256":exported.file.sha256,"outputDurationSeconds":trim::round_seconds(result.duration),"outputChapters":result.chapters.len(),"verification":{"metadata":"pass","strictDecode":"pass","scope":"Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review"},"format":{"codec":result.codec,"pixelFormat":result.pixel_format,"colorTransfer":result.color_transfer.as_deref().unwrap_or("unknown"),"colorPrimaries":result.color_primaries.as_deref().unwrap_or("unknown"),"colorSpace":result.color_space.as_deref().unwrap_or("unknown"),"colorFidelity":"unverified"},"previewStatus":if exported.preview.is_some(){"available"}else if warnings.iter().any(|w|w.contains("contact sheet unavailable")){"unavailable"}else{"not-requested"},"warnings":warnings}).as_object().unwrap().clone());
+        structured.extend(json!({"committed":true,"outputPath":output,"sha256":exported.file.sha256,"outputDurationSeconds":trim::round_seconds(result.duration),"outputChapters":result.chapters.len(),"verification":{"metadata":"pass","strictDecode":"pass","scope":verification_scope},"format":{"codec":result.codec,"pixelFormat":result.pixel_format,"colorTransfer":result.color_transfer.as_deref().unwrap_or("unknown"),"colorPrimaries":result.color_primaries.as_deref().unwrap_or("unknown"),"colorSpace":result.color_space.as_deref().unwrap_or("unknown"),"colorFidelity":"unverified"},"previewStatus":if exported.preview.is_some(){"available"}else if warnings.iter().any(|w|w.contains("contact sheet unavailable")){"unavailable"}else{"not-requested"},"warnings":warnings}).as_object().unwrap().clone());
+        if info.audio_streams > 1 {
+            structured.get_mut("format").unwrap()["audioTracks"] = json!(result.audio_tracks);
+        }
         Ok(report)
     }
 }

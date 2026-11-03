@@ -20,7 +20,7 @@ Known Accepted history remains Accepted and does not become journal Unknown: ind
 
 This slice supplies no qualified OBS-incarnation/reset proof or automatic clear operation. Consequently switching back to guarded production after a possible advanced effect is deliberately refused. Deleting/copying the state namespace, changing endpoint aliases or editing receipt files is not qualified clean-state evidence. Protection assumes the approved namespace and exact endpoint binding remain intact; it is not a filesystem sandbox against a same-user process or proof against a separately configured competing controller.
 
-The catalog union is 178 implemented tool names across native profiles. Production with all host adapters exposes 164; Advanced exposes 163 ordinary tools, with three dynamic controllers counted separately when enabled. These are profile projections, not 178 tools simultaneously available in one runtime.
+The catalog union is 179 implemented tool names across native profiles. Production with all host adapters exposes 165; Advanced exposes 163 ordinary tools, with three dynamic controllers counted separately when enabled. These are profile projections, not 179 tools simultaneously available in one runtime.
 
 Advanced also owns `obs-call-request`, `obs-batch`, `obs-call-vendor-request` and the two hotkey routes. Raw requests admit only the pinned 147 request names; wrapped reads retain the original write/open-world tool policy. Opaque request data is preserved after Source schema stripping and JavaScript numeric normalization. Vendor replies retain the full envelope. No wrapped method string borrows an owned recording Stop, critical lane, Take/file inspection or recovery capability.
 

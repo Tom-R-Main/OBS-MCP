@@ -5389,6 +5389,29 @@
     }
   },
   {
+    "name": "obs-save-replay-verified",
+    "title": "Save and Verify Replay Buffer",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "timeoutSeconds": {
+          "default": 15,
+          "description": "Original total operation budget, including save, event and local file verification",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "obs-save-source-screenshot",
     "title": "Save Source Screenshot",
     "inputSchema": {

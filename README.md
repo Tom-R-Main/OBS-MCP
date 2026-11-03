@@ -12,7 +12,7 @@ The server uses MCP 2026-07-28 and accepts legacy 2025-era clients. Tool discove
 
 The executable runs the retained Rust service directly over stdio or loopback HTTP. The native MCPB layout contains no Node runtime, JavaScript SDK or TypeScript server payload. TypeScript remains a development oracle.
 
-Production is the default immutable profile and exposes up to 164 ordinary tools with approved host/media adapters. Advanced exposes 163 and excludes guarded Take, media, Stage and recovery owners. Their union contains 178 ordinary names; stdio dynamic mode can add three group controllers. Filters, read-only mode and available adapters narrow discovery. See [native profiles](docs/native-profiles.md).
+Production is the default immutable profile and exposes up to 165 ordinary tools with approved host/media adapters. Advanced exposes 163 and excludes guarded Take, media, Stage and recovery owners. Their union contains 179 ordinary names; stdio dynamic mode can add three group controllers. Filters, read-only mode and available adapters narrow discovery. See [native profiles](docs/native-profiles.md).
 
 Core checkpoint `d3bb516` (PRs #26 and #27) passed ten CI jobs. Its physical-Mac qualification passed 736 Source unit cases, 21 Source transport cases, 1,050 default-feature Rust cases, 214 all-feature bin/library cases, four resolver process contracts, seven component checks and 1,016 public cases with no skips. The public suite includes 17 actual HTTP-entry and 58 TCP cases. These suites overlap; their counts are not a unique-test total.
 
@@ -32,7 +32,7 @@ OBS MCP runs as a separate MCP server process using the native executable. It do
 
 ## What is covered
 
-The 178-name ordinary catalog spans both profiles; it is not a promise of 178 simultaneous tools in one process.
+The 179-name ordinary catalog spans both profiles; it is not a promise of 179 simultaneous tools in one process.
 
 - Descriptions for all 147 request types in the pinned OBS WebSocket protocol; profile policy controls dispatch
 - Explicit read-only, destructive, idempotent, and open-world annotations on every tool
@@ -338,6 +338,8 @@ While agents share a server, `obs-claim-control` gives one of them control of OB
 
 **The process exits or emits protocol errors:** inspect stderr. stdio stdout is reserved for MCP traffic; HTTP stdout stays empty. Keep ordinary logs on stderr.
 
+Verified replay files use `obs-save-replay-verified`; see [verification and naming limits](docs/replay-verification.md). Multitrack trim preserves qualified tracks independently; see the [workflow matrix](docs/workflow-qualification.md).
+
 ## Development
 
 After approving the project-scoped dependency fetch, install the pinned development tooling and run the native gate:
@@ -355,7 +357,7 @@ Test the file users will actually install with:
 npm run test:package
 ```
 
-That command builds the host-specific `dist/obs-studio-native.mcpb`, extracts it, and checks its manifest, corresponding source and native entry. Verify profile-conditional inventories rather than treating the 178-name union as one runtime. The recorded macOS artifact passed all three package checks; later artifacts and other platforms need their own receipts.
+That command builds the host-specific `dist/obs-studio-native.mcpb`, extracts it, and checks its manifest, corresponding source and native entry. Verify profile-conditional inventories rather than treating the 179-name union as one runtime. The recorded macOS artifact passed all three package checks; later artifacts and other platforms need their own receipts.
 
 ### Live OBS tests
 

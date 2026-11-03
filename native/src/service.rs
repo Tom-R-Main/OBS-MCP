@@ -184,6 +184,7 @@ pub struct Options {
     pub state_root: Option<PathBuf>,
     pub preparation: Option<PreparationOwners>,
     pub media: Option<Arc<media_tools::Config>>,
+    pub replay: Option<Arc<crate::replay_files::Verifier>>,
     pub read_tools_host: Option<Arc<crate::take_transport::LocalHost>>,
 }
 impl Default for Options {
@@ -198,6 +199,7 @@ impl Default for Options {
             state_root: None,
             preparation: None,
             media: None,
+            replay: None,
             read_tools_host: None,
         }
     }
@@ -358,6 +360,13 @@ enum Command {
     Read(ReadRequest, Value, Duration, ReadReply),
     Workflow(WorkflowCall, Cancellation, Reply),
     Media(media_tools::Request, MediaCancellation, Reply),
+    Replay(
+        crate::replay_save::Request,
+        String,
+        Cancellation,
+        Instant,
+        Reply,
+    ),
     ReadTool(
         ReadToolRequest,
         Result<ScreenshotLimit, ObservationError>,
@@ -379,6 +388,7 @@ impl Command {
                 | Self::Take(..)
                 | Self::Clip(..)
                 | Self::Media(..)
+                | Self::Replay(..)
         )
     }
 }
@@ -446,6 +456,7 @@ enum Completion {
         reply: Reply,
     },
     Generic(Reply, Value),
+    Replay(Reply, crate::replay_save::Outcome),
     RestorePlanned {
         owners: Box<PreparationOwners>,
         call: Box<RestoreCall>,
@@ -556,6 +567,7 @@ impl Service {
             options.take = None;
             options.preparation = None;
             options.media = None;
+            options.replay = None;
             options.read_tools_host = None;
         }
         Self::spawn_cached(resources, options, profile, Some(version))
@@ -568,6 +580,7 @@ impl Service {
     ) -> Result<Self, (ServiceError, Box<Resources>)> {
         let guarded_binding = options.take.is_some()
             || options.media.is_some()
+            || options.replay.is_some()
             || options.preparation.is_some()
             || options.read_tools_host.is_some();
         if profile == crate::native_profile::NativeProfile::Advanced && guarded_binding {
@@ -889,6 +902,19 @@ impl ServiceHandle {
             })
         })
         .await
+    }
+    pub async fn save_replay_verified(
+        &self,
+        request: crate::replay_save::Request,
+        caller: String,
+        cancel: Cancellation,
+        admitted: Instant,
+    ) -> Result<Value, ServiceError> {
+        if admitted > Instant::now() {
+            return Err(ServiceError::Binding);
+        }
+        self.call(|reply| Command::Replay(request, caller, cancel, admitted, reply))
+            .await
     }
     pub async fn recording_media(
         &self,
@@ -1250,6 +1276,7 @@ async fn run(
             value=jobs.join_next(),if !jobs.is_empty()=>{
                 match value {
                     Some(Ok(Completion::Generic(reply,result)))=>{active_cancel=None;let _=reply.send(Ok(result));},
+                    Some(Ok(Completion::Replay(reply,outcome)))=>{active_cancel=None;broken|=outcome.cleanup_unconfirmed;workers_joined&=!outcome.cleanup_unconfirmed;let _=reply.send(Ok(outcome.result));},
                     Some(Ok(Completion::CaptureWindowPlanned{owners,call,planned,reply}))=>{
                         match planned {
                             capture_window_workflow::Planned::Finished(result)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(result));},
@@ -1461,6 +1488,17 @@ async fn run(
                             let result=result.unwrap_or_else(|error|json!({"content":[{"type":"text","text":format!("Native read workflow unavailable: {}",error.message)}],"isError":true}));
                             ReadCompletion::Workflow(id,reply,result)
                         });
+                    },
+                    Command::Replay(request,caller,cancel,admitted,reply)=>{
+                        if broken||uncertainty(&broker){let _=reply.send(Err(ServiceError::Uncertain));continue;}
+                        if borrower.is_some()||take_initializing||!jobs.is_empty()||!safety_jobs.is_empty()||!media_jobs.is_empty()||!waiting_safety.is_empty(){let _=reply.send(Err(ServiceError::Busy));continue;}
+                        let Some(verifier)=options.replay.clone()else{let _=reply.send(Err(ServiceError::Unsupported));continue;};
+                        let supported=version.lock().unwrap().as_ref().and_then(|v|v.as_ref()).and_then(|v|v["availableRequests"].as_array()).is_some_and(|rows|["SaveReplayBuffer","GetReplayBufferStatus","GetLastReplayBufferReplay"].iter().all(|name|rows.iter().any(|row|row.as_str()==Some(name))));
+                        if !supported{let _=reply.send(Err(ServiceError::Unsupported));continue;}
+                        let events=match bridge.replay_events(){Ok(events)=>events,Err(_)=>{let _=reply.send(Err(ServiceError::Binding));continue;}};
+                        let writer=match broker.scope(ScopeKind::Generic(crate::operation_store::GenericKind::SaveReplayBuffer)){Ok(writer)=>writer,Err(_)=>{let _=reply.send(Err(ServiceError::Uncertain));continue;}};
+                        let physical=physical.clone();let control=control.clone();let clock=clock.clone();let id=(identities.lock().unwrap())();active_cancel=Some(cancel.clone());
+                        jobs.spawn(async move{Completion::Replay(reply,crate::replay_save::execute(writer,request,physical,events,verifier,control,clock,caller,cancel,id,admitted).await)});
                     },
                     Command::Media(request,cancel,reply)=>{
                         let Some(id)=next_job.checked_add(1) else {let _=reply.send(Err(ServiceError::Capacity));continue;};

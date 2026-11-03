@@ -47,6 +47,7 @@ impl NativeProfile {
                     | "obs-record-clip"
                     | "obs-contact-sheet"
                     | "obs-trim-take"
+                    | "obs-save-replay-verified"
             )
     }
     pub fn metadata(self) -> Value {

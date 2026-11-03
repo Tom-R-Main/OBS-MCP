@@ -57,6 +57,7 @@ fn immutable_profiles_and_closed_commands_do_not_create_raw_or_guarded_authority
         "obs-record-clip",
         "obs-contact-sheet",
         "obs-trim-take",
+        "obs-save-replay-verified",
         "obs-stage-scene",
         "obs-take-scene",
         "obs-prepare-demo",

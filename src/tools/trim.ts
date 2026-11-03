@@ -162,13 +162,20 @@ function parseSilence(stderr: string, duration: number): Span[] {
   return spans;
 }
 
+export type AudioTrack = { codec: string; sampleRate: number; channels: number; channelLayout: string; language: string; title: string | null; dispositions: Record<string, number> | null; startSeconds: number | null };
 export type MediaProbe = {
   duration: number; audioStreams: number; videoStreams: number; chapters: Chapter[];
   width?: number; height?: number; codec?: string; pixelFormat?: string; bitDepth?: number;
   colorTransfer?: string; colorPrimaries?: string; colorSpace?: string; colorRange?: string;
   frameRate?: string;
+  audioTracks?: AudioTrack[];
+  formatStartSeconds?: number;
+  videoStartSeconds?: number;
 };
 type Probe = MediaProbe;
+function timestamp(value: unknown): number | null {
+  return typeof value === 'string' && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value) && Number.isFinite(Number(value)) ? Number(value) : null;
+}
 
 function rationalFrameRate(value: unknown): string | undefined {
   if (typeof value !== "string" || !/^[1-9][0-9]{0,9}\/[1-9][0-9]{0,9}$/.test(value)) return undefined;
@@ -186,6 +193,13 @@ async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   const data = JSON.parse(stdout) as JsonObject;
   const streams = Array.isArray(data.streams) ? data.streams.filter(isObject) : [];
   const video = streams.find((stream) => stream.codec_type === "video");
+  const audioTracks = streams.filter(stream => stream.codec_type === "audio").map((stream): AudioTrack => {
+    const tag = (name: string) => isObject(stream.tags) ? Object.entries(stream.tags).find(([key]) => key.toLowerCase() === name)?.[1] : undefined;
+    const explicitTitle = tag('title');
+    const rawTitle = typeof explicitTitle === 'string' && explicitTitle !== '' ? explicitTitle : tag('handler_name');
+    const title = typeof rawTitle === 'string' && rawTitle !== '' && (rawTitle !== 'SoundHandler' || rawTitle === explicitTitle) ? rawTitle : null;
+    return { codec: typeof stream.codec_name === 'string' ? stream.codec_name : '', sampleRate: typeof stream.sample_rate === 'string' && /^[0-9]+$/.test(stream.sample_rate) && Number(stream.sample_rate) <= 4294967295 ? Number(stream.sample_rate) : 0, channels: typeof stream.channels === 'number' && Number.isInteger(stream.channels) && stream.channels >= 0 && stream.channels <= 255 ? stream.channels : 0, channelLayout: typeof stream.channel_layout === 'string' ? stream.channel_layout : '', language: typeof tag('language') === 'string' ? tag('language') as string : 'und', title, dispositions: isObject(stream.disposition) && Object.values(stream.disposition).every(value => value === 0 || value === 1) ? stream.disposition as Record<string, number> : null, startSeconds: timestamp(stream.start_time) };
+  });
   const averageRate = rationalFrameRate(video?.avg_frame_rate);
   // Retain an agreed declared cadence. Conflicting or unavailable rate
   // metadata supplies no fixed-rate target; it does not prove packet timing.
@@ -197,6 +211,9 @@ async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   return {
     duration: Number(isObject(data.format) ? data.format.duration : NaN),
     audioStreams: streams.filter((stream) => stream.codec_type === "audio").length,
+    ...(audioTracks.length ? { audioTracks } : {}),
+    ...(isObject(data.format) && timestamp(data.format.start_time) !== null ? {formatStartSeconds:timestamp(data.format.start_time)!} : {}),
+    ...(timestamp(video?.start_time) !== null ? {videoStartSeconds:timestamp(video?.start_time)!} : {}),
     videoStreams: streams.filter((stream) => stream.codec_type === "video").length,
     chapters,
     ...(video ? {
@@ -233,14 +250,32 @@ const chapterTitle = (name: string) => name.replace(/[\u0000-\u001f\u007f]/g, " 
 function requireSingleAudioTrack(audioStreams: number): void {
   if (audioStreams > 1) throw new Error("Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow");
 }
+function qualifiedAudioTracks(info: Pick<MediaProbe, 'audioStreams' | 'audioTracks' | 'formatStartSeconds' | 'videoStartSeconds'>, checkTiming = true): AudioTrack[] {
+  const tracks = info.audioTracks;
+  if (info.audioStreams < 2 || info.audioStreams > 6 || !tracks || tracks.length !== info.audioStreams) throw new Error('Multitrack trim requires complete metadata for two through six audio tracks');
+  const nearZero=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&Math.abs(value)<=0.05;
+  if(tracks.some(track=>!nearZero(track.startSeconds))||(checkTiming&&(!nearZero(info.formatStartSeconds)||!nearZero(info.videoStartSeconds)||tracks.some(track=>Math.abs(track.startSeconds!-info.videoStartSeconds!)>0.05))))throw new Error('Multitrack trim requires declared audio/video/format starts within 50 ms of zero and each other');
+  let defaults = 0;
+  for (const track of tracks) {
+    if (!['aac','flac','opus','pcm_s16le','pcm_s24le','pcm_s32le','pcm_f32le'].includes(track.codec) || ![44100,48000].includes(track.sampleRate) || !((track.channels === 1 && track.channelLayout === 'mono') || (track.channels === 2 && track.channelLayout === 'stereo')) || !/^[a-z]{3}$/.test(track.language) || (track.title !== null && (track.title === 'SoundHandler' || Buffer.byteLength(track.title) > 1024 || /[\u0000-\u001f\u007f-\u009f]/.test(track.title)))) throw new Error('Multitrack trim requires supported codecs, mono/stereo 44.1/48 kHz audio and representable track metadata');
+    if (!track.dispositions) throw new Error('Multitrack audio dispositions are unavailable');
+    if (Object.entries(track.dispositions).some(([name,value]) => value !== 0 && (value !== 1 || name !== 'default'))) throw new Error('Multitrack trim supports only the default audio disposition');
+    if (track.dispositions.default === 1) defaults++;
+  }
+  if (defaults !== 1) throw new Error('Multitrack MP4 trim requires exactly one default audio track');
+  return tracks;
+}
 
-export function validateTrimmedMetadata(actual: MediaProbe, expected: { duration: number; width?: number; height?: number; audioStreams: number; chapters: Chapter[]; frameRate?: string }): void {
-  requireSingleAudioTrack(expected.audioStreams);
+export function validateTrimmedMetadata(actual: MediaProbe, expected: { duration: number; width?: number; height?: number; audioStreams: number; audioTracks?: AudioTrack[]; chapters: Chapter[]; frameRate?: string }): void {
+  if (expected.audioStreams > 1 && !expected.audioTracks) requireSingleAudioTrack(expected.audioStreams);
   if (!Number.isFinite(actual.duration) || Math.abs(actual.duration - expected.duration) > 0.25) throw new Error("Staged export duration differs from the cut plan");
   if (actual.videoStreams !== 1 || actual.codec !== "h264" || actual.pixelFormat !== "yuv420p") throw new Error("Staged export must contain one H.264 yuv420p video stream");
   if (actual.width !== expected.width || actual.height !== expected.height) throw new Error("Staged export dimensions differ from the source");
   if (expected.frameRate !== undefined && actual.frameRate !== expected.frameRate) throw new Error("Staged export frame rate differs from the source");
-  if (actual.audioStreams !== Math.min(1, expected.audioStreams)) throw new Error("Staged export audio stream count differs from the first-track policy");
+  if (expected.audioStreams > 1) {
+    const tracks = qualifiedAudioTracks(expected, false);
+    if (actual.audioStreams !== tracks.length || actual.audioTracks?.length !== tracks.length || tracks.some((track,index) => { const value = actual.audioTracks![index]!; return value.codec !== 'aac' || value.startSeconds===null || !Number.isFinite(value.startSeconds) || Math.abs(value.startSeconds)>0.05 || value.sampleRate !== track.sampleRate || value.channels !== track.channels || value.channelLayout !== track.channelLayout || value.language !== track.language || value.title !== track.title || !value.dispositions || Object.entries(value.dispositions).some(([name,flag]) => flag !== 0 && name !== 'default') || (value.dispositions.default ?? 0) !== (track.dispositions?.default ?? 0); })) throw new Error('Staged export audio track order or descriptors differ from the source');
+  } else if (actual.audioStreams !== Math.min(1, expected.audioStreams)) throw new Error("Staged export audio stream count differs from the first-track policy");
   if (actual.chapters.length !== expected.chapters.length || expected.chapters.some((chapter, i) => {
     const observed = actual.chapters[i];
     return !observed || observed.name !== chapterTitle(chapter.name) || !Number.isFinite(observed.at) || Math.abs(observed.at - chapter.at) > 0.05;
@@ -324,6 +359,7 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
     }, 300_000);
     const tracker = new StillTracker(minIdleSeconds);
     let stderr = "";
+    let diagnosticOverflow = false;
     let pending: Buffer = Buffer.alloc(0);
     let frame = 0;
 
@@ -337,7 +373,7 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
-      if (stderr.length > 4_000_000) stderr = stderr.slice(-2_000_000);
+      if (stderr.length > 4_000_000) { diagnosticOverflow = true; stderr = ''; child.kill('SIGKILL'); }
     });
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -345,6 +381,7 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
     });
     child.on("close", (code) => {
       clearTimeout(timer);
+      if (diagnosticOverflow) { reject(new Error('Audio analysis diagnostics exceed the configured bound')); return; }
       if (timedOut) {
         reject(new Error("Finding still stretches took longer than 5 minutes; try a shorter recording"));
         return;
@@ -359,22 +396,26 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
 }
 
 async function detectIdle(path: string, info: Probe, minIdleSeconds: number, signal?: AbortSignal): Promise<{ idle: Span[]; audible: boolean }> {
-  requireSingleAudioTrack(info.audioStreams);
-  // Silence spans only matter if the recording has sound; they keep narration from being cut.
-  const withAudio = info.audioStreams > 0;
-  const silenceArgs = withAudio
-    ? ["-map", "0:a:0", "-af", `silencedetect=n=-50dB:d=${minIdleSeconds}`, "-f", "null", "-"]
-    : [];
+  if (info.audioStreams > 1) qualifiedAudioTracks(info);
+  // Detector identities are private to this analysis. Container metadata can
+  // imitate complete FFmpeg log prefixes, so static names are not authority.
+  const prefix = info.audioStreams > 0 ? `obs_mcp_${crypto.randomBytes(16).toString('hex')}_a` : undefined;
+  const silenceArgs = prefix ? Array.from({length:info.audioStreams}, (_,index) => ['-map',`0:a:${index}`,'-af',`silencedetect@${prefix}${index}=n=-50dB:d=${minIdleSeconds}`,'-f','null','-']).flat() : [];
   const { spans: still, stderr } = await stillSpans(path, info, minIdleSeconds, silenceArgs, signal);
-  if (!withAudio) return { idle: still, audible: false };
-  const silent = parseSilence(stderr, info.duration);
-  const whollySilent = silent.length === 1 && silent[0]!.start <= 0.1 && silent[0]!.end >= info.duration - 0.1;
-  if (whollySilent) return { idle: still, audible: false };
-  // Idle only where the picture is still and the sound is silent.
-  const idle = still.flatMap((f) => silent
-    .map((s) => ({ start: Math.max(f.start, s.start), end: Math.min(f.end, s.end) }))
-    .filter(({ start, end }) => end > start));
-  return { idle, audible: true };
+  if (!prefix) return { idle: still, audible: false };
+  let common: Span[] = [{start:0,end:info.duration}], allSilent = true;
+  for (let index=0;index<info.audioStreams;index++) {
+    const silent = parseSilence(stderr.split('\n').filter(line => line.trimStart().startsWith(`[silencedetect@${prefix}${index} @`)).join('\n'), info.duration);
+    if (silent.length>100000 || silent.some((span,i) => !Number.isFinite(span.start) || !Number.isFinite(span.end) || span.start<0 || span.end<span.start || span.end>info.duration+0.1 || (i>0 && silent[i-1]!.end>span.start))) throw new Error('Audio silence intervals are incomplete or exceed their bound');
+    allSilent &&= silent.length===1 && silent[0]!.start<=0.1 && silent[0]!.end>=info.duration-0.1;
+    common = intersectSpans(common,silent);
+  }
+  return {idle:intersectSpans(still,common),audible:!allSilent};
+}
+function intersectSpans(a: Span[], b: Span[]): Span[] {
+  let left=0,right=0; const out:Span[]=[];
+  while(left<a.length&&right<b.length){const start=Math.max(a[left]!.start,b[right]!.start),end=Math.min(a[left]!.end,b[right]!.end);if(end>start)out.push({start,end});if(a[left]!.end<b[right]!.end)left++;else right++;}
+  return out;
 }
 
 let cachedEncoder: string[] | null = null;
@@ -411,8 +452,11 @@ async function exportTrimmed(
   duration: number,
   signal?: AbortSignal,
   frameRate?: string,
+  audioTracks?: AudioTrack[],
 ): Promise<void> {
-  requireSingleAudioTrack(audioStreams);
+  if (audioStreams > 1 && !audioTracks) requireSingleAudioTrack(audioStreams);
+  const tracks = audioStreams > 1 ? qualifiedAudioTracks({audioStreams,audioTracks}, false) : [];
+  if (tracks.length && keep.length>256) throw new Error('Track-preserving export plan exceeds its qualified bounds');
   const rate = rationalFrameRate(frameRate);
   if (frameRate !== undefined && !rate) throw new Error("Invalid export frame rate");
   const work = mkdtempSync(join(tmpdir(), "obs-mcp-trim-"));
@@ -422,15 +466,16 @@ async function exportTrimmed(
     const withAudio = audioStreams > 0;
     const parts = keep.map(({ start, end }, index) => [
       `[0:v:0]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${index}]`,
-      ...(withAudio ? [`[0:a:0]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${index}]`] : []),
+      ...(tracks.length ? tracks.map((_,track) => `[0:a:${track}]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${index}_${track}]`) : withAudio ? [`[0:a:0]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${index}]`] : []),
     ].join(";"));
-    const inputs = keep.map((_span, index) => `[v${index}]${withAudio ? `[a${index}]` : ""}`).join("");
+    const inputs = keep.map((_span, index) => `[v${index}]${tracks.length ? tracks.map((_,track) => `[a${index}_${track}]`).join('') : withAudio ? `[a${index}]` : ""}`).join("");
     // Audio lengths can move concat seams off the source frame grid. Restore
     // the declared cadence after concatenation, before encoding/muxing.
-    const filter = `${parts.join(";")};${inputs}concat=n=${keep.length}:v=1:a=${withAudio ? 1 : 0}${rate ? "[joined]" : "[v]"}${withAudio ? "[a]" : ""}${rate ? `;[joined]fps=fps=${rate}[v]` : ""}`;
+    const filter = `${parts.join(";")};${inputs}concat=n=${keep.length}:v=1:a=${tracks.length || (withAudio ? 1 : 0)}${rate ? "[joined]" : "[v]"}${tracks.length ? tracks.map((_,index) => `[a${index}]`).join('') : withAudio ? "[a]" : ""}${rate ? `;[joined]fps=fps=${rate}[v]` : ""}`;
+    const audioArgs = tracks.length ? [...tracks.flatMap((track,index) => ['-map',`[a${index}]`,`-ar:a:${index}`,String(track.sampleRate),`-ac:a:${index}`,String(track.channels),`-channel_layout:a:${index}`,track.channelLayout,`-metadata:s:a:${index}`,`language=${track.language}`,`-metadata:s:a:${index}`,`title=${track.title??''}`,`-metadata:s:a:${index}`,`handler_name=${track.title??''}`,`-disposition:a:${index}`,track.dispositions?.default===1?'default':'0']),'-c:a','aac','-b:a','160k'] : withAudio ? ['-map','[a]','-c:a','aac','-b:a','160k'] : [];
     await execFileAsync("ffmpeg", [
       "-hide_banner", "-nostats", "-y", ...localMediaInputOptions(), "-i", path, "-f", "ffmetadata", ...localMediaInputOptions("metadata"), "-i", metadata,
-      "-filter_complex", filter, "-map", "[v]", ...(withAudio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []),
+      "-filter_complex", filter, "-map", "[v]", ...audioArgs,
       "-map_metadata", "1", "-map_chapters", "1", ...(await videoEncoderArgs()), "-movflags", "+faststart", outputPath,
     ], { timeout: 600_000, maxBuffer: 32 * 1024 * 1024, signal });
   } finally {
@@ -497,7 +542,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         + "the next chapter and the end, and moves chapters to match. Without apply it only returns the "
         + "plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full "
         + "decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory. "
-        + "Supports video-only or one audio track; multitrack input is refused",
+        + "Preserves up to six qualified mono/stereo 44.1/48 kHz audio tracks with near-zero timestamps as lossy AAC in MP4; unsupported metadata is refused",
       inputSchema: z.object({
         path: z.string().describe("Recording to trim; absolute, or relative to the OBS recording directory"),
         apply: z.boolean().default(false).describe("Export the trimmed copy; otherwise only plan"),
@@ -519,6 +564,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         const info = await probe(path, signal);
         if (!Number.isFinite(info.duration)) return errorResult(`ffprobe could not read the length of ${path}`);
         if (args.apply) requireSdrInput(info);
+        if (info.audioStreams > 1) qualifiedAudioTracks(info);
         const chapters = info.chapters.length > 0 ? info.chapters : takeLogChapters(path);
         const { idle, audible } = await detectIdle(path, info, args.minIdleSeconds, signal);
         const { cuts, keep } = planCuts({ ...args, duration: info.duration, idle, chapters });
@@ -556,6 +602,7 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
           false,
         );
         if (outputPath === path) return errorResult("The trimmed copy cannot replace the original");
+        if (info.audioStreams > 1 && extname(outputPath).toLowerCase() !== '.mp4') return errorResult('Trim failed: Track-preserving trim requires an MP4 output');
         // lstat also sees a dangling symlink, which ffmpeg would write through, possibly outside the directory.
         if (pathTaken(outputPath)) return errorResult(`${outputPath} already exists; choose another outputPath`);
         // Export under a temporary name so a failed or interrupted export leaves nothing that looks finished.
@@ -564,10 +611,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         if (partial === path || pathTaken(partial)) return errorResult("Could not choose a temporary name for the export; try again");
         const times = seamSampleTimes(seams, plan.trimmedSeconds);
         const exported = await publishTrimmedExport(partial, outputPath, {
-          encode: () => exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal, info.frameRate),
+          encode: () => exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal, info.frameRate, info.audioTracks),
           verify: async () => {
             const result = await probe(partial, signal);
-            validateTrimmedMetadata(result, { duration: plan.trimmedSeconds, width: info.width, height: info.height, audioStreams: info.audioStreams, chapters: newChapters, frameRate: info.frameRate });
+            validateTrimmedMetadata(result, { duration: plan.trimmedSeconds, width: info.width, height: info.height, audioStreams: info.audioStreams, ...(info.audioStreams>1?{audioTracks:info.audioTracks}:{}), chapters: newChapters, frameRate: info.frameRate });
             await strictDecode(partial, signal);
             return result;
           },
@@ -588,8 +635,8 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
           structuredContent: {
             ...plan, committed: true, outputPath, sha256: exported.sha256,
             outputDurationSeconds: round(result.duration), outputChapters: result.chapters.length,
-            verification: { metadata: "pass", strictDecode: "pass", scope: "Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review" },
-            format: { codec: result.codec, pixelFormat: result.pixelFormat, colorTransfer: result.colorTransfer ?? "unknown", colorPrimaries: result.colorPrimaries ?? "unknown", colorSpace: result.colorSpace ?? "unknown", colorFidelity: "unverified" },
+            verification: { metadata: "pass", strictDecode: "pass", scope: info.audioStreams>1 ? "Cut-plan duration (0.25s tolerance), dimensions, ordered audio track descriptors, chapters and complete all-stream decode; lossy H.264/AAC transcode, editorial content requires review" : "Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review" },
+            format: { codec: result.codec, pixelFormat: result.pixelFormat, colorTransfer: result.colorTransfer ?? "unknown", colorPrimaries: result.colorPrimaries ?? "unknown", colorSpace: result.colorSpace ?? "unknown", colorFidelity: "unverified", ...(info.audioStreams>1?{audioTracks:result.audioTracks}:{}) },
             previewStatus: exported.preview ? "available" : exported.previewWarning ? "unavailable" : "not-requested",
             warnings,
           },

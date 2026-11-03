@@ -99,6 +99,17 @@ fn assert_json(actual: &Value, expected: &Value) {
 fn info() -> MediaProbe {
     serde_json::from_value(json!({"duration":9.5,"audioStreams":0,"videoStreams":1,"chapters":[{"at":0,"name":"Intro"},{"at":7,"name":"Answer"}],"width":160,"height":90,"codec":"h264","pixelFormat":"yuv420p"})).unwrap()
 }
+fn track_info() -> MediaProbe {
+    let mut value = info();
+    value.audio_streams = 2;
+    value.format_start_seconds = Some(0.0);
+    value.video_start_seconds = Some(0.0);
+    value.audio_tracks = serde_json::from_value(json!([
+        {"codec":"aac","sampleRate":48000,"channels":1,"channelLayout":"mono","language":"eng","title":"Game","dispositions":{"default":1},"startSeconds":0},
+        {"codec":"aac","sampleRate":44100,"channels":2,"channelLayout":"stereo","language":"fra","title":"Voix – français","dispositions":{"default":0},"startSeconds":0}
+    ])).unwrap();
+    value
+}
 fn expected() -> ExpectedMetadata {
     let info = info();
     ExpectedMetadata {
@@ -504,6 +515,286 @@ fn source_silence_parsing_and_audio_intersection_are_conservative() {
     );
     assert!(!detect_idle(&still, "silence_start: 0\nsilence_end: 10", &probe).audible);
     assert!(detect_idle(&still, "", &probe).idle.is_empty());
+}
+#[test]
+fn qualified_multitrack_idle_intersects_every_track_and_missing_silence_never_authorizes_cuts() {
+    let mut info = track_info();
+    info.duration = 6.0;
+    let still = [Span {
+        start: 0.0,
+        end: 6.0,
+    }];
+    let first = "[silencedetect@obs_mcp_a0 @ 0x1] silence_start: 0\n[silencedetect@obs_mcp_a0 @ 0x1] silence_end: 6\n";
+    let second = "[silencedetect@obs_mcp_a1 @ 0x2] silence_start: 0\n[silencedetect@obs_mcp_a1 @ 0x2] silence_end: 2\n[silencedetect@obs_mcp_a1 @ 0x2] silence_start: 4\n[silencedetect@obs_mcp_a1 @ 0x2] silence_end: 6\n";
+    let result = analyze_idle(&still, &format!("{first}{second}"), &info).unwrap();
+    assert_eq!(
+        result.idle,
+        [
+            Span {
+                start: 0.0,
+                end: 2.0
+            },
+            Span {
+                start: 4.0,
+                end: 6.0
+            }
+        ]
+    );
+    assert!(result.audible);
+    assert!(analyze_idle(&still, first, &info).unwrap().idle.is_empty());
+    let metadata = format!(
+        "{first}    title : silencedetect@obs_mcp_a1 silence_start: 0\n    comment : metadata\n            : [silencedetect@obs_mcp_a1 @ 0x2] silence_start: 0\n"
+    );
+    assert!(
+        analyze_idle(&still, &metadata, &info)
+            .unwrap()
+            .idle
+            .is_empty()
+    );
+    let malformed = format!(
+        "{first}[silencedetect@obs_mcp_a1 @ 0x2] silence_start: 4\n[silencedetect@obs_mcp_a1 @ 0x2] silence_end: 2\n"
+    );
+    assert!(analyze_idle(&still, &malformed, &info).is_err());
+    let request = sampling_command(Path::new("source.mkv"), &info, 1.0, 1024 * 1024).unwrap();
+    let args = request
+        .args
+        .iter()
+        .map(|value| value.to_string_lossy())
+        .collect::<Vec<_>>();
+    let prefix = request.audio_filter_prefix.as_deref().unwrap();
+    for index in 0..2 {
+        assert!(
+            args.iter()
+                .any(|arg| arg.starts_with(&format!("silencedetect@{prefix}{index}=")))
+        );
+    }
+}
+#[test]
+fn production_audio_identity_is_fresh_owned_and_the_only_source_of_silence_authority() {
+    let mut info = track_info();
+    info.duration = 6.0;
+    let request = sampling_command(Path::new("source.mkv"), &info, 1.0, 1024 * 1024).unwrap();
+    let second = sampling_command(Path::new("source.mkv"), &info, 1.0, 1024 * 1024).unwrap();
+    let prefix = request.audio_filter_prefix.clone().unwrap();
+    let other = second.audio_filter_prefix.clone().unwrap();
+    let nonce = prefix
+        .strip_prefix("obs_mcp_")
+        .unwrap()
+        .strip_suffix("_a")
+        .unwrap();
+    assert_eq!(nonce.len(), 32);
+    assert!(
+        nonce
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    );
+    assert_ne!(prefix, other);
+    let normalized = |args: &[OsString], prefix: &str| {
+        args.iter()
+            .map(|arg| arg.to_string_lossy().replace(prefix, "obs_mcp_NONCE_a"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        normalized(&request.args, &prefix),
+        normalized(&second.args, &other)
+    );
+    for trusted_last_track in [false, true] {
+        let mut sink = GraySink::new(&request, 100).unwrap();
+        for _ in 0..12 {
+            sink.consume(&vec![20; request.frame_bytes]).unwrap();
+        }
+        sink.consume_stderr(format!("[silencedetect@{prefix}0 @ 0x1] silence_start: 0\n[silencedetect@{prefix}0 @ 0x1] silence_end: 6\n").as_bytes());
+        // Complete-looking static metadata and another request's nonce cannot
+        // authorize deleting a continuously audible second track.
+        sink.consume_stderr(format!("[silencedetect@obs_mcp_a1 @ 0x123] silence_start: 0\n[silencedetect@{other}1 @ 0x2] silence_start: 0\n").as_bytes());
+        if trusted_last_track {
+            sink.consume_stderr(format!("[silencedetect@{prefix}1 @ 0x2] silence_start: 0\n[silencedetect@{prefix}1 @ 0x2] silence_end: 2\n[silencedetect@{prefix}1 @ 0x2] silence_start: 4\n[silencedetect@{prefix}1 @ 0x2] silence_end: 6\n").as_bytes());
+        }
+        let mut sampled = sink.finish().unwrap();
+        assert_eq!(
+            sampled.audio_filter_prefix.as_deref(),
+            Some(prefix.as_str())
+        );
+        let result = analyze_sampled_idle(&sampled, &info).unwrap();
+        if trusted_last_track {
+            assert_eq!(
+                result.idle,
+                [
+                    Span {
+                        start: 0.0,
+                        end: 2.0
+                    },
+                    Span {
+                        start: 4.0,
+                        end: 6.0
+                    }
+                ]
+            );
+        } else {
+            assert!(result.idle.is_empty());
+        }
+        sampled.audio_filter_prefix = None;
+        assert!(analyze_sampled_idle(&sampled, &info).is_err());
+    }
+    let mut single = info.clone();
+    single.audio_streams = 1;
+    single.audio_tracks.clear();
+    let request = sampling_command(Path::new("source.mkv"), &single, 1.0, 1024 * 1024).unwrap();
+    assert!(request.audio_filter_prefix.is_some());
+    let mut sink = GraySink::new(&request, 100).unwrap();
+    for _ in 0..12 {
+        sink.consume(&vec![20; request.frame_bytes]).unwrap();
+    }
+    sink.consume_stderr(b"[silencedetect@obs_mcp_a0 @ 0x123] silence_start: 0\n");
+    assert!(
+        analyze_sampled_idle(&sink.finish().unwrap(), &single)
+            .unwrap()
+            .idle
+            .is_empty()
+    );
+}
+#[test]
+fn multitrack_metadata_bounds_and_diagnostic_overflow_refuse_instead_of_retaining_partial_evidence()
+{
+    let qualified = track_info();
+    assert_eq!(qualified_audio_tracks(&qualified).unwrap().len(), 2);
+    for case in [
+        "rate",
+        "layout",
+        "language",
+        "title",
+        "reserved-title",
+        "audio-start",
+        "missing-start",
+        "video-start",
+        "format-start",
+        "disposition",
+        "default",
+        "count",
+    ] {
+        let mut bad = qualified.clone();
+        match case {
+            "rate" => bad.audio_tracks[1].sample_rate = 32000,
+            "layout" => bad.audio_tracks[1].channel_layout = "unknown".into(),
+            "language" => bad.audio_tracks[1].language = "en-US".into(),
+            "title" => bad.audio_tracks[1].title = Some("bad\nmetadata".into()),
+            "reserved-title" => bad.audio_tracks[1].title = Some("SoundHandler".into()),
+            "audio-start" => bad.audio_tracks[1].start_seconds = Some(0.5),
+            "missing-start" => bad.audio_tracks[1].start_seconds = None,
+            "video-start" => bad.video_start_seconds = Some(0.5),
+            "format-start" => bad.format_start_seconds = Some(0.5),
+            "disposition" => {
+                bad.audio_tracks[1]
+                    .dispositions
+                    .as_mut()
+                    .unwrap()
+                    .insert("comment".into(), 1);
+            }
+            "default" => {
+                bad.audio_tracks[1]
+                    .dispositions
+                    .as_mut()
+                    .unwrap()
+                    .insert("default".into(), 1);
+            }
+            _ => {
+                bad.audio_streams = 7;
+                bad.audio_tracks
+                    .resize(7, qualified.audio_tracks[0].clone());
+            }
+        }
+        assert!(qualified_audio_tracks(&bad).is_err(), "{case} was admitted");
+    }
+    let request = sampling_command(Path::new("source.mkv"), &qualified, 1.0, 1024 * 1024).unwrap();
+    let mut sink = GraySink::new(&request, 100).unwrap();
+    sink.consume_stderr(&vec![b'x'; 4_000_001]);
+    assert_eq!(
+        sink.finish().unwrap_err().message(),
+        "Audio analysis diagnostics exceed the configured bound"
+    );
+}
+
+#[tokio::test]
+async fn multitrack_order_metadata_and_count_are_checked_before_decode_or_publication() {
+    let source = track_info();
+    for case in [
+        "order",
+        "rate",
+        "layout",
+        "language",
+        "title",
+        "start",
+        "disposition",
+        "count",
+    ] {
+        let root = Scratch::new();
+        let stage = ExportStage::new(&root.0, "partial.mp4", "final.mp4").unwrap();
+        let mut actual = source.clone();
+        match case {
+            "order" => actual.audio_tracks.swap(0, 1),
+            "rate" => actual.audio_tracks[1].sample_rate = 48000,
+            "layout" => actual.audio_tracks[1].channel_layout = "mono".into(),
+            "language" => actual.audio_tracks[1].language = "eng".into(),
+            "title" => actual.audio_tracks[1].title = Some("wrong".into()),
+            "start" => actual.audio_tracks[1].start_seconds = Some(0.5),
+            "disposition" => {
+                actual.audio_tracks[1]
+                    .dispositions
+                    .as_mut()
+                    .unwrap()
+                    .insert("default".into(), 1);
+            }
+            _ => {
+                actual.audio_streams = 1;
+                actual.audio_tracks.pop();
+            }
+        }
+        let events = Arc::new(Mutex::new(vec![]));
+        let backend = Backend {
+            mode: "success".into(),
+            output: stage.output_path().to_owned(),
+            events: events.clone(),
+            probe: actual,
+        };
+        let mut expected = expected();
+        expected.audio_streams = 2;
+        let request = encode_track_preserving_command(
+            &root.path("source.mkv"),
+            stage.partial_path(),
+            &root.path("chapters.txt"),
+            EncodePlan {
+                keep: &[Span {
+                    start: 0.0,
+                    end: 9.5,
+                }],
+                audio_streams: 2,
+                chapters: &source.chapters,
+                duration: 9.5,
+                frame_rate: None,
+            },
+            "libx264",
+            &source,
+        )
+        .unwrap();
+        let mut owner = ExportOwner::new(
+            backend,
+            stage,
+            request,
+            &source,
+            expected,
+            None,
+            Cancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            owner.finish().await.unwrap_err().message(),
+            "Staged export audio track order or descriptors differ from the source"
+        );
+        assert_eq!(events.lock().unwrap().as_slice(), ["encode", "verify"]);
+        assert!(!root.path("final.mp4").exists());
+        drop(owner);
+        assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
+    }
 }
 
 #[test]

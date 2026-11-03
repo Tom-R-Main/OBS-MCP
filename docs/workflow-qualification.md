@@ -11,15 +11,15 @@ The November 3, 2026 expansion exercises user journeys through the real Rust exe
 | Presenter prepares a virtual-camera meeting | Start virtual camera, change and read back microphone mute and six-track routing, Stage/Take, stop camera and verify final state. No recording or streaming. | Zoom/Teams consumption and delivered microphone audio need application/device checks. Recording tracks do not describe meeting audio delivery. |
 | Teacher cues slides or webinar preroll | Audit image and media sources; reject stale cues after restart and preserve a human edit before issuing a fresh cue. | Run-of-show scheduling, media-ended transitions, presenter hardware and multi-canvas composition need separate controls. |
 | Gamer or tournament organizer diagnoses stutter | Audit game/capture-card structure; existing Take monitor contracts distinguish rendering and encoder frame losses and qualify static-picture evidence. | Capture liveness needs an independent changing signal; an unchanged slide is not proof of a frozen capture. Long-event capacity forecasting is absent. |
-| Podcaster keeps separate microphone and game tracks | Generate static SDR video with silent first audio track and audible second track. Refuse trim planning/export rather than cutting or discarding narration; preserve input and existing output. | Track-preserving editing is not implemented. Audio balance, monitor mode and sync offset are outside the current snapshot restore fields. |
-| Creator saves a gameplay highlight | Distinguish save acceptance from completion; demonstrate that the last replay path can still be old; never retry a lost acknowledgement. | No verified new-file replay receipt or replay-to-media handoff exists yet. An ACK and existing path are insufficient. |
-| Artist edits a long static recording | Actual-file tests protect against silent-first-track mistakes; existing media contracts cover cadence, first-track audio protection and publication. | Artist-app detection, resumable long-file analysis and measured work budgets need development. Static content does not establish safe cuts. |
+| Podcaster keeps separate microphone and game tracks | Keep narration on nonfirst tracks; cut only shared silence. Export independently preserved mono/stereo tracks with different rates, languages and titles, then check metadata, decoded tones and silent windows. | The initial multitrack scope is two through six tracks, 44.1/48 kHz mono/stereo with representable metadata and declared near-zero timestamps. AAC export is lossy. Snapshot restore still omits balance, monitor mode and sync offset. |
+| Creator saves a gameplay highlight | Keep acknowledgement-only saves distinct; the new verified workflow observes a new path, hashes a private snapshot, probes and decodes all audio/video, and rechecks source bytes after OBS corroboration. | OBS supplies no causal request ID. Naming can overwrite an existing replay before verification can refuse it. Unknown history and unfinished verification never authorize another save. See replay-verification.md. |
+| Artist edits a long static recording | Actual-file tests protect later-track narration and untrusted metadata; media contracts cover cadence, all-track silence, descriptor validation and no-clobber publication. | Artist-app detection, resumable long-file analysis and measured work budgets need development. Static content does not establish safe cuts. |
 | Editor supplies unsupported or damaged media | Generate corrupt, audio-only and actual 10-bit inputs; refuse unsupported trim export while preserving input, existing output and directory contents. | HDR tone mapping and audio-only editing require explicit workflows. Actual PQ/HLG tags are not qualified by this fixture; typed refusal predicates have separate existing controls. Refusal is supported behavior, not successful editing. |
 | Operator recovers after interruption | Restart in the same state namespace, retain compatibility history, reject stale stage identities and preserve human changes. Existing journal checks cover recovery conflicts. | Clearing history requires qualified OBS incarnation/reset evidence. Privacy and capture identity require separate evidence. |
 
 ## Corrections prompted by the scenarios
 
-Trim sampling and export selected only the first audio stream. Inputs with more than one audio stream now refuse before analysis/export. This closes a path that could cut or discard narration while preserving video-only and single-track support.
+Checkpoint `3631f42` first closed the unsafe first-track path with explicit multitrack refusal. The next tranche enables qualified multitrack editing: all tracks must be silent before a static span can be cut; every supported track is encoded, mapped and validated independently. Unknown layouts, rates, dispositions, reserved titles and intentional timestamp offsets refuse before analysis. Video-only and single-track paths remain supported. Each audio analysis binds fresh random detector labels through its command and result, so input metadata cannot impersonate trusted silence output.
 
 Audio preflight reads mute state and configured recorded-track routes. Its messages now describe that evidence and state that signal levels and monitoring/loopback paths were not measured. Conservative silence refusal remains; monitor-only configuration is not promoted to proven silence.
 
@@ -42,6 +42,7 @@ NATIVE_TEST_BINARY="$PWD/native/target/release/obs-mcp-native" \
   test/native/production-workflows.test.ts \
   test/native/media-workflows.test.ts \
   test/native/replay-workflows.test.ts \
+  test/native/replay-verified.test.ts \
   test/native/scene-workflows.test.ts
 ```
 
@@ -49,8 +50,8 @@ The new files supplement existing public and Rust contract suites. Native stdio 
 
 ## Next development sequence
 
-1. Preserve all audio tracks through idle detection, encoding and validation. Test narration on nonfirst tracks, different sample rates/channel layouts, metadata and decoded audio on every exported track.
-2. Add verified replay-save operations: retain save-event and request identity, establish a new stable file under the approved root, distinguish late/foreign saves and retain uncertainty without replay.
+1. Extend multitrack timing/layout support beyond the initial qualified inputs. Add real production recordings with intentional AV offsets, surround channels and longer work budgets.
+2. Add a separately designed recovery path for interrupted replay observations. Keep known acknowledgements, Unknown transport fate and historical file evidence separate; never infer request attribution from a shared global filename. See [verified replay files](replay-verification.md).
 3. Design a live-show cue owner separately from guarded recording. Cover operator edits, expired cues, plugin work, transition completion, transport loss and explicit broadcast authority.
 4. Add continuous capacity observations and independent capture liveness. Report measured runway and uncertainty; do not silently grant an automatic Stop or call every static image frozen.
 5. Qualify actual meeting output, microphone loopback/sync, camera/capture-card reconnect, alert delivery and Linux capture backends. Fixture passes remain separate from those results.

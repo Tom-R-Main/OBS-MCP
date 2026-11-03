@@ -764,6 +764,7 @@ impl Host {
     /// No transport queue is introduced here: original ServiceHandle admission
     /// and operation budgets start at the same boundary as the stdio owner.
     pub(super) async fn dispatch(&mut self, invocation: Invocation) -> io::Result<Option<Value>> {
+        let admitted_at = tokio::time::Instant::now();
         let prepared = invocation.0;
         let initialization_charge = if self.runtime.owner.is_none() || self.runtime.initializing() {
             prepared.initialization_bytes()
@@ -950,6 +951,7 @@ impl Host {
                     | "obs-recover-demo"
                     | "obs-contact-sheet"
                     | "obs-trim-take"
+                    | "obs-save-replay-verified"
             ))
         };
         let native_profile = self.runtime.profile;
@@ -984,10 +986,17 @@ impl Host {
         };
         let worker_cancel = cancel.clone();
         let worker_media = media_cancel.clone();
+        let replay_deadline = (name == "obs-save-replay-verified").then(|| {
+            admitted_at
+                + obs_mcp_native::replay_save::Request::parse(&args)
+                    .expect("validated replay arguments")
+                    .timeout
+        });
         self.jobs.spawn(async move {
             let work=async move {
                     let _initialization_permit=initialization_permit;
-                    let service=match service.resolve(cancel.clone()).await {Ok(handle)=>handle,Err(value)=>return (key,reply,Ok(value),cancelled,false)};
+                    let resolved=if let Some(deadline)=replay_deadline{tokio::time::timeout_at(deadline,service.resolve(cancel.clone())).await.unwrap_or_else(|_|{cancel.cancel();Err(error("Replay original operation deadline expired during initialization; no save was dispatched"))})}else{service.resolve(cancel.clone()).await};
+                    let service=match resolved {Ok(handle)=>handle,Err(value)=>return (key,reply,Ok(value),cancelled,false)};
                     if name=="native-take-resource" {
                         let result=service.as_ref().unwrap().take_resource().await.map(|summary|json!({"contents":[{"uri":"obs://take/current","mimeType":"application/json","text":serde_json::to_string_pretty(&summary).unwrap()}]})).map_err(|_|ResourceFailure{code:-32603,message:"Native current-take resource is unavailable".into()});
                         return (key,reply,result,cancelled,true);
@@ -1009,7 +1018,7 @@ impl Host {
                         "obs-claim-control"=>control.lock().unwrap().claim(&caller,args["minutes"].as_u64().unwrap_or(30) as u16,args["reason"].as_str().unwrap_or(""),(clock)().epoch_ms).map(|result|result.tool_result()).unwrap_or_else(|_|error("Invalid control lease arguments")),
                         "obs-release-control"=>control.lock().unwrap().release(&caller,(clock)().epoch_ms).tool_result(),
                         "obs-control-status"=>control.lock().unwrap().status_result(&caller,(clock)().epoch_ms),
-                        _=>dispatch(service.as_ref().unwrap(),&name,args,read,binding,caller,cancel,media_cancel,resource,screenshot_limit).await,
+                        _=>dispatch(service.as_ref().unwrap(),&name,args,read,binding,caller,cancel,media_cancel,resource,screenshot_limit,admitted_at).await,
                     }};
                     if name=="obs-get-status" && native_profile==NativeProfile::Advanced {
                         result=ensure_structured(result);
@@ -1339,6 +1348,7 @@ mod tests {
             clock: support::clock(),
             preparation: None,
             media: None,
+            replay: None,
             media_work: None,
             screenshot_limit: Ok(ScreenshotLimit::default()),
             confirm_live: false,
@@ -1365,6 +1375,7 @@ mod tests {
                 clock: support::clock(),
                 preparation: None,
                 media: None,
+                replay: None,
                 media_work: None,
                 screenshot_limit: Ok(ScreenshotLimit::default()),
                 confirm_live: true,
@@ -1851,6 +1862,7 @@ mod tests {
             clock: support::clock(),
             preparation: None,
             media: None,
+            replay: None,
             media_work: None,
             screenshot_limit: Ok(ScreenshotLimit::default()),
             confirm_live: false,

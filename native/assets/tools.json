@@ -4931,6 +4931,30 @@
       }
     },
     {
+      "name": "obs-save-replay-verified",
+      "title": "Save and Verify Replay Buffer",
+      "description": "Requests one replay save and verifies a new local file under the approved recording root. Request attribution remains unverified: OBS save events contain no request ID. Requires explicit approved root, state directory and media executables; never starts/stops outputs or retries a save. OBS naming can overwrite existing replay files; verification does not prevent overwrites.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "timeoutSeconds": {
+            "default": 15,
+            "description": "Original total operation budget, including save, event and local file verification",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
       "name": "obs-get-record-status",
       "title": "Get Record Status",
       "description": "Gets the status of the record output",
@@ -7186,7 +7210,7 @@
     {
       "name": "obs-trim-take",
       "title": "Trim Dead Time",
-      "description": "Plan, and optionally export, a copy of a recording with its dead time cut: stretches where the picture does not change (and the sound, if any, is silent). A spinner or shimmering label counts as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before the next chapter and the end, and moves chapters to match. Without apply it only returns the plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory. Supports video-only or one audio track; multitrack input is refused",
+      "description": "Plan, and optionally export, a copy of a recording with its dead time cut: stretches where the picture does not change (and the sound, if any, is silent). A spinner or shimmering label counts as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before the next chapter and the end, and moves chapters to match. Without apply it only returns the plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory. Preserves up to six qualified mono/stereo 44.1/48 kHz audio tracks with near-zero timestamps as lossy AAC in MP4; unsupported metadata is refused",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -9217,6 +9241,7 @@
       "obs-stop-output": "outputs",
       "obs-get-output-settings": "outputs",
       "obs-set-output-settings": "outputs",
+      "obs-save-replay-verified": "outputs",
       "obs-get-record-status": "record",
       "obs-toggle-record": "record",
       "obs-start-record": "record",
@@ -9562,6 +9587,7 @@
         "obs-stop-output",
         "obs-get-output-settings",
         "obs-set-output-settings",
+        "obs-save-replay-verified",
         "obs-get-record-status",
         "obs-toggle-record",
         "obs-start-record",
@@ -10183,6 +10209,22 @@
           "required": [
             "durationSeconds"
           ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-save-replay-verified": {
+        "handler": "save-replay-verified",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "timeoutSeconds": {
+              "default": 15,
+              "description": "Original total operation budget, including save, event and local file verification",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
           "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
@@ -19,7 +19,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const binary = process.env.NATIVE_TEST_BINARY ?? join(root, 'native/target/debug/obs-mcp-native');
 const ffmpeg = realpathSync(execFileSync('/usr/bin/which', ['ffmpeg'], { encoding: 'utf8' }).trim());
 const ffprobe = realpathSync(execFileSync('/usr/bin/which', ['ffprobe'], { encoding: 'utf8' }).trim());
-const multitrackMessage = 'Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow';
+const multitrackMessage = 'Multitrack trim requires supported codecs, mono/stereo 44.1/48 kHz audio and representable track metadata';
 const sessions: { close(): Promise<void> }[] = [];
 
 function pidAbsent(pid: number): boolean {
@@ -28,22 +28,23 @@ function pidAbsent(pid: number): boolean {
 function command(executable: string, args: string[]): Buffer {
   return execFileSync(executable, args, { timeout: 15_000, maxBuffer: 2 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
 }
-function makeMedia(directory: string, kind: 'multitrack' | 'audio-only' | '10bit'): string {
+function makeMedia(directory: string, kind: 'multitrack' | 'narrated' | 'audio-only' | '10bit', voiceTitle = 'Narration', extraMetadata: string[] = []): string {
   const path = join(directory, `${kind}.mkv`);
   const args = ['-v', 'error', '-nostdin', '-n', '-threads', '1', '-filter_threads', '1'];
   if (kind === 'audio-only') {
     args.push('-f', 'lavfi', '-i', 'sine=frequency=997:sample_rate=48000:duration=3', '-c:a', 'pcm_s16le');
   } else {
-    args.push('-f', 'lavfi', '-i', `color=c=red:s=160x90:r=10:d=${kind === 'multitrack' ? 6 : 3}`);
-    if (kind === 'multitrack') {
-      args.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono', '-f', 'lavfi', '-i', 'sine=frequency=997:sample_rate=48000:duration=6', '-map', '0:v:0', '-map', '1:a:0', '-map', '2:a:0', '-c:v', 'ffv1', '-pix_fmt', 'yuv420p', '-c:a', 'pcm_s16le', '-t', '6');
+    args.push('-f', 'lavfi', '-i', `color=c=red:s=160x90:r=10:d=${kind === 'multitrack' || kind === 'narrated' ? 6 : 3}`);
+    if (kind === 'multitrack' || kind === 'narrated') {
+      args.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono', '-f', 'lavfi', '-i', `sine=frequency=997:sample_rate=${kind === 'narrated' ? 48000 : 32000}:duration=6`, '-map', '0:v:0', '-map', '1:a:0', '-map', '2:a:0', '-c:v', 'ffv1', '-pix_fmt', 'yuv420p', '-c:a', kind === 'narrated' ? 'aac' : 'pcm_s16le', '-t', '6');
+      if (kind === 'narrated') args.push('-metadata:s:a:0', 'title=Silence', '-metadata:s:a:0', 'language=eng', '-metadata:s:a:1', `title=${voiceTitle}`, '-metadata:s:a:1', 'language=fra');
     } else {
       args.push('-vf', 'format=yuv420p10le', '-c:v', 'ffv1', '-pix_fmt', 'yuv420p10le', '-an');
     }
   }
-  command(ffmpeg, [...args, '-f', 'matroska', path]);
+  command(ffmpeg, [...args, ...extraMetadata, '-f', 'matroska', path]);
   const probe = JSON.parse(command(ffprobe, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', path]).toString()) as { streams: { codec_type: string; pix_fmt?: string; color_transfer?: string }[] };
-  if (kind === 'multitrack') {
+  if (kind === 'multitrack' || kind === 'narrated') {
     expect(probe.streams.filter(stream => stream.codec_type === 'audio')).toHaveLength(2);
     for (const track of [0, 1]) {
       const pcm = command(ffmpeg, ['-v', 'error', '-nostdin', '-i', path, '-map', `0:a:${track}`, '-t', '0.1', '-c:a', 'pcm_s16le', '-f', 's16le', '-']);
@@ -60,6 +61,30 @@ function makeMedia(directory: string, kind: 'multitrack' | 'audio-only' | '10bit
 }
 function text(result: CallToolResult): string {
   return result.content.map(part => part.type === 'text' ? part.text : '').join('\n');
+}
+function makeEditableTracks(directory: string, title = 'Game'): string {
+  const path = join(directory, 'editable.mkv');
+  command(ffmpeg, ['-v','error','-nostdin','-n','-threads','1','-filter_threads','1','-f','lavfi','-i','color=c=red:s=160x90:r=10:d=6','-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=2,apad=whole_dur=6','-f','lavfi','-i','sine=frequency=997:sample_rate=44100:duration=2,adelay=4000,apad=whole_dur=6,aformat=channel_layouts=stereo','-map','0:v:0','-map','1:a:0','-map','2:a:0','-c:v','ffv1','-pix_fmt','yuv420p','-c:a','aac','-metadata:s:a:0',`title=${title}`,'-metadata:s:a:0','language=eng','-metadata:s:a:1','title=Voix – français','-metadata:s:a:1','language=fra','-t','6',path]);
+  return path;
+}
+function inspectEditedTracks(path: string): void {
+  const data = JSON.parse(command(ffprobe,['-v','error','-show_streams','-of','json',path]).toString()) as {streams:Record<string,unknown>[]};
+  const tracks = data.streams.filter(stream => stream.codec_type==='audio');
+  expect(tracks).toHaveLength(2);
+  for(const [index,track] of tracks.entries()) {
+    expect(track).toMatchObject({codec_name:'aac',sample_rate:index===0?'48000':'44100',channels:index===0?1:2,channel_layout:index===0?'mono':'stereo'});
+    expect(track.tags).toMatchObject({language:index===0?'eng':'fra',handler_name:index===0?'Game':'Voix – français'});
+    expect(track.disposition).toMatchObject({default:index===0?1:0});
+    for(const active of [false,true]) {
+      const time = index===0 ? (active?'0.4':'3.2') : (active?'3.2':'0.4');
+      const pcm = command(ffmpeg,['-v','error','-nostdin','-ss',time,'-i',path,'-map',`0:a:${index}`,'-t','0.5','-c:a','pcm_s16le','-f','s16le','-']);
+      let peak=0,crossings=0;
+      for(let offset=0;offset+1<pcm.length;offset+=2){const value=pcm.readInt16LE(offset);peak=Math.max(peak,Math.abs(value));if(offset>0&&pcm.readInt16LE(offset-2)<=0&&value>0)crossings++;}
+      if(active){expect(peak).toBeGreaterThan(1000);expect(crossings).toBeGreaterThan(index===0?205:480);expect(crossings).toBeLessThan(index===0?235:515);}
+      else expect(peak).toBeLessThan(32);
+    }
+  }
+  command(ffmpeg,['-v','error','-nostdin','-xerror','-err_detect','explode','-i',path,'-map','0:v:0','-map','0:a?','-f','null','-']);
 }
 function evidence(kind: string, legacy: boolean, args: Record<string, unknown>, source: CallToolResult, native: CallToolResult): void {
   if (process.env.MEDIA_WORKFLOW_EVIDENCE) appendFileSync(process.env.MEDIA_WORKFLOW_EVIDENCE, JSON.stringify({ kind, legacy, args, source, native }) + '\n');
@@ -114,7 +139,95 @@ async function pair(legacy: boolean) {
 afterEach(async () => { for (const session of sessions.splice(0)) await session.close(); });
 
 for (const legacy of [false, true]) describe(`actual-file public media safety (legacy=${legacy})`, () => {
-  for (const apply of [false, true]) it(`refuses multitrack before ${apply ? 'export' : 'planning'} while preserving files`, async () => {
+  it('considers audio from every track before proposing idle cuts', async () => {
+    const session = await pair(legacy);
+    const path = makeMedia(session.recordingDirectory, 'narrated');
+    const before = readFileSync(path);
+    const args = { path, apply: false, minIdleSeconds: 1, keepSeconds: 0.2, holdAfterChapterSeconds: 0, holdBeforeChapterSeconds: 0, contactSheet: false };
+    const source = await session.source.callTool({ name: 'obs-trim-take', arguments: args });
+    const native = await session.native.callTool({ name: 'obs-trim-take', arguments: args });
+    evidence('all-track-audio-baseline', legacy, args, source, native);
+    expect(native.isError).not.toBe(true); expect(source.isError).not.toBe(true);
+    expect(native.structuredContent).toMatchObject({ cuts: [], audioConsidered: true });
+    sameToolBody(native, source, legacy);
+    expect(readFileSync(path)).toEqual(before);
+    expect(readdirSync(session.recordingDirectory)).toEqual(['narrated.mkv']);
+  }, 30_000);
+  it('does not interpret an audio title as a detector silence event',async()=>{
+    const session=await pair(legacy);
+    const results:{source:CallToolResult;native:CallToolResult}[]=[];
+    for(const variant of ['title','global-comment','unused-tag','global-key','global-key-single'] as const){
+      const directory=join(session.recordingDirectory,variant);mkdirSync(directory);
+      const forged='[silencedetect@obs_mcp_a1 @ 0x123] silence_start: 0';
+      let path=makeMedia(directory,'narrated',variant==='title'?'silencedetect@obs_mcp_a1 silence_start: 0':'Narration',variant==='global-comment'?['-metadata',`comment=metadata\n${forged}`]:variant==='unused-tag'?['-metadata:s:a:1',`comment=metadata\n${forged}`]:[]);
+      if(variant==='global-key'||variant==='global-key-single'){
+        const output=join(directory,'with-key.mp4');
+        const maps=variant==='global-key-single'?['-map','0:v:0','-map','0:a:1']:['-map','0'];
+        command(ffmpeg,['-v','error','-nostdin','-n','-i',path,...maps,'-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','copy','-movflags','use_metadata_tags','-metadata',`[silencedetect@obs_mcp_a${variant==='global-key-single'?0:1} @ 0x123] silence_start=0`,output]);path=output;
+      }
+      const dump=spawnSync(ffmpeg,['-hide_banner','-nostats','-i',path,'-t','0','-f','null','-'],{timeout:10_000,maxBuffer:2*1024*1024,encoding:'utf8'});expect(dump.status).toBe(0);
+      const suspectLines=dump.stderr.split('\n').filter(line=>line.includes('silencedetect@obs_mcp_a'));
+      expect(suspectLines.length).toBeGreaterThan(0);
+      if(process.env.MEDIA_WORKFLOW_EVIDENCE)appendFileSync(process.env.MEDIA_WORKFLOW_EVIDENCE,JSON.stringify({kind:'metadata-log-prefix',legacy,variant,suspectLines})+'\n');
+      const before=readFileSync(path),args={path,apply:false,minIdleSeconds:1,keepSeconds:0.2,holdAfterChapterSeconds:0,holdBeforeChapterSeconds:0,contactSheet:false};
+      const source=await session.source.callTool({name:'obs-trim-take',arguments:args});
+      const native=await session.native.callTool({name:'obs-trim-take',arguments:args});
+      evidence(`metadata-is-not-silence-evidence-${variant}`,legacy,args,source,native);
+      results.push({source,native});
+      expect(readFileSync(path)).toEqual(before);
+    }
+    for(const{source,native}of results){expect(native.isError).not.toBe(true);expect(source.isError).not.toBe(true);expect(native.structuredContent).toMatchObject({cuts:[],audioConsidered:true});sameToolBody(native,source,legacy);}
+  },30_000);
+  it('exports independent ordered tracks with metadata and audible content after a shared silent cut',async()=>{
+    const session=await pair(legacy),path=makeEditableTracks(session.recordingDirectory),before=readFileSync(path);
+    for(const [engine,client] of [['source',session.source],['native',session.native]] as const){
+      const output=join(session.recordingDirectory,`${engine}.edited.mp4`);
+      const args={path,outputPath:output,apply:true,minIdleSeconds:1,keepSeconds:0.2,holdAfterChapterSeconds:0,holdBeforeChapterSeconds:0,contactSheet:false};
+      const result=await client.callTool({name:'obs-trim-take',arguments:args});
+      if(process.env.MEDIA_WORKFLOW_EVIDENCE)appendFileSync(process.env.MEDIA_WORKFLOW_EVIDENCE,JSON.stringify({kind:'track-preserving-export',legacy,engine,args,result})+'\n');
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({committed:true,audioConsidered:true,verification:{metadata:'pass',strictDecode:'pass'}});
+      const structured=result.structuredContent as Record<string,unknown>;
+      expect(structured.cuts as {start:number;end:number}[]).toHaveLength(1);
+      const cut=(structured.cuts as {start:number;end:number}[])[0]!;
+      expect(cut.start).toBeGreaterThan(2);expect(cut.start).toBeLessThan(2.4);expect(cut.end).toBeGreaterThan(3.7);expect(cut.end).toBeLessThan(4.1);
+      inspectEditedTracks(output);expect(readFileSync(path)).toEqual(before);
+    }
+  },30_000);
+  it('refuses the reserved SoundHandler title before either planning or export',async()=>{
+    const session=await pair(legacy),path=makeEditableTracks(session.recordingDirectory,'SoundHandler'),before=readFileSync(path);
+    const output=join(session.recordingDirectory,'human-output.mp4');writeFileSync(output,'human output must survive');const sentinel=readFileSync(output);
+    for(const apply of[false,true]){
+      const args={path,outputPath:output,apply,minIdleSeconds:1,contactSheet:false};
+      const source=await session.source.callTool({name:'obs-trim-take',arguments:args});
+      const native=await session.native.callTool({name:'obs-trim-take',arguments:args});
+      evidence('reserved-audio-title',legacy,args,source,native);
+      expect(native.isError).toBe(true);expect(source.isError).toBe(true);expect(text(native)).toBe(`Trim failed: ${multitrackMessage}`);sameToolBody(native,source,legacy);
+      expect(readFileSync(path)).toEqual(before);expect(readFileSync(output)).toEqual(sentinel);expect(readdirSync(session.recordingDirectory).sort()).toEqual(['editable.mkv','human-output.mp4']);
+    }
+  },30_000);
+  it('refuses intentional stream offsets before either planning or export',async()=>{
+    const session=await pair(legacy),original=makeMedia(session.recordingDirectory,'narrated');
+    const results:{source:CallToolResult;native:CallToolResult}[]=[];
+    const output=join(session.recordingDirectory,'human-output.mp4');writeFileSync(output,'human output must survive');const sentinel=readFileSync(output);
+    for(const offset of[0.5,2]){
+      const path=join(session.recordingDirectory,`offset-${offset}.mkv`);
+      command(ffmpeg,['-v','error','-nostdin','-n','-i',original,'-itsoffset',String(offset),'-i',original,'-map','0:v:0','-map','0:a:0','-map','1:a:1','-c','copy',path]);
+      const probe=JSON.parse(command(ffprobe,['-v','error','-show_streams','-of','json',path]).toString()) as{streams:{codec_type:string;start_time?:string}[]};
+      expect(Number(probe.streams.filter(stream=>stream.codec_type==='audio')[1]!.start_time)).toBeGreaterThan(offset-0.05);
+      const before=readFileSync(path),names=readdirSync(session.recordingDirectory).sort();
+      for(const apply of[false,true]){
+        const args={path,outputPath:output,apply,minIdleSeconds:1,contactSheet:false};
+        const source=await session.source.callTool({name:'obs-trim-take',arguments:args});
+        const native=await session.native.callTool({name:'obs-trim-take',arguments:args});
+        evidence('unsupported-stream-offset',legacy,args,source,native);
+        results.push({source,native});
+        expect(readFileSync(path)).toEqual(before);expect(readFileSync(output)).toEqual(sentinel);expect(readdirSync(session.recordingDirectory).sort()).toEqual(names);
+      }
+    }
+    for(const{source,native}of results){expect(native.isError).toBe(true);expect(source.isError).toBe(true);expect(text(native)).toBe('Trim failed: Multitrack trim requires declared audio/video/format starts within 50 ms of zero and each other');sameToolBody(native,source,legacy);}
+  },30_000);
+  for (const apply of [false, true]) it(`refuses unqualified multitrack metadata before ${apply ? 'export' : 'planning'} while preserving files`, async () => {
     const session = await pair(legacy);
     const path = makeMedia(session.recordingDirectory, 'multitrack');
     const output = join(session.recordingDirectory, 'human-output.mp4'); writeFileSync(output, 'human output must survive');
@@ -127,7 +240,7 @@ for (const legacy of [false, true]) describe(`actual-file public media safety (l
     expect(readdirSync(session.recordingDirectory).sort()).toEqual(namesBefore);
     expect(native.isError).toBe(true); expect(source.isError).toBe(true);
     expect(text(native)).toBe(`Trim failed: ${multitrackMessage}`); sameToolBody(native, source, legacy);
-    for (const client of [session.source, session.native]) expect((await client.listTools()).tools.find(tool => tool.name === 'obs-trim-take')?.description).toContain('Supports video-only or one audio track; multitrack input is refused');
+    for (const client of [session.source, session.native]) expect((await client.listTools()).tools.find(tool => tool.name === 'obs-trim-take')?.description).toContain('Preserves up to six qualified mono/stereo 44.1/48 kHz audio tracks with near-zero timestamps as lossy AAC in MP4');
     expect(session.fake.history().every(row => row.frame.op === 1 || (row.frame.op === 6 && ['GetVersion', 'GetRecordStatus', 'GetRecordDirectory'].includes(String(row.frame.d.requestType))))).toBe(true);
   }, 30_000);
 

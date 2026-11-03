@@ -425,7 +425,7 @@ mod tests {
     }
     #[test]
     fn generated_inventory_has_no_native_effect_routes() {
-        assert_eq!(asset()["tools"].as_array().unwrap().len(), 178);
+        assert_eq!(asset()["tools"].as_array().unwrap().len(), 179);
         assert!(!asset()["requests"].as_object().unwrap().is_empty());
         for (name, route) in asset()["requests"].as_object().unwrap() {
             let tool = asset()["tools"]

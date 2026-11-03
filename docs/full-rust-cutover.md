@@ -4,7 +4,7 @@ The current executable enters the retained Rust service directly. Stdio and loop
 
 ## Current capability boundary
 
-Production exposes up to 164 ordinary tools with approved host/media adapters. Advanced exposes 163 ordinary tools and excludes guarded Take, media, Stage and recovery owners. The 178-name union spans both immutable profiles. Three dynamic group controllers are conditional additions for stdio; HTTP uses static groups. Read-only mode, filters and adapter availability still apply.
+Production exposes up to 165 ordinary tools with approved host/media adapters. Advanced exposes 163 ordinary tools and excludes guarded Take, media, Stage and recovery owners. The 179-name union spans both immutable profiles. Three dynamic group controllers are conditional additions for stdio; HTTP uses static groups. Read-only mode, filters and adapter availability still apply.
 
 The composed service owns planning/audit, Apply Scene and Capture Window, snapshots/manual Restore, guarded preparation/recovery, bounded recording and media jobs, confirmation/resume, resources and cooperating control. Advanced raw, batch, vendor, hotkey and manual output commands retain their separate policy and durable guarded-reentry barriers. See [native profiles](native-profiles.md); a visible tool or successful ACK never grants another workflow's recording, Stop or file authority.
 
