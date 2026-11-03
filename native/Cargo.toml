@@ -37,6 +37,10 @@ strip = "symbols"
 platform-tls-evaluation = ["dep:obs-mcp-platform-tls"]
 resolver-fixture = ["obs-mcp-resolver/resolver-fixture"]
 
+[[test]]
+name = "tls_ca_contract"
+required-features = ["platform-tls-evaluation", "resolver-fixture"]
+
 [target.'cfg(target_os = "macos")'.dependencies]
 obs-mcp-platform-tls = {package="obs-mcp-platform-tls-qualification",path="crates/platform-tls",optional=true}
 

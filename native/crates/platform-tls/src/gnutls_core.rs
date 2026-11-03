@@ -104,6 +104,11 @@ struct SendBuffer {
     offset: usize,
     retry: Option<(usize, usize)>,
 }
+enum Trust<'a> {
+    System(Option<&'a crate::AdditionalRoots>),
+    #[cfg(feature = "gnutls-synthetic-probe")]
+    Fixture(&'a [u8]),
+}
 impl SendBuffer {
     fn remaining(&self) -> &[u8] {
         &self.bytes[self.offset..]
@@ -136,6 +141,7 @@ pub struct Stream {
     monitor: Monitor,
     _single_owner: PhantomData<Rc<()>>,
     _global: Global,
+    additional_roots: Option<crate::AdditionalRoots>,
 }
 
 impl Stream {
@@ -146,8 +152,17 @@ impl Stream {
         deadline: Instant,
         cancel: Arc<AtomicBool>,
         monitor: Monitor,
+        additional_roots: Option<&crate::AdditionalRoots>,
     ) -> io::Result<Self> {
-        Self::new_inner(socket, expected, version, deadline, cancel, monitor, None)
+        Self::new_inner(
+            socket,
+            expected,
+            version,
+            deadline,
+            cancel,
+            monitor,
+            Trust::System(additional_roots),
+        )
     }
 
     #[cfg(feature = "gnutls-synthetic-probe")]
@@ -167,7 +182,7 @@ impl Stream {
             deadline,
             cancel,
             monitor,
-            Some(anchor),
+            Trust::Fixture(anchor),
         )
     }
 
@@ -178,7 +193,7 @@ impl Stream {
         deadline: Instant,
         cancel: Arc<AtomicBool>,
         monitor: Monitor,
-        anchor: Option<&[u8]>,
+        trust: Trust<'_>,
     ) -> io::Result<Self> {
         if expected.is_empty() || expected.len() > 253 || !expected.is_ascii() {
             return Err(io::Error::new(
@@ -231,13 +246,21 @@ impl Stream {
             monitor,
             _single_owner: PhantomData,
             _global: global,
+            additional_roots: None,
         };
         // SAFETY: exclusive out-pointer, initialized to null and owned by this RAII object.
         checked(unsafe { ffi::gnutls_certificate_allocate_credentials(&mut this.credentials) })?;
         this.monitor.0.credentials.fetch_add(1, Ordering::SeqCst);
-        let loaded = if let Some(anchor) = anchor {
+        let (loaded, additional_roots) = match trust {
+            Trust::System(roots) => {
+                // SAFETY: valid exclusively owned credentials; no global trust mutation.
+                (
+                    unsafe { ffi::gnutls_certificate_set_x509_system_trust(this.credentials) },
+                    roots,
+                )
+            }
             #[cfg(feature = "gnutls-synthetic-probe")]
-            {
+            Trust::Fixture(anchor) => {
                 let size = u32::try_from(anchor.len())
                     .map_err(|_| io::Error::other("anchor too large"))?;
                 let datum = ffi::Datum {
@@ -245,21 +268,21 @@ impl Stream {
                     size,
                 };
                 // SAFETY: GnuTLS parses/copies the PEM datum before returning; credentials own parsed CAs.
-                unsafe { ffi::gnutls_certificate_set_x509_trust_mem(this.credentials, &datum, 1) }
+                (
+                    unsafe {
+                        ffi::gnutls_certificate_set_x509_trust_mem(this.credentials, &datum, 1)
+                    },
+                    None,
+                )
             }
-            #[cfg(not(feature = "gnutls-synthetic-probe"))]
-            {
-                let _ = anchor;
-                return Err(io::Error::other("synthetic anchors excluded"));
-            }
-        } else {
-            // SAFETY: valid exclusively owned credentials; no global trust mutation.
-            unsafe { ffi::gnutls_certificate_set_x509_system_trust(this.credentials) }
         };
         if loaded < 0 {
             return Err(native_error(loaded, 0));
         }
-        if loaded == 0 {
+        if let Some(roots) = additional_roots {
+            this = this.with_additional_roots(roots)?;
+        }
+        if loaded == 0 && this.additional_roots.is_none() {
             return Err(io::Error::other("no trust anchors loaded"));
         }
         // SAFETY: exclusive out-pointer, nonblocking client; no early data, auto-reauth or resumption API.
@@ -315,6 +338,26 @@ impl Stream {
         Ok(this)
     }
 
+    pub fn with_additional_roots(mut self, roots: &crate::AdditionalRoots) -> io::Result<Self> {
+        for der in roots.certificates() {
+            let datum = ffi::Datum {
+                data: der.as_ptr().cast_mut(),
+                size: der.len() as u32,
+            };
+            // SAFETY: exclusively owned credentials before handshake; native DER
+            // parser copies certificates. Adds to already loaded system anchors.
+            let loaded =
+                unsafe { ffi::gnutls_certificate_set_x509_trust_mem(self.credentials, &datum, 0) };
+            if loaded <= 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "invalid additional TLS certificate anchors",
+                ));
+            }
+        }
+        self.additional_roots = Some(roots.clone());
+        Ok(self)
+    }
     pub fn fd(&self) -> RawFd {
         self.socket.as_raw_fd()
     }
@@ -464,7 +507,22 @@ impl Stream {
         } else if n > 0 {
             Ok(Step::Ready(self.receive[..n as usize].to_vec()))
         } else {
-            self.result(n)
+            let step = self.result(n)?;
+            if n == ffi::AGAIN && matches!(step, Step::Pending(Direction::Read)) {
+                // TLS 1.3 ticket processing can return AGAIN without exhausting
+                // the socket. Clearing edge-triggered readiness then loses the
+                // already-readable application record. Peek without consuming
+                // bytes; only an actual WouldBlock permits waiting for an edge.
+                match self.socket.peek(&mut [0; 1]) {
+                    Ok(_) => return Ok(Step::Progress),
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {
+                        return Ok(Step::Progress);
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(error) => return self.fail(error),
+                }
+            }
+            Ok(step)
         }
     }
     pub fn has_pending_send(&self) -> bool {
@@ -644,6 +702,7 @@ mod tests {
             Instant::now() + std::time::Duration::from_secs(3),
             cancel.clone(),
             monitor.clone(),
+            None,
         )
         .unwrap();
         assert_eq!(&monitor.snapshot()[..3], &[1, 1, 1]);

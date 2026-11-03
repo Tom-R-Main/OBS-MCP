@@ -203,6 +203,7 @@ struct Entry {
     versions: TlsVersions,
     expected_peer: Arc<CString>,
     endpoint_port: CString,
+    anchors: Option<Arc<crate::macos_trust::Anchors>>,
 }
 impl Entry {
     fn retire(self: &Arc<Self>, error: Option<Code>) {
@@ -290,14 +291,16 @@ impl Entry {
         })?;
         let hold = Hold::new(&self.shared);
         let (minimum, maximum) = self.versions.bounds();
+        let anchors = self.anchors.clone();
+        let verification_queue = self.queue.raw() as usize;
         let configure = move |options: Raw| {
             let sec = Security(unsafe { nw_tls_copy_sec_protocol_options(options) });
             if sec.0.is_null() {
                 hold.0.change(|f| f.error = Some((-1, -2)));
                 return;
             }
-            // Only default OS trust, required peer authentication, owned peer
-            // name and HTTP/1.1. No verification/client-identity/URLSession API.
+            // Default OS policy plus explicit process-local anchors when set.
+            // Peer name/purpose/validity and HTTP/1.1 remain native policy.
             unsafe {
                 sec_protocol_options_set_min_tls_protocol_version(sec.0, minimum);
                 sec_protocol_options_set_max_tls_protocol_version(sec.0, maximum);
@@ -307,6 +310,28 @@ impl Entry {
                 sec_protocol_options_set_tls_tickets_enabled(sec.0, false);
                 sec_protocol_options_set_tls_resumption_enabled(sec.0, false);
                 sec_protocol_options_set_tls_false_start_enabled(sec.0, false);
+            }
+            if let Some(anchors) = &anchors {
+                let anchors = anchors.clone();
+                // Deliberately capture only immutable trust configuration. Native
+                // TLS caches may retain this block; it must retain no operation
+                // permission, waker, Entry, Shared, IO buffer or deadline.
+                let verify =
+                    move |_metadata: Raw,
+                          trust: Raw,
+                          complete: *const block2::DynBlock<dyn Fn(CBool)>| {
+                        let valid = anchors.verify(trust);
+                        // SAFETY: borrowed completion is nonnull by SDK contract and
+                        // called exactly once synchronously for EACH invocation.
+                        if let Some(complete) = unsafe { complete.as_ref() } {
+                            complete.call((CBool(valid),));
+                        }
+                    };
+                prove(&verify);
+                let verify = RcBlock::new(verify);
+                unsafe {
+                    sec_protocol_options_set_verify_block(sec.0, &verify, verification_queue as Raw)
+                };
             }
         };
         prove(&configure);
@@ -552,8 +577,16 @@ impl Entry {
 pub struct Supervisor {
     entries: Vec<Arc<Entry>>,
     stopped: bool,
+    anchors: Option<Arc<crate::macos_trust::Anchors>>,
 }
 impl Supervisor {
+    pub fn with_additional_roots(roots: crate::AdditionalRoots) -> io::Result<Self> {
+        Ok(Self {
+            entries: Vec::new(),
+            stopped: false,
+            anchors: Some(crate::macos_trust::Anchors::new(&roots)?),
+        })
+    }
     pub fn connect(&mut self, peer: &str, port: u16, deadline: Instant) -> io::Result<Connect> {
         self.connect_with_versions(peer, port, deadline, TlsVersions::Supported)
     }
@@ -615,6 +648,7 @@ impl Supervisor {
             versions,
             expected_peer: Arc::new(peer),
             endpoint_port: CString::new(port.to_string()).unwrap(),
+            anchors: self.anchors.clone(),
         });
         self.entries.push(entry.clone());
         entry.start();
@@ -894,6 +928,7 @@ mod tests {
             versions: TlsVersions::Supported,
             expected_peer: Arc::new(CString::new("localhost").unwrap()),
             endpoint_port: CString::new("0").unwrap(),
+            anchors: None,
         })
     }
     #[tokio::test(flavor = "current_thread")]
@@ -902,6 +937,7 @@ mod tests {
         let mut owner = Supervisor {
             entries: vec![entry.clone()],
             stopped: false,
+            anchors: None,
         };
         let mut connect = Connect {
             entry: entry.clone(),
@@ -955,6 +991,7 @@ mod tests {
         let mut owner = Supervisor {
             entries: vec![entry],
             stopped: false,
+            anchors: None,
         };
         let joined = tokio::time::timeout(Duration::from_secs(1), owner.shutdown())
             .await
@@ -972,6 +1009,7 @@ mod tests {
         let mut owner = Supervisor {
             entries: vec![entry.clone()],
             stopped: false,
+            anchors: None,
         };
         let mut shutdown = Box::pin(owner.shutdown());
         assert!(

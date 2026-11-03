@@ -306,7 +306,7 @@ impl BoundTakeIo {
         let uri: tokio_tungstenite::tungstenite::http::Uri = exact_endpoint
             .parse()
             .map_err(|_| "Take endpoint is unavailable")?;
-        if uri.scheme_str() != Some("ws")
+        if !crate::network_transport::admitted_scheme(uri.scheme_str())
             || uri
                 .authority()
                 .is_none_or(|authority| authority.as_str().contains('@'))

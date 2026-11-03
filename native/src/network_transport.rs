@@ -20,6 +20,16 @@ use tokio::{
 };
 use tokio_tungstenite::tungstenite::http::Uri;
 
+/// Admission for adapters already bound to an established physical session.
+/// Parsing an origin alone does not confer transport or mutation authority.
+pub(crate) fn admitted_scheme(scheme: Option<&str>) -> bool {
+    scheme == Some("ws")
+        || cfg!(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        )) && scheme == Some("wss")
+}
+
 pub struct Origin {
     pub encrypted: bool,
     pub expected: ExpectedPeer,
@@ -102,16 +112,55 @@ pub(crate) struct Custody {
 }
 impl Owner {
     pub fn new() -> io::Result<Self> {
+        Self::with_additional_roots(None)
+    }
+    pub fn with_additional_roots(roots: Option<Vec<Vec<u8>>>) -> io::Result<Self> {
+        Self::with_resolver(
+            roots,
+            obs_mcp_resolver::Owner::new().map_err(io::Error::other)?,
+        )
+    }
+    /// Integration tests run in a libtest executable, which cannot dispatch the
+    /// product's fixed DNS helper. This seam exists only in fixture builds.
+    #[cfg(feature = "resolver-fixture")]
+    pub fn fixture_with_executable(
+        roots: Option<Vec<Vec<u8>>>,
+        executable: std::path::PathBuf,
+    ) -> io::Result<Self> {
+        Self::with_resolver(
+            roots,
+            obs_mcp_resolver::Owner::fixture_with_executable(executable)
+                .map_err(io::Error::other)?,
+        )
+    }
+    fn with_resolver(
+        roots: Option<Vec<Vec<u8>>>,
+        resolver: obs_mcp_resolver::Owner,
+    ) -> io::Result<Self> {
+        #[cfg(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        ))]
+        let tls = match roots {
+            Some(roots) => crate::platform_transport::Owner::with_additional_roots(roots)?,
+            None => crate::platform_transport::Owner::new(),
+        }
+        .custody();
+        #[cfg(not(all(
+            feature = "platform-tls-evaluation",
+            any(target_os = "macos", target_os = "linux")
+        )))]
+        if roots.is_some() {
+            return Err(unavailable());
+        }
         Ok(Self {
             custody: Custody {
-                resolver: Arc::new(Mutex::new(
-                    obs_mcp_resolver::Owner::new().map_err(io::Error::other)?,
-                )),
+                resolver: Arc::new(Mutex::new(resolver)),
                 #[cfg(all(
                     feature = "platform-tls-evaluation",
                     any(target_os = "macos", target_os = "linux")
                 ))]
-                tls: crate::platform_transport::Owner::new().custody(),
+                tls,
             },
         })
     }

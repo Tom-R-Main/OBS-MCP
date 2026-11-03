@@ -30,7 +30,6 @@ unsafe extern "C" {
     pub fn gnutls_certificate_allocate_credentials(creds: *mut Credentials) -> c_int;
     pub fn gnutls_certificate_free_credentials(creds: Credentials);
     pub fn gnutls_certificate_set_x509_system_trust(creds: Credentials) -> c_int;
-    #[cfg(feature = "gnutls-synthetic-probe")]
     pub fn gnutls_certificate_set_x509_trust_mem(
         creds: Credentials,
         ca: *const Datum,

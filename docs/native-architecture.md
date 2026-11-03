@@ -2,7 +2,7 @@
 
 OBS MCP has one retained Rust service per server process. Stdio serves one MCP frontend; loopback HTTP gives clients separate response and subscription contexts over the same service and OBS connection. The executable and native MCPB layout contain no JavaScript compatibility launcher or Node server payload. TypeScript and SDK 2.4 remain explicit development oracles.
 
-Start with [distribution and configuration](native-distribution.md). [Cutover status](full-rust-cutover.md) records the optimized, extracted-package and bounded Mac evidence, and the remaining Linux, production TLS, final CI and activation gates.
+Start with [distribution and configuration](native-distribution.md). [Cutover status](full-rust-cutover.md) separates merged core evidence, Linux tester limits, the opt-in Mac TLS evaluation and remaining production/activation work.
 
 ## Admission and profiles
 
@@ -46,9 +46,11 @@ Each frontend has its own response and stream lifetime. One slow or disconnected
 
 ## Encrypted transport status
 
-Default builds refuse `wss:` before connection, with no plaintext downgrade or SDK handoff. This is a supported-transport contraction from the former Source/SDK route; native runtime cutover does not establish full Source transport parity. The optional `platform-tls-evaluation` feature selects Network.framework on macOS and GnuTLS on Linux. Linux evaluation requires its native GnuTLS/pkg-config prerequisites; macOS's backend does not require enabling GnuTLS.
+Default core builds refuse `wss:` before connection without plaintext downgrade or SDK handoff. The TLS variant is an opt-in evaluation using Network.framework on macOS or GnuTLS on Linux. Its feature-aware pack driver preserves `OBS_MCP_NATIVE_BUILD_FEATURES=platform-tls-evaluation` through release build and staged source/executable receipts. An optional `OBS_MCP_TLS_CA_FILE` adds process-local certificate-only anchors while retaining peer/certificate validation; it makes no global trust/keychain change.
 
-Platform bindings and resolver components have their own tests and cleanup contracts. Root default tests do not automatically run a path dependency's unit tests. Component and all-feature checks supplement the default gate. Production TLS still needs feature-on optimized and extracted checks per platform: secure OBS authentication/readback, trust/identity refusals, cancellation through establishment, and joined shutdown/restart. These checks remain separate from the default native gate. Linux qualification is in progress; no platform/runtime acceptance is inferred from the Mac results.
+The exact optimized/extracted Mac evaluation passed four DNS/IP custom-CA TLS1.2/1.3 authenticated real-OBS GetVersion paths and three TLS1.3 trust refusals before Upgrade/Identify/upstream OBS. ALPN was observed as `http/1.1`. Child/connection owners joined, certificate material was removed and frozen identities rechecked. This is bounded custom-CA proxy-backed evidence, not a system-root positive, Linux TLS or general production admission. Default TLS remains off.
+
+Component checks remain separate from live acceptance, and root default tests do not automatically run a path dependency's units. Linux core CI and the separate exact-main tester checks have their own scope; the tester lacked Source-oracle/package qualification. Its missing `EGL_KHR_image_pixmap` leaves real XComposite exact-window capture unqualified; whole-display XShm is a different control.
 
 ## Build and verify
 
@@ -60,6 +62,8 @@ RUSTUP_AUTO_INSTALL=0 cargo build --locked --offline --release --bin obs-mcp-nat
 
 From the development checkout, `npm run native:check` builds the native executable and runs its Rust, Source/client, license and migration checks. Node is development tooling for these oracles and archives. The ratchet binds native sources, assets, local crates and configuration; it detects drift, not translation correctness. Reseal only reviewed changes, never a failing test.
 
-The 2 November 2026 normal gate passed 1,045 default-feature Rust cases, 213 all-feature bin/library cases, four resolver process contracts and the separate path-crate checks. Its public suite passed 1,003 cases with no skips against the pinned optimized executable; the development unit suite passed 735 cases. These suites overlap. The matching MCPB passed extraction checks and a bounded real-OBS Mac journey, with media inspection, conflict-preserving recovery, manual Restore, state restoration and offline snapshot restart.
+Core checkpoint `d3bb516` passed ten CI jobs. Its separate physical-Mac qualification passed 736 Source units, 21 Source transport cases, 1,050 default-feature Rust cases, 214 all-feature bin/library cases, four resolver process contracts, seven component checks and 1,016 public cases with no skips. Suites overlap, and local counts are not substituted for Linux execution. The exact core MCPB passed 3/3 checks and the bounded Mac journey with conflict-preserving recovery, manual Restore, byte-identical state restoration and offline restart.
 
-[Cutover status](full-rust-cutover.md) binds those results to exact executable/package hashes and records the pending Linux, production TLS, final CI and activation gates. Architecture acceptance follows behavior and resource custody. Historical 83/166/167 checkpoint recordings and synthetic timings remain artifact-bound and establish no capture or encoding speed comparison.
+HTTP qualification retains default SDK pooling and exact test-only driver identity/drop ownership. Known-capability Source fixtures observe their public cache before comparison; Source production behavior is unchanged by those fixture controls. The fractional-FPS export correction is merged. The separate movie cadence diagnostic distinguishes discard-marked decoder references from presented frames while still checking every packet duration.
+
+[Cutover status](full-rust-cutover.md) binds core and evaluation evidence to their exact artifacts. Linux desktop, production TLS, archive rebinding and installed-client activation remain scoped separately. Historical 83/166/167 checkpoint recordings and synthetic timings remain artifact-bound and establish no capture or encoding speed comparison.

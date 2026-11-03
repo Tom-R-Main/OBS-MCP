@@ -14,3 +14,9 @@ mod gnutls_core;
 mod gnutls_ffi;
 #[cfg(all(target_os = "linux", feature = "gnutls-probe"))]
 pub use gnutls::*;
+
+mod trust;
+pub use trust::AdditionalRoots;
+
+#[cfg(target_os = "macos")]
+mod macos_trust;

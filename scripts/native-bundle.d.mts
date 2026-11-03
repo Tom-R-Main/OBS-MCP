@@ -6,5 +6,11 @@ export interface NativeManifest {
   tools: Array<{name: string; description?: string}>;
   long_description: string;
 }
-export function nativeManifest(root: string, platform?: NodeJS.Platform, arch?: string): NativeManifest;
+export function nativeManifest(root: string, platform?: NodeJS.Platform, arch?: string, buildFeatures?: string): NativeManifest;
 export function nativeBundleFiles(root: string): string[];
+export function nativeBuildFeatures(value?: string): string[];
+export function nativeBuildSource(root: string): {sha256: string; files: Record<string,string>};
+
+export interface NativeArtifactOwner {path:string;dev:number;ino:number}
+export function nativeArtifactOwner(root:string,prefix?:string):NativeArtifactOwner;
+export function nativeArtifactCleanup(owner:NativeArtifactOwner):void;

@@ -88,3 +88,36 @@ unsafe extern "C" {
         length: *mut usize,
     ) -> Raw;
 }
+
+pub type Cf = *const c_void;
+pub type Verify = DynBlock<dyn Fn(Raw, Raw, *const DynBlock<dyn Fn(CBool)>)>;
+#[repr(C)]
+pub struct ArrayCallbacks {
+    pub version: isize,
+    pub retain: *const c_void,
+    pub release: *const c_void,
+    pub copy_description: *const c_void,
+    pub equal: *const c_void,
+}
+#[link(name = "Security", kind = "framework")]
+unsafe extern "C" {
+    pub fn sec_trust_copy_ref(trust: Raw) -> Cf;
+    pub fn sec_protocol_options_set_verify_block(options: Raw, callback: &Verify, queue: Raw);
+    pub fn SecCertificateCreateWithData(allocator: Cf, data: Cf) -> Cf;
+    pub fn SecTrustSetAnchorCertificates(trust: Cf, anchors: Cf) -> i32;
+    pub fn SecTrustSetAnchorCertificatesOnly(trust: Cf, only: u8) -> i32;
+    pub fn SecTrustSetNetworkFetchAllowed(trust: Cf, allowed: u8) -> i32;
+    pub fn SecTrustEvaluateWithError(trust: Cf, error: *mut Cf) -> bool;
+}
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    pub static kCFTypeArrayCallBacks: ArrayCallbacks;
+    pub fn CFDataCreate(allocator: Cf, bytes: *const u8, length: isize) -> Cf;
+    pub fn CFArrayCreate(
+        allocator: Cf,
+        values: *const Cf,
+        count: isize,
+        callbacks: *const ArrayCallbacks,
+    ) -> Cf;
+    pub fn CFRelease(object: Cf);
+}

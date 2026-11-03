@@ -371,6 +371,7 @@ struct Runtime {
     initialization: Option<ConnectAttempt>,
     initialization_broken: bool,
     network: Option<obs_mcp_native::network_transport::Owner>,
+    tls_ca: Option<Vec<Vec<u8>>>,
     url: String,
     password: Option<String>,
     root: PathBuf,
@@ -405,6 +406,10 @@ impl Runtime {
                 "Native configuration requires a supported WS/WSS endpoint; unavailable transports cannot activate",
             ));
         }
+        let tls_ca = config::additional_tls_roots(
+            std::env::var_os("OBS_MCP_TLS_CA_FILE").as_deref(),
+            cfg!(feature = "platform-tls-evaluation"),
+        )?;
         let resolved = config::resolve_environment()
             .map_err(|_| io::Error::other("Native authentication configuration is unavailable"))?;
         let root = config::resolve_state_root()
@@ -472,6 +477,7 @@ impl Runtime {
             initialization: None,
             initialization_broken: false,
             network: None,
+            tls_ca,
             url,
             password: resolved.password().map(str::to_owned),
             root,
@@ -527,7 +533,9 @@ impl Runtime {
         // Reentry guard above precedes all helper/DNS admission. Retain the
         // sole owner here; the static bootstrap carries only its Connector.
         if self.network.is_none() {
-            match obs_mcp_native::network_transport::Owner::new() {
+            match obs_mcp_native::network_transport::Owner::with_additional_roots(
+                self.tls_ca.clone(),
+            ) {
                 Ok(owner) => self.network = Some(owner),
                 Err(_) => {
                     return ServiceSource::Ready(Err(error(
@@ -1361,6 +1369,7 @@ mod tests {
             initialization: None,
             initialization_broken: true,
             network: None,
+            tls_ca: None,
             url: "ws://unused-fixture.invalid:4455".into(),
             password: None,
             root: dir.0.clone(),
