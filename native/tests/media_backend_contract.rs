@@ -1594,3 +1594,189 @@ async fn helper_ready_is_not_visible_before_complete_metadata_publication() {
         "ready became visible before the metadata-path publication boundary"
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sampler_private_files_preserve_silence_and_ignore_forged_incoming_metadata_in_special_paths()
+ {
+    use trim::OwnedJob;
+    let root = Scratch::new();
+    let work = root.path("sp ace:quo'te\\comma,[x];");
+    fs::create_dir(&work).unwrap();
+    private(&work);
+    let sampler = std::env::var_os("OBS_MCP_TEST_FFMPEG_SAMPLER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| tool("ffmpeg"));
+    use std::os::unix::fs::PermissionsExt;
+    let wrapper = root.path("metadata-injecting-sampler.py");
+    let script = format!(
+        "#!/usr/bin/env python3\nimport os,sys\nargs=sys.argv[1:]\nfor i in range(len(args)-1):\n if args[i]=='-af': args[i+1]='ametadata=mode=add:key=lavfi.silence_start:value=0,ametadata=mode=add:key=lavfi.silence_end:value=3,ametadata=mode=add:key=lavfi.silence_duration:value=3,'+args[i+1]\nos.execv({binary},[{binary}]+args)\n",
+        binary = serde_json::to_string(sampler.to_str().unwrap()).unwrap()
+    );
+    fs::write(&wrapper, script).unwrap();
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o700)).unwrap();
+    let mut media = SystemMedia::new(&wrapper, &tool("ffprobe"), &work, Bounds::default()).unwrap();
+    for audible in [false, true] {
+        let input = root.path(if audible { "audible.mkv" } else { "silent.mkv" });
+        let mut command = args(&[
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=black:s=160x90:r=30:d=3",
+            "-f",
+            "lavfi",
+            "-i",
+            if audible {
+                "sine=frequency=1000:sample_rate=48000:duration=3"
+            } else {
+                "anullsrc=r=48000:cl=mono"
+            },
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "pcm_s16le",
+            "-t",
+            "3",
+        ]);
+        command.push(input.into_os_string());
+        run_ffmpeg(&command).await;
+        let input = root.path(if audible { "audible.mkv" } else { "silent.mkv" });
+        let info = probe(&mut media, &input).await;
+        let request = trim::sampling_command(&input, &info, 0.5, 1024 * 1024).unwrap();
+        let mut job = media
+            .sampling(
+                &request,
+                Cancellation::default(),
+                Duration::from_secs(10),
+                100,
+            )
+            .unwrap();
+        let first = job.finish().await.unwrap();
+        assert!(Arc::ptr_eq(&first, &job.finish().await.unwrap()));
+        let idle = trim::analyze_sampled_idle(&first, &info).unwrap();
+        if audible {
+            assert!(idle.idle.is_empty());
+            assert!(idle.audible);
+        } else {
+            assert!(!idle.idle.is_empty());
+            assert!(!idle.audible);
+        }
+        assert!(fs::read_dir(&work).unwrap().next().is_none());
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", "--", &job.pid().to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+}
+#[cfg(unix)]
+fn sampling_helper(root: &Scratch, mode: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = root.path("owned-sampler-fixture.cjs");
+    let script = r#"#!/usr/bin/env node
+const fs=require('node:fs'),p=require('node:path'),root=p.dirname(process.argv[1]),mode=MODE;
+const work=p.join(root,'work'),name=fs.readdirSync(work).find(n=>n.startsWith('audio-')),file=p.join(work,name);
+process.on('SIGTERM',()=>{});
+if(mode==='overflow')fs.writeFileSync(file,Buffer.alloc(1024*1024+1));
+if(mode==='replace'){fs.unlinkSync(file);fs.writeFileSync(file,'foreign sentinel',{mode:0o600});}
+if(mode==='hardlink')fs.linkSync(file,p.join(root,'audio-alias'));
+if(mode==='symlink'){fs.renameSync(file,p.join(root,'original-audio'));fs.writeFileSync(p.join(root,'foreign'),'foreign sentinel',{mode:0o600});fs.symlinkSync(p.join(root,'foreign'),file);}
+fs.writeFileSync(p.join(root,'ready'),String(process.pid));setInterval(()=>{},1000);
+"#.replace("MODE",&format!("{mode:?}"));
+    fs::write(&path, script).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    path
+}
+#[cfg(unix)]
+#[tokio::test]
+async fn sampler_monitor_cancels_overflow_and_identity_changes_even_without_finish_awaiter() {
+    use trim::OwnedJob;
+    for mode in ["overflow", "replace", "hardlink", "symlink", "cancel"] {
+        let root = Scratch::new();
+        let work = root.work();
+        let executable = sampling_helper(&root, mode);
+        let media =
+            SystemMedia::new(&executable, &tool("ffprobe"), &work, Bounds::default()).unwrap();
+        let input = root.path("source.mkv");
+        fs::write(&input, b"owned synthetic process fixture").unwrap();
+        let info = trim::parse_probe(
+            &serde_json::json!({"format":{"duration":"3"},"streams":[{"codec_type":"video","width":160,"height":90},{"codec_type":"audio"}]}),
+        );
+        let request = trim::sampling_command(&input, &info, 0.5, 1024 * 1024).unwrap();
+        let mut job = media
+            .sampling(
+                &request,
+                Cancellation::default(),
+                Duration::from_secs(5),
+                100,
+            )
+            .unwrap();
+        let ready = wait_file(&root.path("ready")).await;
+        if !ready {
+            job.cancel();
+            let settled = job.finish().await;
+            panic!("sampler failed readiness after cleanup: {settled:?}");
+        }
+        if mode == "cancel" {
+            assert!(
+                timeout(Duration::from_millis(20), job.finish())
+                    .await
+                    .is_err()
+            );
+            job.cancel();
+        }
+        let joined = timeout(Duration::from_secs(3), job.finish()).await;
+        let result = match joined {
+            Ok(result) => result,
+            Err(_) => {
+                job.cancel();
+                let result = job.finish().await;
+                panic!("monitor failed bounded join: {result:?}");
+            }
+        };
+        let failure = result.unwrap_err();
+        assert_eq!(job.finish().await.unwrap_err(), failure);
+        assert!(
+            !Command::new("/bin/kill")
+                .args(["-0", "--", &job.pid().to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success()
+        );
+        if mode == "cancel" {
+            assert_eq!(failure.kind, ErrorKind::Cancelled);
+            assert!(failure.cleanup_issue.is_none());
+            assert!(fs::read_dir(&work).unwrap().next().is_none());
+        } else {
+            assert!(failure.cleanup_issue.is_some());
+            assert_eq!(
+                fs::read_dir(&work).unwrap().count(),
+                1,
+                "uncertain/overflow evidence must remain"
+            );
+            if mode == "replace" {
+                assert_eq!(
+                    fs::read(fs::read_dir(&work).unwrap().next().unwrap().unwrap().path()).unwrap(),
+                    b"foreign sentinel"
+                );
+            }
+            if mode == "symlink" {
+                assert_eq!(fs::read(root.path("foreign")).unwrap(), b"foreign sentinel");
+            }
+        }
+    }
+}

@@ -19,7 +19,7 @@ The November 3, 2026 expansion exercises user journeys through the real Rust exe
 
 ## Corrections prompted by the scenarios
 
-Checkpoint `3631f42` first closed the unsafe first-track path with explicit multitrack refusal. The next tranche enables qualified multitrack editing: all tracks must be silent before a static span can be cut; every supported track is encoded, mapped and validated independently. Unknown layouts, rates, dispositions, reserved titles and intentional timestamp offsets refuse before analysis. Video-only and single-track paths remain supported. Each audio analysis binds fresh random detector labels through its command and result, so input metadata cannot impersonate trusted silence output.
+Checkpoint `3631f42` first closed the unsafe first-track path with explicit multitrack refusal. The next tranche enables qualified multitrack editing: all tracks must be silent before a static span can be cut; every supported track is encoded, mapped and validated independently. Unknown layouts, rates, dispositions, reserved titles and intentional timestamp offsets refuse before analysis. Video-only and single-track paths remain supported. Each audio analysis owns private per-track filter metadata files. Incoming audio-frame metadata is cleared before silence detection; diagnostic stderr never supplies cut authority. This supports older FFmpeg releases whose silence diagnostics omit filter instance names.
 
 Audio preflight reads mute state and configured recorded-track routes. Its messages now describe that evidence and state that signal levels and monitoring/loopback paths were not measured. Conservative silence refusal remains; monitor-only configuration is not promoted to proven silence.
 
@@ -47,6 +47,8 @@ NATIVE_TEST_BINARY="$PWD/native/target/release/obs-mcp-native" \
 ```
 
 The new files supplement existing public and Rust contract suites. Native stdio tests cover both protocol eras; media comparisons use the canonical Source registration over its legacy in-memory transport. Teardown joins owned MCP processes and OBS peers and removes its own scratch state. Generated media contains colors and tones; the tests capture no desktop, microphone or personal window.
+
+Audio evidence is read only after the sampling child and both output pipes have joined. Reads admit at most 1 MiB per track and 6 MiB across six tracks. Sampled extent checks stop an oversized producer, but are not a hard disk or RSS sandbox. Unconfirmed helper cleanup, unsafe file identity or oversized evidence retains private files for inspection; those files cannot authorize cuts.
 
 ## Next development sequence
 

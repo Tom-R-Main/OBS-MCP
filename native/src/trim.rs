@@ -1254,6 +1254,134 @@ fn analyze_named_idle(
         audible: !all_silent,
     })
 }
+pub const AUDIO_EVIDENCE_BYTES: usize = 1024 * 1024;
+pub const AUDIO_EVIDENCE_EVENTS: usize = 100_000;
+#[derive(Clone, Debug)]
+pub struct AudioEvidence {
+    tracks: Vec<Vec<Span>>,
+}
+/// Parse only independent, inode-checked producer files after joined cleanup.
+/// Neither stderr nor caller-supplied frame metadata is evidence.
+pub fn parse_audio_evidence(texts: &[String], duration: f64) -> Result<AudioEvidence, TrimError> {
+    if texts.len() > 6 {
+        return Err(evidence("Audio analysis supports at most six tracks"));
+    }
+    let tracks = texts
+        .iter()
+        .map(|text| parse_audio_track_evidence(text, duration))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(AudioEvidence { tracks })
+}
+pub fn parse_audio_track_evidence(text: &str, duration: f64) -> Result<Vec<Span>, TrimError> {
+    if !duration.is_finite()
+        || duration <= 0.0
+        || text.len() > AUDIO_EVIDENCE_BYTES
+        || (!text.is_empty() && !text.ends_with('\n'))
+    {
+        return Err(evidence(
+            "Audio evidence is incomplete or exceeds its bound",
+        ));
+    }
+    let mut frame: Option<u64> = None;
+    let mut fields: BTreeMap<&str, f64> = BTreeMap::new();
+    let mut start = None;
+    let mut spans = vec![];
+    let mut events = 0;
+    for line in text.lines() {
+        if line.starts_with("frame:") {
+            if frame.is_some() {
+                finish_audio_frame(&fields, &mut start, &mut spans, duration)?;
+            }
+            let (frame_raw, rest) = line
+                .strip_prefix("frame:")
+                .unwrap()
+                .trim_start()
+                .split_once("pts:")
+                .ok_or_else(|| evidence("Audio evidence frame sequence is invalid"))?;
+            let (pts_raw, time_raw) = rest
+                .split_once("pts_time:")
+                .ok_or_else(|| evidence("Audio evidence frame sequence is invalid"))?;
+            let next = frame_raw.trim().parse::<u64>().ok();
+            let pts = Some(pts_raw.trim());
+            let time = time_raw.trim().parse::<f64>().ok();
+            if !next.is_some_and(|next| {
+                next <= 9_007_199_254_740_991 && frame.is_none_or(|prior| next > prior)
+            }) || !pts.is_some_and(|value| value == "NOPTS" || value.parse::<i64>().is_ok())
+                || !time.is_some_and(f64::is_finite)
+            {
+                return Err(evidence("Audio evidence frame sequence is invalid"));
+            }
+            frame = next;
+            fields.clear();
+            continue;
+        }
+        let (key, raw) = line
+            .split_once('=')
+            .ok_or_else(|| evidence("Audio evidence contains unexpected or duplicate metadata"))?;
+        let name = key
+            .strip_prefix("lavfi.silence_")
+            .filter(|name| matches!(*name, "start" | "end" | "duration"));
+        events += 1;
+        let name = name
+            .filter(|name| {
+                frame.is_some() && !fields.contains_key(name) && events <= AUDIO_EVIDENCE_EVENTS
+            })
+            .ok_or_else(|| evidence("Audio evidence contains unexpected or duplicate metadata"))?;
+        let value = raw
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite() && *v >= -0.1 && *v <= duration + 0.1)
+            .ok_or_else(|| evidence("Audio evidence timestamp is outside the recording"))?;
+        fields.insert(name, value);
+    }
+    if frame.is_some() {
+        finish_audio_frame(&fields, &mut start, &mut spans, duration)?;
+    }
+    if let Some(start) = start {
+        spans.push(Span {
+            start,
+            end: duration,
+        });
+    }
+    if spans
+        .iter()
+        .enumerate()
+        .any(|(i, span)| span.end < span.start || (i > 0 && spans[i - 1].end > span.start))
+    {
+        return Err(evidence("Audio silence evidence overlaps"));
+    }
+    Ok(spans)
+}
+fn finish_audio_frame(
+    fields: &BTreeMap<&str, f64>,
+    start: &mut Option<f64>,
+    spans: &mut Vec<Span>,
+    duration: f64,
+) -> Result<(), TrimError> {
+    if fields.is_empty() || fields.contains_key("end") != fields.contains_key("duration") {
+        return Err(evidence("Audio evidence frame is incomplete"));
+    }
+    if fields.get("duration").is_some_and(|value| *value < 0.0) {
+        return Err(evidence("Audio evidence silence duration is negative"));
+    }
+    if let Some(value) = fields.get("start") {
+        if start.is_some() {
+            return Err(evidence("Audio evidence has overlapping silence starts"));
+        }
+        *start = Some(value.max(0.0));
+    }
+    if let Some(end) = fields.get("end") {
+        let at = start
+            .take()
+            .filter(|at| end >= at)
+            .ok_or_else(|| evidence("Audio evidence has an unmatched silence end"))?;
+        spans.push(Span {
+            start: at,
+            end: end.min(duration),
+        });
+    }
+    Ok(())
+}
 pub fn analyze_sampled_idle(
     samples: &GrayAnalysis,
     info: &MediaProbe,
@@ -1261,24 +1389,28 @@ pub fn analyze_sampled_idle(
     if info.audio_streams == 0 {
         return Ok(detect_idle(&samples.spans, "", info));
     }
-    let prefix = samples
-        .audio_filter_prefix
-        .as_deref()
-        .ok_or_else(|| evidence("Audio analysis identity is unavailable or invalid"))?;
-    let nonce = prefix
-        .strip_prefix("obs_mcp_")
-        .and_then(|value| value.strip_suffix("_a"));
-    if !nonce.is_some_and(|value| {
-        value.len() == 32
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    }) {
-        return Err(evidence(
-            "Audio analysis identity is unavailable or invalid",
-        ));
+    if info.audio_streams > 1 {
+        qualified_audio_tracks(info)?;
     }
-    analyze_named_idle(&samples.spans, &samples.stderr, info, prefix)
+    let audio = samples
+        .audio_evidence
+        .as_ref()
+        .filter(|value| value.tracks.len() == info.audio_streams)
+        .ok_or_else(|| evidence("Private audio evidence is unavailable"))?;
+    let mut common = vec![Span {
+        start: 0.0,
+        end: info.duration,
+    }];
+    let mut all_silent = true;
+    for silent in &audio.tracks {
+        all_silent &=
+            silent.len() == 1 && silent[0].start <= 0.1 && silent[0].end >= info.duration - 0.1;
+        common = intersect_spans(&common, silent);
+    }
+    Ok(IdleAnalysis {
+        idle: intersect_spans(&samples.spans, &common),
+        audible: !all_silent,
+    })
 }
 fn intersect_spans(a: &[Span], b: &[Span]) -> Vec<Span> {
     let (mut left, mut right) = (0, 0);
@@ -1299,7 +1431,8 @@ fn intersect_spans(a: &[Span], b: &[Span]) -> Vec<Span> {
 }
 #[derive(Clone, Debug)]
 pub struct SamplingRequest {
-    pub audio_filter_prefix: Option<String>,
+    pub audio_tracks: usize,
+    pub input: PathBuf,
     pub args: Vec<OsString>,
     pub height: usize,
     pub frame_bytes: usize,
@@ -1318,20 +1451,6 @@ pub fn sampling_command(
         }
         qualified_audio_tracks(info)?;
     }
-    let audio_filter_prefix = if info.audio_streams > 0 {
-        let mut entropy = [0u8; 16];
-        getrandom::fill(&mut entropy)
-            .map_err(|_| evidence("Cannot obtain private audio analysis identity"))?;
-        Some(format!(
-            "obs_mcp_{}_a",
-            entropy
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        ))
-    } else {
-        None
-    };
     let aspect = match (info.width, info.height) {
         (Some(w), Some(h)) if w != 0.0 && h != 0.0 && !w.is_nan() && !h.is_nan() => h / w,
         _ => 9.0 / 16.0,
@@ -1353,8 +1472,11 @@ pub fn sampling_command(
                 "Grayscale sample dimensions exceed the configured bound",
             )
         })?;
-    let mut args = vec![
+    let args = vec![
         "-hide_banner".into(),
+        "-xerror".into(),
+        "-err_detect".into(),
+        "explode".into(),
         "-nostats".into(),
         "-i".into(),
         path.as_os_str().to_owned(),
@@ -1366,25 +1488,9 @@ pub fn sampling_command(
         "rawvideo".into(),
         "pipe:1".into(),
     ];
-    if let Some(prefix) = &audio_filter_prefix {
-        for index in 0..info.audio_streams {
-            args.extend([
-                "-map".into(),
-                format!("0:a:{index}").into(),
-                "-af".into(),
-                format!(
-                    "silencedetect@{prefix}{index}=n=-50dB:d={}",
-                    number(min_idle_seconds)
-                )
-                .into(),
-                "-f".into(),
-                "null".into(),
-                "-".into(),
-            ]);
-        }
-    }
     Ok(SamplingRequest {
-        audio_filter_prefix,
+        audio_tracks: info.audio_streams,
+        input: path.to_owned(),
         args,
         height,
         frame_bytes,
@@ -1394,14 +1500,13 @@ pub fn sampling_command(
 }
 #[derive(Clone, Debug)]
 pub struct GrayAnalysis {
-    pub audio_filter_prefix: Option<String>,
+    pub audio_evidence: Option<AudioEvidence>,
     pub spans: Vec<Span>,
     pub frames: u64,
     pub trailing_bytes: usize,
     pub stderr: String,
 }
 pub struct GraySink {
-    audio_filter_prefix: Option<String>,
     tracker: StillTracker,
     pending: Vec<u8>,
     frame_bytes: usize,
@@ -1420,7 +1525,6 @@ impl GraySink {
             ));
         }
         Ok(Self {
-            audio_filter_prefix: request.audio_filter_prefix.clone(),
             tracker: StillTracker::new(request.min_idle_seconds),
             pending: Vec::with_capacity(request.frame_bytes),
             frame_bytes: request.frame_bytes,
@@ -1487,7 +1591,7 @@ impl GraySink {
             ));
         }
         Ok(GrayAnalysis {
-            audio_filter_prefix: self.audio_filter_prefix,
+            audio_evidence: None,
             spans,
             frames: self.frames,
             trailing_bytes: self.pending.len(),

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -95,16 +95,49 @@ function sameToolBody(native: CallToolResult, source: CallToolResult, legacy: bo
   else expect(_meta).toEqual({ 'io.modelcontextprotocol/serverInfo': { name: 'obs-mcp', version: PACKAGE_VERSION } });
   expect(body).toEqual(source);
 }
-async function pair(legacy: boolean) {
+async function pair(legacy: boolean, muteMediaDiagnostics = false, holdAudioEvidence = false) {
   const env = nativeDefaultFixture(root);
   const directory = env.OBS_MCP_STATE_DIR!;
+  vi.stubEnv('TMPDIR',directory);
   const recordingDirectory = join(directory, 'recordings'); mkdirSync(recordingDirectory, { mode: 0o700 });
-  const fake = await FakeOBSServer.start({ availableRequests: ['GetRecordDirectory', 'GetRecordStatus'] });
+  let mediaExecutable=ffmpeg;const samplerMarker=join(directory,'sampler-calls.jsonl'),holderScript=join(directory,'audio-evidence-holder.cjs'),holderRecords=join(directory,'audio-evidence-holders.jsonl');
+  type HeldAudio={pid:number;file:string;closed:string};
+  const heldAudio=():HeldAudio[]=>existsSync(holderRecords)?readFileSync(holderRecords,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line) as HeldAudio):[];
+  const joinAudioHolders=async()=>{
+    for(const held of heldAudio()){
+      if(!pidAbsent(held.pid)){
+        const commandLine=execFileSync('/bin/ps',['-p',String(held.pid),'-o','args='],{encoding:'utf8'});if(!commandLine.includes(holderScript)||!commandLine.includes(held.file))throw Error('Audio holder identity changed; signal and cleanup withheld');process.kill(held.pid,'SIGTERM');
+      }
+      await vi.waitFor(()=>expect(pidAbsent(held.pid)).toBe(true),{timeout:5000});expect(JSON.parse(readFileSync(held.closed,'utf8'))).toEqual({descriptorClosed:true,filePresent:true});
+    }
+  };
+  if(muteMediaDiagnostics||holdAudioEvidence){
+    if(holdAudioEvidence)writeFileSync(holderScript,`const fs=require('node:fs');const file=process.argv[2],closed=process.argv[3],fd=fs.openSync(file,'r');const timer=setInterval(()=>fs.readSync(fd,Buffer.alloc(1),0,1,0),50);process.on('SIGTERM',()=>{clearInterval(timer);fs.closeSync(fd);fs.writeFileSync(closed,JSON.stringify({descriptorClosed:true,filePresent:fs.existsSync(file)}));process.exit(0);});process.send('ready');`);
+    const bin=join(directory,'diagnostic-free-media');mkdirSync(bin);mediaExecutable=join(bin,'ffmpeg');
+    writeFileSync(mediaExecutable,'#!/usr/bin/env node\n'+`
+import{spawn}from'node:child_process';import{appendFileSync}from'node:fs';
+const args=process.argv.slice(2),sampling=args.includes('rawvideo')&&args.includes('pipe:1');
+if(sampling)appendFileSync(${JSON.stringify(samplerMarker)},JSON.stringify(args)+${JSON.stringify('\n')});
+const child=spawn(${JSON.stringify(ffmpeg)},args,{stdio:['ignore','pipe','pipe']});child.stdout.pipe(process.stdout);child.stderr.resume();
+process.on('SIGTERM',()=>child.kill('SIGTERM'));child.on('error',()=>{process.exitCode=1;});
+child.on('close',code=>{
+ if(code!==0||!sampling||!${JSON.stringify(holdAudioEvidence)}){process.exitCode=code??1;return;}
+ const filter=args.find((_,i)=>args[i-1]==='-af'),raw=filter?.split('ametadata=mode=print:file=')[1];
+ if(!raw){process.exitCode=8;return;}
+ const unescape=value=>{let out='';for(let i=0;i<value.length;i++){if(value.charCodeAt(i)===92&&i+1<value.length)i++;out+=value[i];}return out;};const file=unescape(unescape(raw));
+ const closed=${JSON.stringify(directory)}+'/audio-holder-closed-'+process.pid;
+ const holder=spawn(process.execPath,[${JSON.stringify(holderScript)},file,closed],{detached:true,stdio:['ignore','inherit','inherit','ipc']});let ready=false;
+ holder.once('exit',()=>{if(!ready)process.exitCode=9;});holder.once('message',message=>{if(message!=='ready'){process.exitCode=7;return;}ready=true;appendFileSync(${JSON.stringify(holderRecords)},JSON.stringify({pid:holder.pid,file,closed})+${JSON.stringify('\n')});holder.disconnect();holder.unref();process.exitCode=0;});
+});
+`);chmodSync(mediaExecutable,0o755);vi.stubEnv('PATH',`${bin}:${process.env.PATH??''}`);
+  }
+
+  const fake = await FakeOBSServer.start({ availableRequests: ['GetRecordDirectory','GetRecordStatus',...(holdAudioEvidence?['StartRecord','StopRecord','SaveReplayBuffer','GetReplayBufferStatus','GetLastReplayBufferReplay']:[])] });
   fake.respondWith('GetRecordDirectory', () => ({ recordDirectory: recordingDirectory }));
   fake.respondWith('GetRecordStatus', () => ({ outputActive: false, outputPaused: false }));
   const options = { versionNegotiation: { mode: legacy ? 'legacy' as const : { pin: '2026-07-28' as const } } };
   const native = new Client({ name: 'media-workflows', version: '1' }, options);
-  const transport = new StdioClientTransport({ command: binary, args: [], cwd: root, env: { ...getDefaultEnvironment(), ...env, HOME: directory, TMPDIR: directory, OBS_WEBSOCKET_URL: fake.url, OBS_WEBSOCKET_PASSWORD: '', OBS_MCP_NATIVE_RECORDING_ROOT: recordingDirectory, OBS_MCP_NATIVE_FFMPEG: ffmpeg, OBS_MCP_NATIVE_FFPROBE: ffprobe, OBS_MCP_NATIVE_PROFILE: 'production', OBS_MCP_TOOLSETS: '', OBS_MCP_TOOLS: 'obs-contact-sheet,obs-trim-take', OBS_MCP_READ_ONLY: 'false', OBS_MCP_DYNAMIC_TOOLSETS: 'false', OBS_MCP_CONFIRM_LIVE: 'false', OBS_MCP_HTTP_PORT: '', OBS_MCP_LOG_LEVEL: 'silent' }, stderr: 'pipe' });
+  const transport = new StdioClientTransport({ command: binary, args: [], cwd: root, env: { ...getDefaultEnvironment(), ...env, HOME: directory, TMPDIR: directory, OBS_WEBSOCKET_URL: fake.url, OBS_WEBSOCKET_PASSWORD: '', OBS_MCP_NATIVE_RECORDING_ROOT: recordingDirectory, OBS_MCP_NATIVE_FFMPEG: mediaExecutable, OBS_MCP_NATIVE_FFPROBE: ffprobe, OBS_MCP_NATIVE_PROFILE: 'production', OBS_MCP_TOOLSETS: '', OBS_MCP_TOOLS: holdAudioEvidence?'obs-contact-sheet,obs-trim-take,obs-take-start,obs-save-replay-verified,obs-get-record-status':'obs-contact-sheet,obs-trim-take', OBS_MCP_READ_ONLY: 'false', OBS_MCP_DYNAMIC_TOOLSETS: 'false', OBS_MCP_CONFIRM_LIVE: 'false', OBS_MCP_HTTP_PORT: '', OBS_MCP_LOG_LEVEL: 'silent' }, stderr: 'pipe' });
   transport.stderr?.on('data', () => undefined);
   const server = new McpServer({ name: 'canonical-source-media-oracle', version: '1' });
   initialize(server, { async sendRequest(request: string) { expect(request).toBe('GetRecordDirectory'); return { recordDirectory: recordingDirectory }; } } as unknown as OBSWebSocketClient);
@@ -115,6 +148,7 @@ async function pair(legacy: boolean) {
   let pid: number | null = null, closed = false, resolveClosed!: () => void;
   const closeEvent = new Promise<void>(done => { resolveClosed = done; });
   sessions.push({ async close() {
+    await joinAudioHolders();
     await source.close(); await server.close();
     pid ??= transport.pid;
     try { await native.close(); await transport.close(); }
@@ -134,11 +168,36 @@ async function pair(legacy: boolean) {
   await native.connect(transport); pid = transport.pid;
   const previousClose = transport.onclose;
   transport.onclose = () => { closed = true; resolveClosed(); previousClose?.(); };
-  return { source, native, directory, recordingDirectory, fake };
+  return { source, native, directory, recordingDirectory, fake, samplerMarker, heldAudio, joinAudioHolders };
 }
-afterEach(async () => { for (const session of sessions.splice(0)) await session.close(); });
+afterEach(async () => { try {for (const session of sessions.splice(0)) await session.close();} finally {vi.unstubAllEnvs();} });
 
 for (const legacy of [false, true]) describe(`actual-file public media safety (legacy=${legacy})`, () => {
+  it('retains private audio evidence while an escaped holder keeps its descriptor and pipe alive',async()=>{
+    const session=await pair(legacy,true,true),path=makeEditableTracks(session.recordingDirectory),before=readFileSync(path);
+    const args={path,apply:false,minIdleSeconds:1,keepSeconds:0.2,holdAfterChapterSeconds:0,holdBeforeChapterSeconds:0,contactSheet:false};
+    const registered=(await session.native.listTools()).tools.map(tool=>tool.name);for(const name of['obs-trim-take','obs-take-start','obs-save-replay-verified','obs-get-record-status'])expect(registered).toContain(name);
+    const samplers=()=>readFileSync(session.samplerMarker,'utf8').trim().split('\n').filter(Boolean).length;
+    const assertNativeRetained=async()=>{
+      const count=samplers(),frames=session.fake.history().length;
+      for(const[name,arguments_]of[['obs-trim-take',args],['obs-take-start',{}],['obs-save-replay-verified',{timeoutSeconds:1}]]as const){const result=await session.native.callTool({name,arguments:arguments_});expect(result.isError,JSON.stringify(result)).toBe(true);expect(text(result)).toContain('(Uncertain)');}
+      expect(samplers()).toBe(count);const requests=session.fake.history().slice(frames).filter(row=>row.frame.op===6);expect(requests).toEqual([]);for(const held of session.heldAudio())expect(existsSync(held.file)).toBe(true);
+    };
+    for(const[engine,client]of[['source',session.source],['native',session.native]]as const){
+      const result=await client.callTool({name:'obs-trim-take',arguments:args});expect(result.isError,JSON.stringify(result)).toBe(true);expect(text(result)).toMatch(/cleanup.*unconfirmed|pipe.*(?:close|drain)/i);const held=session.heldAudio().at(-1)!;expect(held,engine).toBeDefined();expect(pidAbsent(held.pid)).toBe(false);expect(existsSync(held.file)).toBe(true);expect(readFileSync(held.file,'utf8')).toContain('lavfi.silence_');expect(readFileSync(path)).toEqual(before);if(process.env.MEDIA_WORKFLOW_EVIDENCE)appendFileSync(process.env.MEDIA_WORKFLOW_EVIDENCE,JSON.stringify({kind:'private-audio-custody-unjoined',legacy,engine,args,result,held})+'\n');
+    }
+    await assertNativeRetained();expect((await session.native.callTool({name:'obs-get-record-status',arguments:{}})).isError).not.toBe(true);
+    const owned=session.heldAudio();expect(owned).toHaveLength(2);await session.joinAudioHolders();for(const held of owned){expect(existsSync(held.file)).toBe(true);expect(pidAbsent(held.pid)).toBe(true);}
+    // Joining the fixture descendant supplies no new service authority.
+    await assertNativeRetained();expect(samplers()).toBe(2);expect(session.fake.history().filter(row=>row.frame.op===6&&typeof row.frame.d.requestType==='string'&&['StartRecord','SaveReplayBuffer'].includes(row.frame.d.requestType))).toEqual([]);
+  },30_000);
+  it('finds shared silence from private audio files when every FFmpeg diagnostic is suppressed',async()=>{
+    const session=await pair(legacy,true),path=makeEditableTracks(session.recordingDirectory),before=readFileSync(path);
+    const args={path,apply:false,minIdleSeconds:1,keepSeconds:0.2,holdAfterChapterSeconds:0,holdBeforeChapterSeconds:0,contactSheet:false};
+    const source=await session.source.callTool({name:'obs-trim-take',arguments:args}),native=await session.native.callTool({name:'obs-trim-take',arguments:args});
+    evidence('private-audio-without-diagnostics',legacy,args,source,native);expect(source.isError,JSON.stringify(source)).not.toBe(true);expect(native.isError,JSON.stringify(native)).not.toBe(true);sameToolBody(native,source,legacy);expect(source.structuredContent).toMatchObject({audioConsidered:true,removedSeconds:1.6});expect((source.structuredContent as {cuts:unknown[]}).cuts).toHaveLength(1);expect(readFileSync(path)).toEqual(before);
+    const samplers=readFileSync(session.samplerMarker,'utf8').trim().split('\n').map(line=>JSON.parse(line) as string[]);expect(samplers).toHaveLength(2);for(const args of samplers){const filters=args.filter((_,i)=>args[i-1]==='-af');expect(filters).toHaveLength(2);for(const filter of filters){expect(filter).toContain('ametadata=mode=delete,silencedetect=');expect(filter).toContain('ametadata=mode=print:file=');}}
+  },30_000);
   it('considers audio from every track before proposing idle cuts', async () => {
     const session = await pair(legacy);
     const path = makeMedia(session.recordingDirectory, 'narrated');
@@ -156,17 +215,17 @@ for (const legacy of [false, true]) describe(`actual-file public media safety (l
   it('does not interpret an audio title as a detector silence event',async()=>{
     const session=await pair(legacy);
     const results:{source:CallToolResult;native:CallToolResult}[]=[];
-    for(const variant of ['title','global-comment','unused-tag','global-key','global-key-single'] as const){
+    for(const variant of ['title','global-comment','unused-tag','global-key','global-key-single','evidence-key'] as const){
       const directory=join(session.recordingDirectory,variant);mkdirSync(directory);
       const forged='[silencedetect@obs_mcp_a1 @ 0x123] silence_start: 0';
       let path=makeMedia(directory,'narrated',variant==='title'?'silencedetect@obs_mcp_a1 silence_start: 0':'Narration',variant==='global-comment'?['-metadata',`comment=metadata\n${forged}`]:variant==='unused-tag'?['-metadata:s:a:1',`comment=metadata\n${forged}`]:[]);
-      if(variant==='global-key'||variant==='global-key-single'){
+      if(variant==='global-key'||variant==='global-key-single'||variant==='evidence-key'){
         const output=join(directory,'with-key.mp4');
         const maps=variant==='global-key-single'?['-map','0:v:0','-map','0:a:1']:['-map','0'];
-        command(ffmpeg,['-v','error','-nostdin','-n','-i',path,...maps,'-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','copy','-movflags','use_metadata_tags','-metadata',`[silencedetect@obs_mcp_a${variant==='global-key-single'?0:1} @ 0x123] silence_start=0`,output]);path=output;
+        command(ffmpeg,['-v','error','-nostdin','-n','-i',path,...maps,'-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','copy','-movflags','use_metadata_tags','-metadata',variant==='evidence-key'?'frame:0 pts:0 pts_time:0\nlavfi.silence_start=0':`[silencedetect@obs_mcp_a${variant==='global-key-single'?0:1} @ 0x123] silence_start=0`,output]);path=output;
       }
       const dump=spawnSync(ffmpeg,['-hide_banner','-nostats','-i',path,'-t','0','-f','null','-'],{timeout:10_000,maxBuffer:2*1024*1024,encoding:'utf8'});expect(dump.status).toBe(0);
-      const suspectLines=dump.stderr.split('\n').filter(line=>line.includes('silencedetect@obs_mcp_a'));
+      const suspectLines=dump.stderr.split('\n').filter(line=>line.includes('silencedetect@obs_mcp_a')||line.includes('lavfi.silence_start'));
       expect(suspectLines.length).toBeGreaterThan(0);
       if(process.env.MEDIA_WORKFLOW_EVIDENCE)appendFileSync(process.env.MEDIA_WORKFLOW_EVIDENCE,JSON.stringify({kind:'metadata-log-prefix',legacy,variant,suspectLines})+'\n');
       const before=readFileSync(path),args={path,apply:false,minIdleSeconds:1,keepSeconds:0.2,holdAfterChapterSeconds:0,holdBeforeChapterSeconds:0,contactSheet:false};

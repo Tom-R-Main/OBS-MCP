@@ -1173,7 +1173,7 @@ async fn run(
     let mut safety_waiting_bytes = 0usize;
     let mut observations: JoinSet<ReadCompletion> = JoinSet::new();
     let mut snapshot_jobs: JoinSet<(u64, Box<PreparationOwners>, Reply, Value)> = JoinSet::new();
-    let mut media_jobs: JoinSet<(u64, Reply, Value)> = JoinSet::new();
+    let mut media_jobs: JoinSet<(u64, Reply, Value, bool)> = JoinSet::new();
     let mut media_cancel = HashMap::<u64, MediaCancellation>::new();
     let mut workflow_cancel = HashMap::<u64, Cancellation>::new();
     let mut clip_cancel = HashMap::<u64, Cancellation>::new();
@@ -1268,7 +1268,7 @@ async fn run(
                 match result {Some(Ok((id,owners,reply,result)))=>{workflow_cancel.remove(&id);preparation=Some(*owners);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
             },
             result=media_jobs.join_next(),if !media_jobs.is_empty()=>{
-                match result {Some(Ok((id,reply,result)))=>{media_cancel.remove(&id);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
+                match result {Some(Ok((id,reply,result,cleanup_unconfirmed)))=>{media_cancel.remove(&id);broken|=cleanup_unconfirmed;workers_joined&=!cleanup_unconfirmed;let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
             },
             result=observations.join_next(),if !observations.is_empty()=>{
                 match result {Some(Ok(ReadCompletion::Observe(reply,report)))=>{let _=reply.send(Ok(report));},Some(Ok(ReadCompletion::Read(reply,result)))=>{let _=reply.send(result);},Some(Ok(ReadCompletion::TakeResource(reply,result)))=>{let _=reply.send(result);},Some(Ok(ReadCompletion::Workflow(id,reply,result)))=>{workflow_cancel.remove(&id);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
@@ -1509,8 +1509,8 @@ async fn run(
                         let Some(config)=options.media.clone() else {let _=reply.send(Err(ServiceError::Unsupported));continue;};next_job=id;
                         media_cancel.insert(id,cancel.clone());let provider=Arc::new(ServiceRecordingDirectory {reader:bridge.reader()});
                         media_jobs.spawn(async move {
-                            let result=match media_tools::Operation::new((*config).clone(),provider,request,cancel) {Ok(mut operation)=>operation.finish().await,Err(error)=>json!({"content":[{"type":"text","text":format!("Recording media unavailable: {error}")}],"isError":true})};
-                            (id,reply,result)
+                            let (result,cleanup_unconfirmed)=match media_tools::Operation::new((*config).clone(),provider,request,cancel) {Ok(mut operation)=>{let result=operation.finish().await;(result,operation.cleanup_unconfirmed())},Err(error)=>{let cleanup_unconfirmed=error.cleanup_issue.is_some();(json!({"content":[{"type":"text","text":format!("Recording media unavailable: {error}")}],"isError":true}),cleanup_unconfirmed)}};
+                            (id,reply,result,cleanup_unconfirmed)
                         });
                     },
                     Command::Read(request,data,duration,reply)=>{

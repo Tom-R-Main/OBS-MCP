@@ -4,15 +4,12 @@
 //! finish await preserves every admitted provider/media future in this owner.
 //! Dropping the owner itself is emergency cancellation, not joined cleanup.
 use crate::{
-    media_backend::{Bounds as MediaBounds, SystemMedia},
-    media_verification::{
-        self, Cancellation, LocalMediaInput, MediaProcess, ProcessOptions,
-        local_media_input_options,
-    },
+    media_backend::{Bounds as MediaBounds, SamplingJob, SystemMedia},
+    media_verification::Cancellation,
     trim::{
         self, Chapter, CutOptions, Decode, Encode, EncodeRequest, ErrorKind, ExportOwner,
-        ExportStage, GrayAnalysis, GraySink, JobFuture, MediaProbe, OwnedJob, Preview, Probe,
-        SheetRequest, Timeline, TrimError,
+        ExportStage, JobFuture, MediaProbe, OwnedJob, Preview, Probe, SheetRequest, Timeline,
+        TrimError,
     },
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -310,13 +307,14 @@ pub struct Operation {
     chapters: Option<Vec<Chapter>>,
     backend: Option<SystemMedia>,
     probe_job: Option<Box<dyn OwnedJob<MediaProbe>>>,
-    sample_job: Option<MediaProcess<Arc<GrayAnalysis>>>,
+    sample_job: Option<SamplingJob>,
     encoder_job: Option<Box<dyn OwnedJob<Arc<[u8]>>>>,
     sheet_job: Option<Box<dyn OwnedJob<Arc<[u8]>>>>,
     plan: Option<Timeline>,
     output: Option<PathBuf>,
     export: Option<ExportOwner<GuardedBackend>>,
     result: Option<Value>,
+    cleanup_unconfirmed: bool,
 }
 impl fmt::Debug for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -358,10 +356,15 @@ impl Operation {
             output: None,
             export: None,
             result: None,
+            cleanup_unconfirmed: false,
         })
     }
     pub fn cancel(&self) {
         self.cancellation.cancel();
+    }
+    /// Sticky typed cleanup fate, independent of the public tool error text.
+    pub fn cleanup_unconfirmed(&self) -> bool {
+        self.cleanup_unconfirmed
     }
     pub async fn finish(&mut self) -> Value {
         if let Some(result) = &self.result {
@@ -369,7 +372,10 @@ impl Operation {
         }
         let mut result = match self.advance().await {
             Ok(result) => result,
-            Err(error) => error_result(&format!("{}: {error}", self.request.prefix())),
+            Err(error) => {
+                self.cleanup_unconfirmed |= error.cleanup_issue.is_some();
+                error_result(&format!("{}: {error}", self.request.prefix()))
+            }
         };
         source_json_numbers(&mut result);
         self.result = Some(result.clone());
@@ -492,33 +498,14 @@ impl Operation {
                     args.min_idle_seconds,
                     self.config.max_frame_bytes,
                 )?;
-                let mut arguments = Vec::new();
-                for arg in &request.args {
-                    if arg == "-i" {
-                        arguments.extend(local_media_input_options(LocalMediaInput::Recording));
-                    }
-                    arguments.push(arg.clone());
-                }
-                self.sample_job = Some(
-                    media_verification::run_streamed_media_process(
-                        &self.config.ffmpeg,
-                        &arguments,
-                        ProcessOptions {
-                            timeout: self.config.sampling_timeout,
-                            cancellation: self.cancellation.clone(),
-                        },
-                        GraySink::new(&request, self.config.max_spans)?,
-                    )
-                    .map_err(sample_error)?,
-                );
+                self.sample_job = Some(self.backend.as_ref().unwrap().sampling(
+                    &request,
+                    self.cancellation.clone(),
+                    self.config.sampling_timeout,
+                    self.config.max_spans,
+                )?);
             }
-            let samples = self
-                .sample_job
-                .as_mut()
-                .unwrap()
-                .finish()
-                .await
-                .map_err(sample_error)?;
+            let samples = self.sample_job.as_mut().unwrap().finish().await?;
             source.check(&self.config.authority)?;
             if samples.trailing_bytes != 0 {
                 return Err(err(
@@ -1052,22 +1039,6 @@ fn cancelled(c: &Cancellation) -> Result<(), TrimError> {
     } else {
         Ok(())
     }
-}
-fn sample_error(e: media_verification::MediaError) -> TrimError {
-    let mut error = err(
-        if e.kind() == media_verification::ErrorKind::Cancelled {
-            ErrorKind::Cancelled
-        } else {
-            ErrorKind::Decode
-        },
-        if e.kind() == media_verification::ErrorKind::TimedOut {
-            "Finding still stretches took longer than 5 minutes; try a shorter recording"
-        } else {
-            e.primary_message()
-        },
-    );
-    error.cleanup_issue = e.cleanup_issue().map(str::to_owned);
-    error
 }
 fn err(kind: ErrorKind, text: &str) -> TrimError {
     TrimError::new(kind, text)

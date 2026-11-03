@@ -3,9 +3,10 @@
  * See NOTICE.md and Git history for authorship and change dates.
  * SPDX-License-Identifier: GPL-2.0-only
  */
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import crypto from "node:crypto";
-import { closeSync, linkSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, linkSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
@@ -14,7 +15,7 @@ import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";
 import { StillTracker } from "./frame-sample.js";
 import { takeLogPath } from "./take-monitor.js";
-import { localMediaInputOptions, strictDecode } from "./media-verification.js";
+import { localMediaInputOptions, runStreamingMediaProcess, strictDecode } from "./media-verification.js";
 
 type JsonObject = Record<string, unknown>;
 export type Span = { start: number; end: number };
@@ -147,6 +148,7 @@ export function remapTime(time: number, cuts: Span[]): number {
   return round(time - removed);
 }
 
+/** Trusted conceptual controls only; production reads private ametadata files. */
 function parseSilence(stderr: string, duration: number): Span[] {
   const spans: Span[] = [];
   let start: number | null = null;
@@ -341,73 +343,114 @@ function takeLogChapters(path: string): Chapter[] {
   }
 }
 
-/** Streams SAMPLE_FPS grayscale frames and returns the stretches where the picture did not change. */
-function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceArgs: string[], signal?: AbortSignal): Promise<{ spans: Span[]; stderr: string }> {
-  const aspect = info.width && info.height ? info.height / info.width : 9 / 16;
-  const height = Math.max(2, Math.round((SAMPLE_WIDTH * aspect) / 2) * 2);
-  const frameBytes = SAMPLE_WIDTH * height;
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn("ffmpeg", [
-      "-hide_banner", "-nostats", ...localMediaInputOptions(), "-i", path,
-      "-map", "0:v:0", "-vf", `fps=${SAMPLE_FPS},scale=${SAMPLE_WIDTH}:${height},format=gray`, "-f", "rawvideo", "pipe:1",
-      ...silenceArgs,
-    ], { stdio: ["ignore", "pipe", "pipe"], ...(signal ? { signal } : {}) });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, 300_000);
-    const tracker = new StillTracker(minIdleSeconds);
-    let stderr = "";
-    let diagnosticOverflow = false;
-    let pending: Buffer = Buffer.alloc(0);
-    let frame = 0;
+const AUDIO_EVIDENCE_BYTES = 1024 * 1024;
+const AUDIO_EVIDENCE_EVENTS = 100_000;
+/** Two FFmpeg parsing layers: graph separators, then the file option value. */
+export function audioEvidenceFilterPath(path: string): string {
+  return path.replace(/\\/g, "\\\\\\\\").replace(/'/g, "\\\\\\'").replace(/:/g, "\\\\:").replace(/[,;\[\]]/g, "\\$&");
+}
+/** Only a joined, private producer file may be passed here, never stderr. */
+export function parseAudioEvidence(text: string, duration: number): Span[] {
+  if (!Number.isFinite(duration) || duration <= 0 || Buffer.byteLength(text) > AUDIO_EVIDENCE_BYTES || (text !== "" && !text.endsWith("\n"))) throw Error('Audio evidence is incomplete or exceeds its bound');
+  const numeric = /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+  let frame = -1, fields = new Map<string,number>(), start: number | null = null, events = 0;
+  const spans: Span[] = [];
+  const finishFrame = () => {
+    if (frame < 0) return;
+    if (fields.size === 0 || fields.has('end') !== fields.has('duration')) throw Error('Audio evidence frame is incomplete');
+    if (fields.has('duration') && fields.get('duration')! < 0) throw Error('Audio evidence silence duration is negative');
+    if (fields.has('start')) { if (start !== null) throw Error('Audio evidence has overlapping silence starts'); start = Math.max(0,fields.get('start')!); }
+    if (fields.has('end')) { const end = fields.get('end')!; if (start === null || end < start) throw Error('Audio evidence has an unmatched silence end'); spans.push({start,end:Math.min(duration,end)}); start = null; }
+  };
+  for (const line of text.split('\n').slice(0, -1)) {
+    const header = /^frame:\s*(\d+)\s+pts:\s*(-?\d+|NOPTS)\s+pts_time:\s*(\S+)\s*$/.exec(line);
+    if (header) {
+      const next = Number(header[1]), time = Number(header[3]);
+      if (!Number.isSafeInteger(next) || next <= frame || !numeric.test(header[3]!) || !Number.isFinite(time)) throw Error('Audio evidence frame sequence is invalid');
+      finishFrame();frame = next;fields = new Map();continue;
+    }
+    const entry = /^lavfi\.silence_(start|end|duration)=([^\s]+)$/.exec(line);
+    if (frame < 0 || !entry || fields.has(entry[1]!) || ++events > AUDIO_EVIDENCE_EVENTS) throw Error('Audio evidence contains unexpected or duplicate metadata');
+    const value = Number(entry[2]);
+    if (!numeric.test(entry[2]!) || !Number.isFinite(value) || value < -0.1 || value > duration + 0.1) throw Error('Audio evidence timestamp is outside the recording');
+    fields.set(entry[1]!,value);
+  }
+  finishFrame();
+  if (start !== null) spans.push({start,end:duration});
+  if (spans.some((span,index) => span.end < span.start || (index > 0 && spans[index-1]!.end > span.start))) throw Error('Audio silence evidence overlaps');
+  return spans;
+}
 
-    child.stdout.on("data", (chunk: Buffer) => {
-      pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
-      while (pending.length >= frameBytes) {
-        tracker.push(frame / SAMPLE_FPS, new Uint8Array(pending.subarray(0, frameBytes)));
-        pending = pending.subarray(frameBytes);
-        frame += 1;
+/** One sampling child owns private audio evidence until both pipes are joined. */
+async function stillSpans(path: string, info: Probe, minIdleSeconds: number, signal?: AbortSignal): Promise<{ spans: Span[]; audio: Span[][] }> {
+  signal?.throwIfAborted();
+  const aspect = info.width && info.height ? info.height / info.width : 9 / 16;
+  const height = Math.max(2, Math.round((SAMPLE_WIDTH * aspect) / 2) * 2), frameBytes = SAMPLE_WIDTH * height;
+  if (info.audioStreams < 0 || info.audioStreams > 6) throw Error('Audio analysis supports at most six tracks');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'obs-mcp-audio-evidence-'))), rootIdentity = lstatSync(root, {bigint:true});
+  const files: {path: string; fd: number; identity: BigIntStats}[] = [];
+  const stop = new AbortController(), combined = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
+  let retained = false, issue: Error | undefined, monitor: ReturnType<typeof setInterval> | undefined;
+  const same = (a:BigIntStats,b:BigIntStats) => a.dev === b.dev && a.ino === b.ino;
+  const check = () => {
+    const current = lstatSync(root, {bigint:true});
+    if (!same(rootIdentity,current) || current.mode !== rootIdentity.mode || !current.isDirectory() || current.isSymbolicLink()) throw Error('Private audio evidence directory identity changed');
+    let total = 0n;
+    for (const file of files) {
+      const named = lstatSync(file.path,{bigint:true}), opened = fstatSync(file.fd,{bigint:true});
+      if (!same(named,file.identity) || !same(opened,file.identity) || !named.isFile() || named.isSymbolicLink() || named.nlink !== 1n || opened.nlink !== 1n || named.mode !== file.identity.mode) throw Error('Private audio evidence file identity changed');
+      total += opened.size;
+      if (opened.size > BigInt(AUDIO_EVIDENCE_BYTES) || total > BigInt(6 * AUDIO_EVIDENCE_BYTES)) throw Error('Private audio evidence exceeds its byte bound');
+    }
+  };
+  try {
+    for (let index = 0; index < info.audioStreams; index++) {
+      const output = join(root, `track-${index}.txt`), fd = openSync(output, constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
+      try { files.push({path:output,fd,identity:fstatSync(fd,{bigint:true})}); } catch (error) { closeSync(fd); throw error; }
+    }
+    check();
+    const silenceArgs = files.flatMap((file,index) => ['-map',`0:a:${index}`,'-af',`ametadata=mode=delete,silencedetect=n=-50dB:d=${minIdleSeconds},ametadata=mode=print:file=${audioEvidenceFilterPath(file.path)}`,'-f','null','-']);
+    const tracker = new StillTracker(minIdleSeconds); let pending:Buffer = Buffer.alloc(0), frame = 0;
+    // Sampled extent checks stop the owned producer; this is not a disk sandbox.
+    monitor = setInterval(() => { try { check(); } catch (error) { issue = error instanceof Error ? error : Error(String(error)); stop.abort(); } }, 25);
+    await runStreamingMediaProcess('ffmpeg', ['-hide_banner','-nostats','-xerror','-err_detect','explode',...localMediaInputOptions(),'-i',path,'-map','0:v:0','-vf',`fps=${SAMPLE_FPS},scale=${SAMPLE_WIDTH}:${height},format=gray`,'-f','rawvideo','pipe:1',...silenceArgs], chunk => {
+      check(); pending = pending.length === 0 ? Buffer.from(chunk) : Buffer.concat([pending,chunk]);
+      while (pending.length >= frameBytes) { tracker.push(frame / SAMPLE_FPS, new Uint8Array(pending.subarray(0,frameBytes))); pending = pending.subarray(frameBytes); frame++; }
+    }, {signal:combined,timeoutMs:300_000});
+    if (issue) throw issue;
+    if (pending.length !== 0) throw Error('Grayscale sampling ended with an incomplete frame');
+    check();
+    const audio = files.map(file => {
+      const before = fstatSync(file.fd,{bigint:true}), bytes = Buffer.alloc(Number(before.size) + 1), count = readSync(file.fd,bytes,0,bytes.length,0), after = fstatSync(file.fd,{bigint:true});
+      if (count !== Number(before.size) || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw Error('Private audio evidence changed during read');
+      return parseAudioEvidence(bytes.subarray(0,count).toString('utf8'),info.duration);
+    });
+    check(); return {spans:tracker.finish(Math.min(info.duration,frame / SAMPLE_FPS)),audio};
+  } catch (error) {
+    retained = error instanceof Error && /cleanup unconfirmed/i.test(error.message);
+    if (retained) throw error;
+    throw issue ?? error;
+  } finally {
+    if (monitor) clearInterval(monitor);
+    try {
+      if (!retained) {
+        check(); const expected = files.map(file => basename(file.path)).sort(), names = readdirSync(root).sort();
+        if (JSON.stringify(names) !== JSON.stringify(expected)) throw Error('Private audio evidence directory contains unowned entries');
+        for (const file of files) unlinkSync(file.path);
+        rmdirSync(root);
       }
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-      if (stderr.length > 4_000_000) { diagnosticOverflow = true; stderr = ''; child.kill('SIGKILL'); }
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (diagnosticOverflow) { reject(new Error('Audio analysis diagnostics exceed the configured bound')); return; }
-      if (timedOut) {
-        reject(new Error("Finding still stretches took longer than 5 minutes; try a shorter recording"));
-        return;
-      }
-      if (code !== 0) {
-        reject(new Error(`ffmpeg exited with ${code}: ${stderr.trim().split("\n").slice(-2).join(" ")}`));
-        return;
-      }
-      resolvePromise({ spans: tracker.finish(Math.min(info.duration, frame / SAMPLE_FPS)), stderr });
-    });
-  });
+    } catch (error) { retained = true; throw Error(`Audio evidence cleanup unconfirmed; private files retained: ${errorMessage(error)}`); }
+    finally { for (const file of files) closeSync(file.fd); }
+  }
 }
 
 async function detectIdle(path: string, info: Probe, minIdleSeconds: number, signal?: AbortSignal): Promise<{ idle: Span[]; audible: boolean }> {
   if (info.audioStreams > 1) qualifiedAudioTracks(info);
-  // Detector identities are private to this analysis. Container metadata can
-  // imitate complete FFmpeg log prefixes, so static names are not authority.
-  const prefix = info.audioStreams > 0 ? `obs_mcp_${crypto.randomBytes(16).toString('hex')}_a` : undefined;
-  const silenceArgs = prefix ? Array.from({length:info.audioStreams}, (_,index) => ['-map',`0:a:${index}`,'-af',`silencedetect@${prefix}${index}=n=-50dB:d=${minIdleSeconds}`,'-f','null','-']).flat() : [];
-  const { spans: still, stderr } = await stillSpans(path, info, minIdleSeconds, silenceArgs, signal);
-  if (!prefix) return { idle: still, audible: false };
-  let common: Span[] = [{start:0,end:info.duration}], allSilent = true;
-  for (let index=0;index<info.audioStreams;index++) {
-    const silent = parseSilence(stderr.split('\n').filter(line => line.trimStart().startsWith(`[silencedetect@${prefix}${index} @`)).join('\n'), info.duration);
-    if (silent.length>100000 || silent.some((span,i) => !Number.isFinite(span.start) || !Number.isFinite(span.end) || span.start<0 || span.end<span.start || span.end>info.duration+0.1 || (i>0 && silent[i-1]!.end>span.start))) throw new Error('Audio silence intervals are incomplete or exceed their bound');
-    allSilent &&= silent.length===1 && silent[0]!.start<=0.1 && silent[0]!.end>=info.duration-0.1;
+  const {spans:still,audio} = await stillSpans(path, info, minIdleSeconds, signal);
+  if (audio.length === 0) return {idle:still,audible:false};
+  let common:Span[] = [{start:0,end:info.duration}], allSilent = true;
+  for (const silent of audio) {
+    allSilent &&= silent.length === 1 && silent[0]!.start <= 0.1 && silent[0]!.end >= info.duration - 0.1;
     common = intersectSpans(common,silent);
   }
   return {idle:intersectSpans(still,common),audible:!allSilent};
