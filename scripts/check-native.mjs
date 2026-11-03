@@ -21,7 +21,7 @@ const commands = [
   ['cargo',['test','--locked','--offline']],
   ['cargo',['clippy','--locked','--offline','--all-targets','--all-features','--','-D','warnings']],
   ['cargo',['test','--locked','--offline','--all-features','--lib','--bins']],
-  ['cargo',['test','--locked','--offline','--features','platform-tls-evaluation','--test','tls_ca_contract']],
+  ['cargo',['test','--locked','--offline','--features','platform-tls-evaluation,resolver-fixture','--test','tls_ca_contract']],
   ['cargo',['test','--locked','--offline','--features','resolver-fixture','--test','resolver_owner_contract']],
   // Path dependencies are not workspace members: root tests do not execute
   // their unit controls. Select only the applicable platform TLS backend.

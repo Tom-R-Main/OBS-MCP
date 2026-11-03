@@ -559,8 +559,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-03T01:03:12.454Z",
-    "sourceRevision": "d3bb516ed1bcecb04f15106dc384ff5ba76ee23f",
+    "at": "2026-11-03T02:43:29.440Z",
+    "sourceRevision": "407dc7be13e839bb5ef7be98f9d9a271270adf7b",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -653,7 +653,7 @@
     "nativeHashes": {
       "docs/protocol.json": "042e8c42da2dfd6d78fa0f695b2b59495d8254d5fe718b0f20d0e2e6f58a6993",
       "native/Cargo.lock": "9f064df1717c4b7db7f3b675b246a22f9c1669bd625f2e9d926944541ebc988e",
-      "native/Cargo.toml": "877db5341812da66c783d0f522abc477bbbf69db00bf063258ee2fb10f4e92dc",
+      "native/Cargo.toml": "6a02eacb3741978ac4371f4dfa0fc2d40bdab0c2a0525ff6ad419b9966b6cbb9",
       "native/assets/prompts.json": "8e75374c641fce8ef09bd460b02be92ed55034de4faa89155f11eb18d4e580f3",
       "native/crates/platform-tls/Cargo.lock": "454dbde2ec2855f608b52c5655454bc14ac7995645e6b878802f57b0ebd32eac",
       "native/crates/platform-tls/Cargo.toml": "69eca37dac58dbd7e815bccf961815dce1b7e630b85aa9a075919859bb8a3188",
@@ -712,7 +712,7 @@
       "native/src/native_host.rs": "56af0baea97653907e9f84a54c0441d3a44b3de8c1b62ff6b98e2a3d71a6a5e1",
       "native/src/native_profile.rs": "9d3d33940ed57c7e038d2d0e7346258992f2250017011bdb0a34c48a2bc35675",
       "native/src/native_service.rs": "2b3c590a7656da76dd46c9b78469ab5b02cfbbd6a21994a4952f40583d9422fd",
-      "native/src/network_transport.rs": "820cbab0930973390972ab6a52ae007fc837a36755d8a53e04dd0da9dacec209",
+      "native/src/network_transport.rs": "c74df4c6b3d36cabcd92a82f72f71f69944fb6c31f75b095054cce3c5cc3c55c",
       "native/src/obs.rs": "bb1c513d106eedfe67616743a50437884a5fed1fa2a3ca7589eb221ef941db01",
       "native/src/observation.rs": "6edb66cdb8954dc6076601f0caa5dcd3107610d41d824472b2f2dcd5212cb114",
       "native/src/opaque_commands.rs": "98c4b2dd8de81b9468905ca9f36ef15b83618a9c05502529752b155531a4386d",
@@ -844,7 +844,7 @@
       "native/tests/take_transport_contract.rs": "b2ea3a4c65484b6db1df08bcde33e5058331676737c5d648a3fc0b3cde2fa516",
       "native/tests/takes_contract.rs": "b6246862905b3190b1fe9e15ff6c54f312f5c2dfa42581fc78b33cbeacdcf73a",
       "native/tests/timeline5_contract.rs": "3d512f09ffc6dec6a1499c369c010c5203ad693d56d9f23f2adcb37127e0f5fc",
-      "native/tests/tls_ca_contract.rs": "18a877555d79d6086d685a663c900899cd191d3d0992deb89a4578067c86e59b",
+      "native/tests/tls_ca_contract.rs": "b5e7bcd9b4769987a66e8e86a9ab1e47fe701656d7f0188d4a198e2f0d8cc178",
       "native/tests/tool_validation_contract.rs": "1067a6f7b162e3feff493aa89aa480dfda8f9900e4d364803135fb51fd11fd88",
       "native/tests/transform_receipt_contract.rs": "ded09b7806ce29c841986527d9897154aae3cdb71da30d6311bcc0f331ac7002",
       "native/tests/trim_contract.rs": "3eee236b60fa42b319dcd01df536b0d0188817215fdf159e7c6e6f72facae27a",

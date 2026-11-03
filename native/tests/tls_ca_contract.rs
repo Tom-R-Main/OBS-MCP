@@ -80,7 +80,11 @@ impl Fixture {
         } else {
             None
         };
-        network_transport::Owner::with_additional_roots(roots).unwrap()
+        network_transport::Owner::fixture_with_executable(
+            roots,
+            PathBuf::from(env!("CARGO_BIN_EXE_obs-mcp-native")),
+        )
+        .unwrap()
     }
     fn url(&self, ip: bool) -> String {
         format!(
@@ -106,6 +110,7 @@ async fn additive_ca_authenticates_and_reads_with_tls12_tls13_dns_and_ip() {
             Instant::now() + Duration::from_secs(3),
         )
         .await;
+        let establishment_error = format!("{:?}", established.as_ref().err());
         let mut response = None;
         let mut session_join = None;
         if let Ok((session, _events)) = established {
@@ -125,7 +130,10 @@ async fn additive_ca_authenticates_and_reads_with_tls12_tls13_dns_and_ip() {
         let joined = timeout(WAIT, network.shutdown()).await;
         let facts = fixture.finish().await;
         assert!(joined.unwrap().is_ok());
-        assert!(session_join.unwrap().is_ok());
+        assert!(
+            session_join.is_some_and(|join| join.is_ok()),
+            "{mode} establishment failed: {establishment_error}; peer={facts}"
+        );
         assert_eq!(
             response.unwrap().unwrap()["obsVersion"],
             "fixture-native-tls"

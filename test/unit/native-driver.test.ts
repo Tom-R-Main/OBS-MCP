@@ -44,7 +44,7 @@ describe.skipIf(process.platform === "win32")("native driver toolchain selection
     if (script === "build-native.mjs") expect(cargo).toHaveLength(1);
     else {
       for (const kind of ["clippy", "test"]) expect(cargo.some(row => row.args[0] === kind && row.args.includes("--all-features") && !row.args.includes("--manifest-path")), `root ${kind} must exercise optional native owners`).toBe(true);
-      expect(cargo.filter(row=>JSON.stringify(row.args)===JSON.stringify(['test','--locked','--offline','--features','platform-tls-evaluation','--test','tls_ca_contract']))).toHaveLength(1);
+      expect(cargo.filter(row=>JSON.stringify(row.args)===JSON.stringify(['test','--locked','--offline','--features','platform-tls-evaluation,resolver-fixture','--test','tls_ca_contract']))).toHaveLength(1);
       expect(cargo.some(row => row.args[0] === "test" && row.args.includes("resolver-fixture") && row.args.includes("resolver_owner_contract")), "actual owned helper processes need a separate feature-enabled contract gate").toBe(true);
       for (const manifest of ["crates/resolver/Cargo.toml", "crates/platform-tls/Cargo.toml"]) for (const kind of ["fmt", "clippy", "test"]) {
         const matching = cargo.filter(row => row.args[0] === kind && row.args.includes(manifest));

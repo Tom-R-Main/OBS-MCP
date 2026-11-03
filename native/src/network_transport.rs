@@ -115,6 +115,28 @@ impl Owner {
         Self::with_additional_roots(None)
     }
     pub fn with_additional_roots(roots: Option<Vec<Vec<u8>>>) -> io::Result<Self> {
+        Self::with_resolver(
+            roots,
+            obs_mcp_resolver::Owner::new().map_err(io::Error::other)?,
+        )
+    }
+    /// Integration tests run in a libtest executable, which cannot dispatch the
+    /// product's fixed DNS helper. This seam exists only in fixture builds.
+    #[cfg(feature = "resolver-fixture")]
+    pub fn fixture_with_executable(
+        roots: Option<Vec<Vec<u8>>>,
+        executable: std::path::PathBuf,
+    ) -> io::Result<Self> {
+        Self::with_resolver(
+            roots,
+            obs_mcp_resolver::Owner::fixture_with_executable(executable)
+                .map_err(io::Error::other)?,
+        )
+    }
+    fn with_resolver(
+        roots: Option<Vec<Vec<u8>>>,
+        resolver: obs_mcp_resolver::Owner,
+    ) -> io::Result<Self> {
         #[cfg(all(
             feature = "platform-tls-evaluation",
             any(target_os = "macos", target_os = "linux")
@@ -133,9 +155,7 @@ impl Owner {
         }
         Ok(Self {
             custody: Custody {
-                resolver: Arc::new(Mutex::new(
-                    obs_mcp_resolver::Owner::new().map_err(io::Error::other)?,
-                )),
+                resolver: Arc::new(Mutex::new(resolver)),
                 #[cfg(all(
                     feature = "platform-tls-evaluation",
                     any(target_os = "macos", target_os = "linux")
