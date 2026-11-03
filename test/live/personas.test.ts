@@ -111,6 +111,28 @@ function saveImage(result: Result, name: string): string {
   return file;
 }
 
+/** Each output's status tool and the tool that stops it. */
+const OUTPUTS = [
+  ["obs-get-stream-status", "obs-stop-stream"],
+  ["obs-get-record-status", "obs-take-stop"],
+  ["obs-get-replay-buffer-status", "obs-stop-replay-buffer"],
+  ["obs-get-virtual-cam-status", "obs-stop-virtual-cam"],
+] as const;
+
+/**
+ * Stops a test-owned child process and waits for it to exit: SIGTERM, then
+ * SIGKILL after `graceMs`. Throws if it is still running after both.
+ */
+async function stopChild(child: ChildProcess | undefined, graceMs = 3_000): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  const within = (ms: number) => Promise.race([exited.then(() => true), sleep(ms).then(() => false)]);
+  child.kill("SIGTERM");
+  if (await within(graceMs)) return;
+  child.kill("SIGKILL");
+  if (!(await within(graceMs))) throw new Error(`Child process ${child.pid} did not exit after SIGKILL`);
+}
+
 /**
  * Records what each persona changes and puts it back afterwards: outputs,
  * program scene, Studio Mode, recording directory, and its scenes and inputs.
@@ -120,12 +142,18 @@ class Footprint {
   private readonly inputs = new Set<string>();
   private programScene?: string;
   private recordDirectory?: string;
+  /** Outputs already running when the persona began; cleanup leaves them alone. */
+  private readonly preexisting = new Set<string>();
 
   constructor(private readonly session: Session) {}
 
   async begin(): Promise<void> {
     ({ currentProgramSceneName: this.programScene } = await this.session.call("obs-get-current-scene") as { currentProgramSceneName?: string });
     ({ recordDirectory: this.recordDirectory } = await this.session.call("obs-get-record-directory") as { recordDirectory?: string });
+    for (const [status] of OUTPUTS) {
+      const { ok, result } = await this.session.attempt(status);
+      if (ok && result.outputActive === true) this.preexisting.add(status);
+    }
   }
 
   /** Scenes and inputs the persona is about to create; leftovers from an interrupted run are removed first. */
@@ -146,14 +174,13 @@ class Footprint {
       const { ok, text } = await this.session.attempt(name, args);
       if (!ok) failures.push(`${what}: ${text}`);
     };
-    for (const [status, stop] of [
-      ["obs-get-stream-status", "obs-stop-stream"],
-      ["obs-get-record-status", "obs-take-stop"],
-      ["obs-get-replay-buffer-status", "obs-stop-replay-buffer"],
-      ["obs-get-virtual-cam-status", "obs-stop-virtual-cam"],
-    ] as const) {
+    for (const [status, stop] of OUTPUTS) {
+      if (this.preexisting.has(status)) continue;
       const { ok, result } = await this.session.attempt(status);
-      if (ok && result.outputActive === true) await step(`stop (${status})`, stop);
+      if (!ok || result.outputActive !== true) continue;
+      await step(`stop (${status})`, stop);
+      // Stop requests return before OBS finishes; settings restored next depend on it.
+      try { await waitInactive(this.session, status); } catch (error) { failures.push(`${status} still active: ${error instanceof Error ? error.message : String(error)}`); }
     }
     await step("leave Studio Mode", "obs-set-studio-mode", { studioModeEnabled: false });
     if (this.programScene && !this.scenes.has(this.programScene)) await step("restore program scene", "obs-set-current-scene", { sceneName: this.programScene });
@@ -189,15 +216,16 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
     try {
       const { currentSceneCollectionName } = await session.call("obs-get-scene-collection-list");
       expect(currentSceneCollectionName, "Select the disposable persona collection in OBS first").toBe(collection);
-      for (const status of ["obs-get-stream-status", "obs-get-record-status", "obs-get-virtual-cam-status"]) {
-        expect((await session.call(status)).outputActive, `${status}: stop every output first`).toBe(false);
-      }
       const parameter = async (parameterCategory: string, parameterName: string) =>
         (await session.call("obs-get-profile-parameter", { parameterCategory, parameterName })).parameterValue;
       expect(await parameter("Output", "Mode"), "Persona tests expect Simple output mode").toBe("Simple");
       expect(Number(await parameter("SimpleOutput", "RecTracks")) & 0b111, "Record audio tracks 1, 2 and 3, then restart OBS").toBe(0b111);
       expect(await parameter("SimpleOutput", "RecFormat2"), "Chapters need the Hybrid MP4 recording format").toBe("hybrid_mp4");
       expect(await parameter("SimpleOutput", "RecRB"), "Enable the replay buffer, then restart OBS").toBe("true");
+      // Cleanup stops outputs the personas start, so none may be running beforehand.
+      for (const [status] of OUTPUTS) {
+        expect((await session.call(status)).outputActive, `${status}: stop every output first`).toBe(false);
+      }
       const video = await session.call("obs-get-video-settings");
       expect([video.baseWidth, video.baseHeight], "Persona layouts assume a 1920×1080 canvas").toEqual([1920, 1080]);
       outputScale = Number(video.outputWidth) / 1920;
@@ -234,19 +262,20 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
     }, 60_000);
 
     afterAll(async () => {
-      sink?.kill();
-      try {
-        await footprint?.restore();
-        // OBS refuses empty service settings, so an unconfigured service cannot be put back.
-        if (originalService && isObject(originalService.streamServiceSettings) && Object.keys(originalService.streamServiceSettings).length > 0) {
-          await session.call("obs-set-stream-service-settings", {
-            streamServiceType: originalService.streamServiceType,
-            streamServiceSettings: originalService.streamServiceSettings,
-          });
-        }
-      } finally {
-        await session?.close();
+      const failures: unknown[] = [];
+      const run = async (task: () => Promise<unknown>) => { try { await task(); } catch (error) { failures.push(error); } };
+      // restore() waits for the stream to stop; OBS refuses service changes while streaming.
+      await run(() => footprint?.restore());
+      // OBS refuses empty service settings, so an unconfigured service cannot be put back.
+      if (session && originalService && isObject(originalService.streamServiceSettings) && Object.keys(originalService.streamServiceSettings).length > 0) {
+        await run(() => session.call("obs-set-stream-service-settings", {
+          streamServiceType: originalService!.streamServiceType,
+          streamServiceSettings: originalService!.streamServiceSettings,
+        }));
       }
+      await run(() => stopChild(sink));
+      await run(() => session?.close());
+      if (failures.length > 0) throw new AggregateError(failures, "Maya cleanup failed");
     }, 60_000);
 
     it("builds her scenes, goes live, pops an alert, takes a break, and ends the stream", async () => {
@@ -432,19 +461,25 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
         device = spawn("ffmpeg", ["-v", "error", "-y", "-f", "avfoundation", "-framerate", "60", "-video_size", "1920x1080", "-pixel_format", "uyvy422",
           "-i", "OBS Virtual Camera", "-t", "9", "-vf", "scale=480:270", "-c:v", "ffv1", deviceFile], { stdio: "ignore" });
       }
-      const at = clock();
-      await at(3); await session.call("obs-set-current-scene", { sceneName: "Priya · Be Right Back" });
-      const away = await session.call("obs-get-source-screenshot", { sourceName: "Priya · Be Right Back", imageFormat: "png", imageWidth: 480 });
-      expect(colorNear(regionColor(saveImage(away, "priya-away"), 0, { x: 20, y: 20, width: 40, height: 40 }), [48, 48, 48])).toBe(true);
-      await at(6); await session.call("obs-set-current-scene", { sceneName: "Priya · Meeting" });
-      await at(9);
-      if (device) {
-        await vi.waitFor(() => expect(device.exitCode ?? device.signalCode).not.toBeNull(), { timeout: 15_000 });
-        const scale = 480 / 1920;
-        const corner = { x: Math.round(400 * scale), y: 10, width: 20, height: 20 };
-        expect(colorNear(regionColor(deviceFile, 1.5, corner), PERSONA_COLORS.camera)).toBe(true);
-        expect(colorNear(regionColor(deviceFile, 4.5, corner), [48, 48, 48])).toBe(true);
-        expect(colorNear(regionColor(deviceFile, 7.5, corner), PERSONA_COLORS.camera)).toBe(true);
+      try {
+        const at = clock();
+        await at(3); await session.call("obs-set-current-scene", { sceneName: "Priya · Be Right Back" });
+        const away = await session.call("obs-get-source-screenshot", { sourceName: "Priya · Be Right Back", imageFormat: "png", imageWidth: 480 });
+        expect(colorNear(regionColor(saveImage(away, "priya-away"), 0, { x: 20, y: 20, width: 40, height: 40 }), [48, 48, 48])).toBe(true);
+        await at(6); await session.call("obs-set-current-scene", { sceneName: "Priya · Meeting" });
+        await at(9);
+        if (device) {
+          // `-t 9` bounds media time, not wall time: a camera-permission prompt stalls the reader.
+          await vi.waitFor(() => expect(device.exitCode ?? device.signalCode).not.toBeNull(), { timeout: 15_000 });
+          expect(device.exitCode, "the virtual camera reader failed").toBe(0);
+          const scale = 480 / 1920;
+          const corner = { x: Math.round(400 * scale), y: 10, width: 20, height: 20 };
+          expect(colorNear(regionColor(deviceFile, 1.5, corner), PERSONA_COLORS.camera)).toBe(true);
+          expect(colorNear(regionColor(deviceFile, 4.5, corner), [48, 48, 48])).toBe(true);
+          expect(colorNear(regionColor(deviceFile, 7.5, corner), PERSONA_COLORS.camera)).toBe(true);
+        }
+      } finally {
+        await stopChild(device);
       }
       await session.call("obs-stop-virtual-cam");
       await waitInactive(session, "obs-get-virtual-cam-status");
@@ -604,8 +639,11 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
     }, 60_000);
 
     afterAll(async () => {
-      app?.kill();
-      try { await footprint?.restore(); } finally { await session?.close(); }
+      try {
+        await stopChild(app);
+      } finally {
+        try { await footprint?.restore(); } finally { await session?.close(); }
+      }
     }, 60_000);
 
     it("captures only the app window, records a chaptered demo, and trims the dead time", async () => {

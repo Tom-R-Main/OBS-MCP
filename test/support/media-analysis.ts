@@ -90,6 +90,8 @@ export function flashTimes(frames: readonly LumaFrame[], { minGapSeconds = 0.3, 
 export interface SyncMeasurement {
   /** Median of audio onset minus video flash, in seconds. Positive means audio is late. */
   medianOffset: number;
+  /** Largest absolute offset of any pair. A median alone hides pairs that disagree. */
+  worstOffset: number;
   pairs: number;
   spread: number;
 }
@@ -113,5 +115,6 @@ export function measureSync(
   const sorted = [...offsets].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   const medianOffset = sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
-  return { medianOffset, pairs: offsets.length, spread: sorted.at(-1)! - sorted[0]! };
+  const worstOffset = Math.max(...offsets.map(Math.abs));
+  return { medianOffset, worstOffset, pairs: offsets.length, spread: sorted.at(-1)! - sorted[0]! };
 }

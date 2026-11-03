@@ -12,6 +12,7 @@ import {
   generateScenarioFixtures,
   hasMediaTools,
   inspectRecording,
+  syncPulseTimes,
   type ScenarioFixtures,
 } from "../support/scenario-media.js";
 
@@ -44,8 +45,26 @@ describe("scenario signal checks", () => {
   });
 
   it("pairs each flash with its nearest beep and reports the median offset", () => {
-    expect(measureSync([1, 2, 3], [1.02, 2.03, 3.02, 3.5])).toEqual({ medianOffset: expect.closeTo(0.02, 5), pairs: 3, spread: expect.closeTo(0.01, 5) });
+    expect(measureSync([1, 2, 3], [1.02, 2.03, 3.02, 3.5])).toEqual({
+      medianOffset: expect.closeTo(0.02, 5), worstOffset: expect.closeTo(0.03, 5), pairs: 3, spread: expect.closeTo(0.01, 5),
+    });
     expect(measureSync([1, 2], [5])).toBeUndefined();
+  });
+
+  it("reports the worst pair when errors cancel out in the median", () => {
+    // Alternating ±250 ms: the median is zero, but every pair is out of sync.
+    const sync = measureSync([1, 2, 3, 4, 5, 6], [1.25, 1.75, 3.25, 3.75, 5.25, 5.75])!;
+    expect(sync.pairs).toBe(6);
+    expect(sync.medianOffset).toBeCloseTo(0, 5);
+    expect(sync.worstOffset).toBeCloseTo(0.25, 5);
+  });
+
+  it("spaces sync pulses unevenly so a one-pulse slip cannot line up", () => {
+    const times = syncPulseTimes(10);
+    expect(times[0]).toBe(0);
+    const gaps = times.slice(1).map((time, index) => time - times[index]!);
+    expect(Math.min(...gaps)).toBeCloseTo(0.7, 5);
+    expect(Math.max(...gaps) - Math.min(...gaps)).toBeGreaterThan(0.5);
   });
 
 });
@@ -54,11 +73,14 @@ describe.skipIf(!hasMediaTools)("multi-track recording inspection (synthetic med
   let dir: string;
   let fixtures: ScenarioFixtures;
   let shifted: ScenarioFixtures;
+  let slipped: ScenarioFixtures;
 
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), "obs-mcp-scenario-media-"));
     fixtures = generateScenarioFixtures(dir, { seconds: 4 });
     shifted = generateScenarioFixtures(mkdtempSync(join(dir, "shifted-")), { seconds: 4, syncAudioDelayMs: 200 });
+    // About one pulse late: with a beep every second, this would pair each flash with the next beep and read as in sync.
+    slipped = generateScenarioFixtures(mkdtempSync(join(dir, "slipped-")), { seconds: 4, syncAudioDelayMs: 1000 });
   });
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -92,11 +114,18 @@ describe.skipIf(!hasMediaTools)("multi-track recording inspection (synthetic med
     expect(report.flashes).toBeGreaterThanOrEqual(2);
     expect(report.sync?.pairs).toBeGreaterThanOrEqual(2);
     expect(Math.abs(report.sync!.medianOffset)).toBeLessThan(0.035);
+    expect(report.sync!.worstOffset).toBeLessThan(0.035);
   });
 
   it("detects a known 200 ms audio delay in MKV as well", () => {
     const report = inspectRecording(muxTracks(shifted, "late", "mkv"));
     expect(report.formatName).toMatch(/matroska/);
     expect(report.sync!.medianOffset).toBeCloseTo(0.2, 1);
+  });
+
+  it("flags audio that slipped by about one pulse, even where the median looks in sync", () => {
+    const report = inspectRecording(muxTracks(slipped, "slipped"));
+    expect(report.sync?.pairs).toBeGreaterThanOrEqual(2);
+    expect(report.sync!.worstOffset).toBeGreaterThan(0.15);
   });
 });

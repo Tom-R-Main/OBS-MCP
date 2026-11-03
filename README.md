@@ -384,7 +384,7 @@ Add `OBS_MCP_LIVE_RECORD=1` to the mutation command to also record a one-second 
 
 #### Scenario tests
 
-Scenario tests build a real use case through MCP tools, record it, and check the file with `ffmpeg` and `ffprobe` instead of trusting what OBS reports. They need both tools on `PATH`, a disposable scene collection, and stopped outputs. The first scenario checks multi-track recording for editing: two tones stand in for a microphone and a game on tracks 2 and 3, and a flash-and-beep clip on track 1 measures audio/video sync. It fails if a track carries the wrong source or if sync is off by more than 100 ms. Correcting sync with an audio sync offset is not covered yet: on OBS 32.2.2, changing the offset on a playing media source did not move the recorded audio by the requested amount.
+Scenario tests build a real use case through MCP tools, record it, and check the file with `ffmpeg` and `ffprobe` instead of trusting what OBS reports. They need both tools on `PATH`, a disposable scene collection, and stopped outputs. The first scenario checks multi-track recording for editing: two tones stand in for a microphone and a game on tracks 2 and 3, and a flash-and-beep clip on track 1 measures audio/video sync. It fails if a track carries the wrong source or if any flash and its beep are more than 100 ms apart. The pulses are unevenly spaced, so a beep matched to the wrong flash shows up as an error. Correcting sync with an audio sync offset is not covered yet: on OBS 32.2.2, changing the offset on a playing media source did not move the recorded audio by the requested amount.
 
 Set the profile used with the disposable collection to record audio tracks 1, 2 and 3 (Settings > Output > Recording), restart OBS, then run:
 

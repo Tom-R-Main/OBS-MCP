@@ -249,6 +249,7 @@ describe.skipIf(!enabled)(`OBS use-case scenarios (${serverKind} server)`, () =>
       expect(syncTrack!.levels[GAME_TONE_HZ], evidence).toBeLessThan(ABSENT_DB);
       expect(report.sync?.pairs ?? 0, evidence).toBeGreaterThanOrEqual(3);
       expect(Math.abs(report.sync!.medianOffset), evidence).toBeLessThanOrEqual(MAX_BASELINE_OFFSET_S);
+      expect(report.sync!.worstOffset, evidence).toBeLessThanOrEqual(MAX_BASELINE_OFFSET_S);
     }, 60_000);
   });
 });

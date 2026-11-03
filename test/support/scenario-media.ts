@@ -31,8 +31,24 @@ function ffmpeg(args: string[]): void {
 }
 
 /**
+ * Gaps between sync pulses, in seconds. They are uneven so that a beep paired
+ * with the wrong flash gives a large error at some pulse instead of reading
+ * as in sync, as it would with a pulse every second.
+ */
+const SYNC_PULSE_GAPS = [0.7, 1.2, 0.9, 1.4, 0.8, 1.1, 1.3, 1.0];
+
+/** Start times of the sync clip's pulses, on 0.1 s steps so each lands on a 30 fps frame. */
+export function syncPulseTimes(seconds: number): number[] {
+  const times: number[] = [];
+  for (let time = 0, gap = 0; time < seconds - 0.1; time = Math.round((time + SYNC_PULSE_GAPS[gap++ % SYNC_PULSE_GAPS.length]!) * 10) / 10) {
+    times.push(time);
+  }
+  return times;
+}
+
+/**
  * Writes the fixtures into `dir`. The sync clip shows a white frame pair and
- * plays a 60 ms 1 kHz beep at the start of every second; otherwise it is black
+ * plays a 60 ms 1 kHz beep at each of `syncPulseTimes`; otherwise it is black
  * and silent. `syncAudioDelayMs` shifts its beeps, to build known-bad inputs.
  */
 export function generateScenarioFixtures(dir: string, { seconds = 10, syncAudioDelayMs = 0 } = {}): ScenarioFixtures {
@@ -42,12 +58,14 @@ export function generateScenarioFixtures(dir: string, { seconds = 10, syncAudioD
   for (const [file, frequency] of [[micTone, MIC_TONE_HZ], [gameTone, GAME_TONE_HZ]] as const) {
     ffmpeg(["-f", "lavfi", "-i", `sine=frequency=${frequency}:sample_rate=48000:duration=${seconds}`, "-af", "volume=4", "-c:a", "pcm_s16le", file]);
   }
+  const pulses = syncPulseTimes(seconds);
   const delay = syncAudioDelayMs / 1000;
+  const flashes = pulses.map((time) => Math.round(time * 30)).map((frame) => `between(N,${frame},${frame + 1})`).join("+");
+  const beeps = pulses.map((time) => time + delay).map((start) => `between(t,${start.toFixed(3)},${(start + 0.06).toFixed(3)})`).join("+");
   ffmpeg([
     "-f", "lavfi", "-i", `color=black:s=320x180:r=30:d=${seconds}`,
-    "-f", "lavfi", "-i",
-    `aevalsrc='0.5*sin(2*PI*${SYNC_BEEP_HZ}*t)*lt(mod(t-${delay},1),0.06)*gte(t,${delay})':s=48000:d=${seconds}`,
-    "-filter_complex", "[0:v]geq=lum='if(lt(mod(N,30),2),235,16)':cb=128:cr=128,format=yuv420p[v]",
+    "-f", "lavfi", "-i", `aevalsrc='0.5*sin(2*PI*${SYNC_BEEP_HZ}*t)*(${beeps})':s=48000:d=${seconds}`,
+    "-filter_complex", `[0:v]geq=lum='if(${flashes},235,16)':cb=128:cr=128,format=yuv420p[v]`,
     "-map", "[v]", "-map", "1:a",
     "-c:v", "mpeg4", "-q:v", "2", "-g", "30",
     "-c:a", "pcm_s16le",
