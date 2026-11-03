@@ -421,7 +421,7 @@ Restart OBS after changing the profile.
 **Requirements.**
 
 - `ffmpeg` and `ffprobe` must be on `PATH`.
-- The product-demo persona needs Python with `tkinter`, and Screen Recording permission for OBS.
+- The product-demo persona runs on macOS only. It needs Python with `tkinter`, and Screen Recording permission for OBS.
 - `OBS_MCP_LIVE_VCAM_FRAMES=1` also reads frames from the OBS Virtual Camera device. That needs camera permission for the process running the tests.
 
 ```bash

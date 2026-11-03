@@ -32,6 +32,8 @@ const collection = process.env.OBS_MCP_LIVE_SCENE_COLLECTION ?? "";
 const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
 const nativeBin = process.env.OBS_MCP_LIVE_NATIVE_BIN ?? join(projectRoot, "native/target/release/obs-mcp-native");
 const hasTkinter = !spawnSync("python3", ["-c", "import tkinter"]).error && spawnSync("python3", ["-c", "import tkinter"]).status === 0;
+/** Sam's journey creates a macOS `screen_capture` input; X11 and PipeWire capture are not covered yet. */
+const canRunProductDemo = process.platform === "darwin" && hasTkinter;
 /** Reading frames from the OBS Virtual Camera device needs camera permission for the test runner. */
 const readVirtualCamera = process.env.OBS_MCP_LIVE_VCAM_FRAMES === "1";
 
@@ -620,7 +622,7 @@ describe.skipIf(!enabled)("personas reach their goals on a real OBS (native Prod
    * window in the shot and no stray audio, a chapter per feature, the
    * loading and idle time cut out, and a contact sheet to check the edit.
    */
-  describe.skipIf(!hasTkinter)("Sam, a founder recording a product demo", () => {
+  describe.skipIf(!canRunProductDemo)("Sam, a founder recording a product demo", () => {
     let session: Session;
     let footprint: Footprint;
     let recordingRoot: string;

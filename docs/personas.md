@@ -175,7 +175,7 @@ Sam records a walkthrough of her web app for a launch page.
 - The chapters are in the file.
 - The trimmed copy is at least 5 seconds shorter, keeps all three chapters, and shows the app's final screen after the last chapter.
 
-A small Tk app (`test/support/demo-app.py`) stands in for the product. The test is skipped when Python's `tkinter` is unavailable.
+A small Tk app (`test/support/demo-app.py`) stands in for the product. The test runs only on macOS, because it creates a macOS window capture (`screen_capture`), and is skipped when Python's `tkinter` is unavailable.
 
 ## Gaps found while building these journeys
 
