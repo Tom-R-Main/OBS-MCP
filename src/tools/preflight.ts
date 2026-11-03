@@ -208,9 +208,10 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean, req
   // One round trip for every input's mute state, tracks and activity.
   // Video-only inputs fail the audio requests, which the batch reports
   // without failing the rest.
-  // Activity is optional evidence: an OBS that does not advertise it keeps
-  // every input counted, exactly as before activity was read.
-  const readsActivity = client.supportsRequest("GetSourceActive") === true && client.supportsRequest("GetSpecialInputs") === true;
+  // Activity is optional evidence: an OBS known not to offer it keeps every
+  // input counted, exactly as before activity was read. Unknown capabilities
+  // still try; a failed activity read leaves that input counted.
+  const readsActivity = client.supportsRequest("GetSourceActive") !== false && client.supportsRequest("GetSpecialInputs") !== false;
   const stride = readsActivity ? 3 : 2;
   const results = await client.sendBatch(names.flatMap((inputName) => [
     { requestType: "GetInputMute", requestData: { inputName } },

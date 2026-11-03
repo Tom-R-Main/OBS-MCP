@@ -66,6 +66,7 @@ const client={
   async connect(){trace.push({kind:'connect'});if(input.connectError)throw Error(input.connectError);},
   getConnectionStatus(){return {url:input.url,versionInfo:{platform:input.platform}}},
   hasPendingOutputSettings(){return input.pending===true},
+  supportsRequest(){return input.readsActivity===true},
   async sendRequest(type,data){trace.push({kind:'read',request:type,data:data??null});return reply(type,data);},
   async sendBatch(calls){
     trace.push({kind:'batch',calls:calls.map(call=>({request:call.requestType,data:call.requestData}))});

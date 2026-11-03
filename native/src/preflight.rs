@@ -115,8 +115,8 @@ pub struct ConnectionContext {
     pub hostname: Option<String>,
     pub platform: Option<String>,
     pub pending_output_settings: bool,
-    /// OBS advertises both GetSourceActive and GetSpecialInputs. Without them
-    /// the audio check counts every input, as it did before reading activity.
+    /// OBS is not known to lack GetSourceActive or GetSpecialInputs. When it
+    /// does, the audio check counts every input, as before activity was read.
     pub reads_activity: bool,
 }
 impl ConnectionContext {
@@ -597,7 +597,11 @@ async fn audio(
                     && result.response_data.is_object()
                     && result.response_data.get("videoActive") == Some(&Value::Bool(false))
             });
-        if inactive && global.as_ref().is_some_and(|global| !global.contains(*name)) {
+        if inactive
+            && global
+                .as_ref()
+                .is_some_and(|global| !global.contains(*name))
+        {
             off_program.push(*name);
             continue;
         }
@@ -613,7 +617,9 @@ async fn audio(
             check(
                 "audio",
                 Status::Pass,
-                format!("No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured.{excluded}"),
+                format!(
+                    "No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured.{excluded}"
+                ),
             )
         } else {
             check(

@@ -376,7 +376,9 @@ impl Adapter for Scope {
             hostname: Some(self.hostname.clone()),
             platform: self.platform.clone(),
             pending_output_settings: self.pending.load(Ordering::Acquire),
-            reads_activity: self.capabilities.as_ref().is_some_and(|known| {
+            // Unknown capabilities still try, as other reads do; a failed
+            // activity read leaves that input counted.
+            reads_activity: self.capabilities.as_ref().is_none_or(|known| {
                 known.contains("GetSourceActive") && known.contains("GetSpecialInputs")
             }),
         }

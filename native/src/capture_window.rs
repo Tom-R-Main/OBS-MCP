@@ -791,14 +791,13 @@ pub fn discover(
             Err(_) => {}
         }
     }
-    let (inventory, settings, properties) =
-        inventory.ok_or_else(|| {
-            Failure::direct(if kind == Kind::ScreenCapture {
-                NO_INVENTORY_MAC
-            } else {
-                NO_INVENTORY_X11
-            })
-        })?;
+    let (inventory, settings, properties) = inventory.ok_or_else(|| {
+        Failure::direct(if kind == Kind::ScreenCapture {
+            NO_INVENTORY_MAC
+        } else {
+            NO_INVENTORY_X11
+        })
+    })?;
     let selected = properties
         .map(|properties| select(&request, kind, properties))
         .transpose()?;

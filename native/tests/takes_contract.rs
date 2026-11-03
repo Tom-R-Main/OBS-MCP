@@ -665,6 +665,8 @@ class Client extends EventEmitter {
  async connect(){}
  getConnectionStatus(){return {url:input.local?'ws://localhost:4455':'ws://remote.example:4455',generation:7,versionInfo:{platform:'macos',supportedImageFormats:['png']}}}
  hasPendingOutputSettings(){return false}
+ // Matches the native fixture, which advertises no activity reads.
+ supportsRequest(){return false}
  subscribeHighVolume(){subscriptions++;return ()=>{subscriptions--;}}
  async sendBatch(){return []}
  async sendRequest(type,data){
