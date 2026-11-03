@@ -664,6 +664,7 @@ mod tests {
             clock: support::clock(),
             preparation: Some(PreparationOwners::new(&dir.0).unwrap()),
             media: None,
+            replay: None,
             media_work: None,
             screenshot_limit: Ok(ScreenshotLimit::default()),
             confirm_live: false,
@@ -1693,7 +1694,7 @@ mod tests {
             use tokio::io::AsyncBufReadExt;
             use futures_util::Stream;
             let root=std::path::PathBuf::from(std::env::var_os("NATIVE_HTTP_BRIDGE_STATE").unwrap());
-            let runtime=Runtime{profile:obs_mcp_native::native_profile::NativeProfile::Production,notifications:Owner::new(false),owner:None,initialization:None,initialization_broken:false,network:None, tls_ca:None,url:std::env::var("NATIVE_HTTP_BRIDGE_OBS").unwrap(),password:None,root:root.clone(),host:None,control:Arc::new(Mutex::new(ControlDomain::default())),clock:super::super::admitted_clock(obs_mcp_native::clock::snapshot).unwrap(),preparation:Some(PreparationOwners::new(&root).unwrap()),media:None,media_work:None,screenshot_limit:Ok(ScreenshotLimit::default()),confirm_live:std::env::var("NATIVE_HTTP_BRIDGE_CONFIRM").as_deref()==Ok("1")};
+            let runtime=Runtime{profile:obs_mcp_native::native_profile::NativeProfile::Production,notifications:Owner::new(false),owner:None,initialization:None,initialization_broken:false,network:None, tls_ca:None,url:std::env::var("NATIVE_HTTP_BRIDGE_OBS").unwrap(),password:None,root:root.clone(),host:None,control:Arc::new(Mutex::new(ControlDomain::default())),clock:super::super::admitted_clock(obs_mcp_native::clock::snapshot).unwrap(),preparation:Some(PreparationOwners::new(&root).unwrap()),media:None,replay:None,media_work:None,screenshot_limit:Ok(ScreenshotLimit::default()),confirm_live:std::env::var("NATIVE_HTTP_BRIDGE_CONFIRM").as_deref()==Ok("1")};
             let mut bridge=Bridge::new(runtime,ToolFilter::parse(|name|(name=="OBS_MCP_TOOLSETS").then(||"all".into()),crate::schema::catalog()).unwrap(),Policy::new(None)).unwrap();
             let mut clients=HashMap::<u64,ClientResponse>::new();let mut lines=tokio::io::BufReader::new(tokio::io::stdin()).lines();
             fn send(value:Value){use std::io::Write;let mut out=std::io::stdout().lock();out.write_all(b"HTTP_BRIDGE_PROBE ").unwrap();serde_json::to_writer(&mut out,&value).unwrap();out.write_all(b"\n").unwrap();out.flush().unwrap();}

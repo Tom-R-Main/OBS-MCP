@@ -18,6 +18,7 @@ import * as filters from "./filters.js";
 import * as inputs from "./inputs.js";
 import * as mediaInputs from "./media-inputs.js";
 import * as outputs from "./outputs.js";
+import * as replay from "./replay.js";
 import * as record from "./record.js";
 import * as ui from "./ui.js";
 import * as protocolExtensions from "./protocol-extensions.js";
@@ -55,6 +56,7 @@ const MODULES: ReadonlyArray<[ToolGroup, { initialize(server: McpServer, client:
   ["inputs", inputs],
   ["media", mediaInputs],
   ["outputs", outputs],
+  ["outputs", replay],
   ["record", record],
   ["ui", ui],
   ["protocol", protocolExtensions], // Regrouped per tool in toolsets.ts.

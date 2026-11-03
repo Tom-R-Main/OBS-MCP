@@ -184,6 +184,7 @@ pub struct Options {
     pub state_root: Option<PathBuf>,
     pub preparation: Option<PreparationOwners>,
     pub media: Option<Arc<media_tools::Config>>,
+    pub replay: Option<Arc<crate::replay_files::Verifier>>,
     pub read_tools_host: Option<Arc<crate::take_transport::LocalHost>>,
 }
 impl Default for Options {
@@ -198,6 +199,7 @@ impl Default for Options {
             state_root: None,
             preparation: None,
             media: None,
+            replay: None,
             read_tools_host: None,
         }
     }
@@ -358,6 +360,13 @@ enum Command {
     Read(ReadRequest, Value, Duration, ReadReply),
     Workflow(WorkflowCall, Cancellation, Reply),
     Media(media_tools::Request, MediaCancellation, Reply),
+    Replay(
+        crate::replay_save::Request,
+        String,
+        Cancellation,
+        Instant,
+        Reply,
+    ),
     ReadTool(
         ReadToolRequest,
         Result<ScreenshotLimit, ObservationError>,
@@ -379,6 +388,7 @@ impl Command {
                 | Self::Take(..)
                 | Self::Clip(..)
                 | Self::Media(..)
+                | Self::Replay(..)
         )
     }
 }
@@ -446,6 +456,7 @@ enum Completion {
         reply: Reply,
     },
     Generic(Reply, Value),
+    Replay(Reply, crate::replay_save::Outcome),
     RestorePlanned {
         owners: Box<PreparationOwners>,
         call: Box<RestoreCall>,
@@ -535,10 +546,30 @@ impl Service {
     }
     pub fn spawn_bootstrapped(
         bootstrap: BootstrappedResources,
-        options: Options,
+        mut options: Options,
         profile: crate::native_profile::NativeProfile,
     ) -> Result<Self, (ServiceError, Box<Resources>)> {
         let BootstrappedResources { resources, version } = bootstrap;
+        // A Production Stream session may reconnect for diagnosis/explicit
+        // controls without constructing any guarded adapter. The per-command
+        // receipt guard still refuses Stage, Take, recovery and media work.
+        // Advanced/plugin history retains its stronger connection barrier.
+        if profile == crate::native_profile::NativeProfile::Production
+            && matches!(
+                resources.store.read_view().guarded_reentry_allowed(),
+                Ok(false)
+            )
+            && matches!(
+                resources.store.read_view().production_connection_allowed(),
+                Ok(true)
+            )
+        {
+            options.take = None;
+            options.preparation = None;
+            options.media = None;
+            options.replay = None;
+            options.read_tools_host = None;
+        }
         Self::spawn_cached(resources, options, profile, Some(version))
     }
     fn spawn_cached(
@@ -549,6 +580,7 @@ impl Service {
     ) -> Result<Self, (ServiceError, Box<Resources>)> {
         let guarded_binding = options.take.is_some()
             || options.media.is_some()
+            || options.replay.is_some()
             || options.preparation.is_some()
             || options.read_tools_host.is_some();
         if profile == crate::native_profile::NativeProfile::Advanced && guarded_binding {
@@ -871,6 +903,19 @@ impl ServiceHandle {
         })
         .await
     }
+    pub async fn save_replay_verified(
+        &self,
+        request: crate::replay_save::Request,
+        caller: String,
+        cancel: Cancellation,
+        admitted: Instant,
+    ) -> Result<Value, ServiceError> {
+        if admitted > Instant::now() {
+            return Err(ServiceError::Binding);
+        }
+        self.call(|reply| Command::Replay(request, caller, cancel, admitted, reply))
+            .await
+    }
     pub async fn recording_media(
         &self,
         args: media_tools::Request,
@@ -1128,7 +1173,7 @@ async fn run(
     let mut safety_waiting_bytes = 0usize;
     let mut observations: JoinSet<ReadCompletion> = JoinSet::new();
     let mut snapshot_jobs: JoinSet<(u64, Box<PreparationOwners>, Reply, Value)> = JoinSet::new();
-    let mut media_jobs: JoinSet<(u64, Reply, Value)> = JoinSet::new();
+    let mut media_jobs: JoinSet<(u64, Reply, Value, bool)> = JoinSet::new();
     let mut media_cancel = HashMap::<u64, MediaCancellation>::new();
     let mut workflow_cancel = HashMap::<u64, Cancellation>::new();
     let mut clip_cancel = HashMap::<u64, Cancellation>::new();
@@ -1223,7 +1268,7 @@ async fn run(
                 match result {Some(Ok((id,owners,reply,result)))=>{workflow_cancel.remove(&id);preparation=Some(*owners);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
             },
             result=media_jobs.join_next(),if !media_jobs.is_empty()=>{
-                match result {Some(Ok((id,reply,result)))=>{media_cancel.remove(&id);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
+                match result {Some(Ok((id,reply,result,cleanup_unconfirmed)))=>{media_cancel.remove(&id);broken|=cleanup_unconfirmed;workers_joined&=!cleanup_unconfirmed;let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
             },
             result=observations.join_next(),if !observations.is_empty()=>{
                 match result {Some(Ok(ReadCompletion::Observe(reply,report)))=>{let _=reply.send(Ok(report));},Some(Ok(ReadCompletion::Read(reply,result)))=>{let _=reply.send(result);},Some(Ok(ReadCompletion::TakeResource(reply,result)))=>{let _=reply.send(result);},Some(Ok(ReadCompletion::Workflow(id,reply,result)))=>{workflow_cancel.remove(&id);let _=reply.send(Ok(result));},_=>{workers_joined=false;broken=true;}}
@@ -1231,6 +1276,7 @@ async fn run(
             value=jobs.join_next(),if !jobs.is_empty()=>{
                 match value {
                     Some(Ok(Completion::Generic(reply,result)))=>{active_cancel=None;let _=reply.send(Ok(result));},
+                    Some(Ok(Completion::Replay(reply,outcome)))=>{active_cancel=None;broken|=outcome.cleanup_unconfirmed;workers_joined&=!outcome.cleanup_unconfirmed;let _=reply.send(Ok(outcome.result));},
                     Some(Ok(Completion::CaptureWindowPlanned{owners,call,planned,reply}))=>{
                         match planned {
                             capture_window_workflow::Planned::Finished(result)=>{preparation=Some(*owners);active_cancel=None;let _=reply.send(Ok(result));},
@@ -1443,6 +1489,17 @@ async fn run(
                             ReadCompletion::Workflow(id,reply,result)
                         });
                     },
+                    Command::Replay(request,caller,cancel,admitted,reply)=>{
+                        if broken||uncertainty(&broker){let _=reply.send(Err(ServiceError::Uncertain));continue;}
+                        if borrower.is_some()||take_initializing||!jobs.is_empty()||!safety_jobs.is_empty()||!media_jobs.is_empty()||!waiting_safety.is_empty(){let _=reply.send(Err(ServiceError::Busy));continue;}
+                        let Some(verifier)=options.replay.clone()else{let _=reply.send(Err(ServiceError::Unsupported));continue;};
+                        let supported=version.lock().unwrap().as_ref().and_then(|v|v.as_ref()).and_then(|v|v["availableRequests"].as_array()).is_some_and(|rows|["SaveReplayBuffer","GetReplayBufferStatus","GetLastReplayBufferReplay"].iter().all(|name|rows.iter().any(|row|row.as_str()==Some(name))));
+                        if !supported{let _=reply.send(Err(ServiceError::Unsupported));continue;}
+                        let events=match bridge.replay_events(){Ok(events)=>events,Err(_)=>{let _=reply.send(Err(ServiceError::Binding));continue;}};
+                        let writer=match broker.scope(ScopeKind::Generic(crate::operation_store::GenericKind::SaveReplayBuffer)){Ok(writer)=>writer,Err(_)=>{let _=reply.send(Err(ServiceError::Uncertain));continue;}};
+                        let physical=physical.clone();let control=control.clone();let clock=clock.clone();let id=(identities.lock().unwrap())();active_cancel=Some(cancel.clone());
+                        jobs.spawn(async move{Completion::Replay(reply,crate::replay_save::execute(writer,request,physical,events,verifier,control,clock,caller,cancel,id,admitted).await)});
+                    },
                     Command::Media(request,cancel,reply)=>{
                         let Some(id)=next_job.checked_add(1) else {let _=reply.send(Err(ServiceError::Capacity));continue;};
                         if media_jobs.len()>=2 {let _=reply.send(Err(ServiceError::Capacity));continue;}
@@ -1452,8 +1509,8 @@ async fn run(
                         let Some(config)=options.media.clone() else {let _=reply.send(Err(ServiceError::Unsupported));continue;};next_job=id;
                         media_cancel.insert(id,cancel.clone());let provider=Arc::new(ServiceRecordingDirectory {reader:bridge.reader()});
                         media_jobs.spawn(async move {
-                            let result=match media_tools::Operation::new((*config).clone(),provider,request,cancel) {Ok(mut operation)=>operation.finish().await,Err(error)=>json!({"content":[{"type":"text","text":format!("Recording media unavailable: {error}")}],"isError":true})};
-                            (id,reply,result)
+                            let (result,cleanup_unconfirmed)=match media_tools::Operation::new((*config).clone(),provider,request,cancel) {Ok(mut operation)=>{let result=operation.finish().await;(result,operation.cleanup_unconfirmed())},Err(error)=>{let cleanup_unconfirmed=error.cleanup_issue.is_some();(json!({"content":[{"type":"text","text":format!("Recording media unavailable: {error}")}],"isError":true}),cleanup_unconfirmed)}};
+                            (id,reply,result,cleanup_unconfirmed)
                         });
                     },
                     Command::Read(request,data,duration,reply)=>{

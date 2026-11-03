@@ -280,6 +280,9 @@ impl ObservationBridge {
     ) -> Result<crate::output_events::OutputEvents, crate::output_events::OutputEventError> {
         self.event_hub.output_events(self.handle.clone())
     }
+    pub fn replay_events(&self) -> Result<crate::replay_events::ReplayEvents, String> {
+        self.event_hub.replay_events(self.handle.clone())
+    }
 
     /// One take consumer shares this observer and the socket's existing event
     /// byte/item permits. Its owner must outlive the take supervisor's workers.

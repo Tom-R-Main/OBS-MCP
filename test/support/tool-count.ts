@@ -5,15 +5,15 @@
  */
 
 /** Number of tools the server registers with no tool filtering configured. */
-export const TOOL_COUNT = 178;
+export const TOOL_COUNT = 179;
 
 /** Declared union across opt-in feature configurations; not one host inventory. */
-export const NATIVE_STATEFUL_DECLARED_TOOL_COUNT = 178;
+export const NATIVE_STATEFUL_DECLARED_TOOL_COUNT = 179;
 
-/** Production all-host inventory: union178 minus fourteen advanced/Stream names.
+/** Production all-host inventory: union179 minus fourteen advanced/Stream names.
  * Stream callbacks may trigger OBS automatic recording and remain separate from
  * immutable Take/media ownership. Independent of runtime catalog metadata. */
-export const NATIVE_STATEFUL_TOOL_COUNT = 164;
+export const NATIVE_STATEFUL_TOOL_COUNT = 165;
 
 /** Deferred Source names with all host adapters enabled; independent of metadata. */
 export const NATIVE_STATEFUL_DEFERRED_TOOL_NAMES = [
@@ -33,5 +33,5 @@ export const NATIVE_STATEFUL_DEFERRED_TOOL_NAMES = [
   "obs-batch"
 ] as const;
 
-/** Advanced profile excludes fifteen guarded workflows from the native union. */
+/** Advanced profile excludes sixteen guarded workflows from the native union. */
 export const NATIVE_ADVANCED_TOOL_COUNT = 163;

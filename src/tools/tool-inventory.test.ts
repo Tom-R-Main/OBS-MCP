@@ -13,7 +13,7 @@ import { initialize } from "./index.js";
 // docs/protocol.json) cannot silently rename tools or change their arguments.
 // Tools that end a broadcast, finalize a recording, or cut off consumers of an
 // output must be marked destructive so clients can ask before calling them.
-const DESTRUCTIVE_NAME = /^obs-(remove-.+|take-stop|restore|stop-(stream|record|output|virtual-cam|replay-buffer)|toggle-(stream|record|output|virtual-cam|replay-buffer))$/;
+const DESTRUCTIVE_NAME = /^obs-(remove-.+|take-stop|restore|save-replay-verified|stop-(stream|record|output|virtual-cam|replay-buffer)|toggle-(stream|record|output|virtual-cam|replay-buffer))$/;
 
 describe("tool contract snapshot", () => {
   it("keeps tool names, input and output schemas, and annotations stable", async () => {

@@ -665,7 +665,9 @@ impl Call {
             ),
             K::InputVolume => format!("Successfully set volume for input: {}", s("inputName")),
             K::StreamCaption => "Successfully sent stream caption".into(),
-            K::SaveReplayBuffer => "Replay buffer saved".into(),
+            K::SaveReplayBuffer => {
+                "Replay buffer save requested; file completion has not been observed".into()
+            }
             K::InputMute => format!(
                 "Successfully {} input: {}",
                 if self.arguments["inputMuted"] == true {
@@ -877,6 +879,37 @@ pub async fn execute_with_pending(
 }
 #[allow(clippy::too_many_arguments)]
 pub async fn execute_with_services(
+    store: OperationStore,
+    call: Call,
+    session: SessionHandle,
+    control: SharedControl,
+    clock: Clock,
+    caller: String,
+    cancel: Cancellation,
+    id: String,
+    timeout: Duration,
+    admitted_at: Instant,
+    services: GenericServices,
+) -> Value {
+    execute_with_dispatch_hook(
+        store,
+        call,
+        session,
+        control,
+        clock,
+        caller,
+        cancel,
+        id,
+        timeout,
+        admitted_at,
+        services,
+        None,
+    )
+    .await
+}
+pub(crate) type DispatchObservation = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn execute_with_dispatch_hook(
     mut store: OperationStore,
     call: Call,
     session: SessionHandle,
@@ -888,6 +921,7 @@ pub async fn execute_with_services(
     timeout: Duration,
     admitted_at: Instant,
     services: GenericServices,
+    observation: Option<DispatchObservation>,
 ) -> Value {
     if call.is_opaque() {
         let capabilities = services.readback.and_then(|readback| readback.capabilities);
@@ -1029,6 +1063,9 @@ pub async fn execute_with_services(
             |fence| !fence.permits(&own).unwrap_or(false),
         ) {
             return Err("Unresolved receipt custody prevents dispatch".into());
+        }
+        if let Some(observation) = &observation {
+            observation()?;
         }
         Ok(())
     };

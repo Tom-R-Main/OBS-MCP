@@ -59,7 +59,7 @@ HTTP clients share one retained service and OBS connection. Static tool groups a
 
 ## Profiles and media prerequisites
 
-The profile is immutable after startup. Production is the default and exposes up to 164 ordinary tools with all approved host/media adapters. Advanced exposes 163 ordinary tools and does not construct guarded Take, media, Stage or recovery owners. Their union contains 178 ordinary tool names; stdio dynamic mode can add three group controllers. Filters, read-only mode and missing adapters narrow discovery. See [native profiles](native-profiles.md) for the persistent barriers around advanced effects and guarded reentry.
+The profile is immutable after startup. Production is the default and exposes up to 165 ordinary tools with all approved host/media adapters. Advanced exposes 163 ordinary tools and does not construct guarded Take, media, Stage or recovery owners. Their union contains 179 ordinary tool names; stdio dynamic mode can add three group controllers. Filters, read-only mode and missing adapters narrow discovery. See [native profiles](native-profiles.md) for the persistent barriers around advanced effects and guarded reentry.
 
 Production Take, Clip and file workflows require an existing approved recording directory through `OBS_MCP_NATIVE_RECORDING_ROOT`. Media inspection and editing also need trusted existing FFmpeg and ffprobe executables, selected with `OBS_MCP_NATIVE_FFMPEG` and `OBS_MCP_NATIVE_FFPROBE` or PATH. The package installs neither program. A directory or executable binding grants no recording, file or recovery authority; operation-specific preflight and user permission remain necessary.
 

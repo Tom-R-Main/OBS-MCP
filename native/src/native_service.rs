@@ -226,6 +226,7 @@ fn handler(name: &str, takes: bool, media: bool) -> Option<&'static str> {
         "obs-stage-scene" => "stage-scene",
         "obs-take-scene" => "take-scene",
         "obs-record-clip" if takes => "record-clip",
+        "obs-save-replay-verified" if media => "save-replay-verified",
         "obs-take-start" if takes => "take-start",
         "obs-take-stop" if takes => "take-stop",
         "obs-take-mark" if takes => "take-mark",
@@ -380,6 +381,7 @@ struct Runtime {
     clock: Clock,
     preparation: Option<PreparationOwners>,
     media: Option<Arc<media_tools::Config>>,
+    replay: Option<Arc<obs_mcp_native::replay_files::Verifier>>,
     media_work: Option<MediaWork>,
     screenshot_limit: Result<ScreenshotLimit, obs_mcp_native::observation::ObservationError>,
     confirm_live: bool,
@@ -470,6 +472,25 @@ impl Runtime {
         } else {
             (None, None)
         };
+        let replay = match (
+            &media_work,
+            std::env::var_os("OBS_MCP_NATIVE_RECORDING_ROOT"),
+            tool_path("OBS_MCP_NATIVE_FFMPEG", "ffmpeg"),
+            tool_path("OBS_MCP_NATIVE_FFPROBE", "ffprobe"),
+        ) {
+            (Some(work), Some(recording), Some(ffmpeg), Some(ffprobe)) => Some(Arc::new(
+                obs_mcp_native::replay_files::Verifier::new(
+                    &PathBuf::from(recording),
+                    &ffmpeg,
+                    &ffprobe,
+                    &work.path,
+                )
+                .map_err(|_| {
+                    io::Error::other("Replay verification configuration is unavailable")
+                })?,
+            )),
+            _ => None,
+        };
         Ok(Self {
             profile,
             notifications: obs_mcp_native::resource_events::Owner::new(dynamic_requested),
@@ -486,6 +507,7 @@ impl Runtime {
             clock,
             preparation,
             media,
+            replay,
             media_work,
             confirm_live: enabled("OBS_MCP_CONFIRM_LIVE"),
             screenshot_limit: ScreenshotLimit::parse(
@@ -495,7 +517,7 @@ impl Runtime {
             ),
         })
     }
-    fn service_source(&mut self) -> ServiceSource {
+    fn service_source(&mut self, guarded: bool) -> ServiceSource {
         if let Some(attempt) = &self.initialization {
             return ServiceSource::Waiting(attempt.receiver());
         }
@@ -520,9 +542,15 @@ impl Runtime {
         if self.profile == NativeProfile::Production {
             match store.read_view().guarded_reentry_allowed() {
                 Ok(true) => {}
-                Ok(false) => {
-                    return ServiceSource::Ready(Err(service_error(ServiceError::Profile)));
-                }
+                Ok(false) => match store.read_view().production_connection_allowed() {
+                    Ok(true) if !guarded => {}
+                    Ok(_) => {
+                        return ServiceSource::Ready(Err(service_error(ServiceError::Profile)));
+                    }
+                    Err(_) => {
+                        return ServiceSource::Ready(Err(service_error(ServiceError::Uncertain)));
+                    }
+                },
                 Err(_) => {
                     return ServiceSource::Ready(Err(error(
                         "Native operation receipt history is unavailable; inspect retained evidence before another change",
@@ -625,7 +653,7 @@ impl Runtime {
     }
     #[cfg(test)]
     async fn connect(&mut self) -> Result<obs_mcp_native::service::ServiceHandle, Value> {
-        let source = self.service_source();
+        let source = self.service_source(false);
         while self.initializing() {
             self.progress_initialization()
                 .await
@@ -658,6 +686,7 @@ impl Runtime {
                 take,
                 preparation: self.preparation.take(),
                 media: self.media.clone(),
+                replay: self.replay.clone(),
                 read_tools_host: self.host.clone(),
                 generic_readback_screenshot_limit: Some(self.screenshot_limit.clone()),
                 // Invalid screenshot policy blocks Stage independently; unrelated read
@@ -1228,6 +1257,7 @@ async fn dispatch(
     media_cancel: Option<MediaCancellation>,
     _resource: bool,
     screenshot_limit: Result<ScreenshotLimit, obs_mcp_native::observation::ObservationError>,
+    admitted_at: tokio::time::Instant,
 ) -> Value {
     if let Some(request) = read {
         return match service.read(request, args, Duration::from_secs(10)).await {
@@ -1295,6 +1325,18 @@ async fn dispatch(
                     ..Default::default()
                 },
                 cancel,
+            )
+            .await
+            .unwrap_or_else(service_error);
+    }
+    if name == "obs-save-replay-verified" {
+        return service
+            .save_replay_verified(
+                obs_mcp_native::replay_save::Request::parse(&args)
+                    .expect("validated replay arguments"),
+                caller,
+                cancel,
+                admitted_at,
             )
             .await
             .unwrap_or_else(service_error);
@@ -1378,6 +1420,7 @@ mod tests {
             clock: native_host::support::clock(),
             preparation: None,
             media: None,
+            replay: None,
             media_work: Some(work),
             screenshot_limit: Ok(ScreenshotLimit::default()),
             confirm_live: false,

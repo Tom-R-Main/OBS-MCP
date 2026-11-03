@@ -52,7 +52,7 @@ const fake=async(command,args,options)=>{calls.push({command,args,timeout:option
 cp.execFile=function(){};cp.execFile[promisify.custom]=fake;
 if(input.action==='gray'||input.action==='tool-plan')cp.spawn=(command,args)=>{calls.push({command,args});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>{};setImmediate(()=>{for(const chunk of input.chunks)child.stdout.emit('data',Buffer.from(chunk,'base64'));for(const chunk of input.stderrChunks??[])child.stderr.emit('data',Buffer.from(chunk));child.emit('close',0)});return child;};
 syncBuiltinESMExports();const base=pathToFileURL(join(process.cwd(),'build/tools/trim.js'));let source=fs.readFileSync(base,'utf8').replace(/from\s*(['"])([^'"]+)\1/g,(_all,_q,spec)=>`from ${JSON.stringify(spec.startsWith('.')?new URL(spec,base).href:spec.startsWith('node:')?spec:import.meta.resolve(spec))}`);source+='\nexport{ffmetadata,exportTrimmed,parseSilence,probe,stillSpans,detectIdle,takeLogChapters};';const m=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-let result;try{switch(input.action){case'cuts':result=m.planCuts(input.options);break;case'remap':result=input.times.map(t=>m.remapTime(t,input.cuts));break;case'seams':result=m.seamSampleTimes(input.seams,input.duration);break;case'sdr':m.requireSdrInput(input.info);result={ok:true};break;case'validate':m.validateTrimmedMetadata(input.info,input.expected);result={ok:true};break;case'encoder':result=m.qualifiedEncoderArgs(input.encoders);break;case'metadata':result=m.ffmetadata(input.chapters,input.duration);break;case'silence':result=m.parseSilence(input.stderr,input.duration);break;case'probe':result=await m.probe(input.path);break;case'encode':await m.exportTrimmed(input.path,input.output,input.keep,input.audio,input.chapters,input.duration,undefined,input.frameRate??undefined);result={calls,metadata};break;case'sheet':await m.contactSheet(input.path,input.times,input.columns,input.width);result={calls};break;case'gray':result=await m.stillSpans(input.path,input.info,input.minIdleSeconds,[],undefined);break;case'tool-plan':{const{McpServer,InMemoryTransport}=await import('@modelcontextprotocol/server');const{Client}=await import('@modelcontextprotocol/client');const server=new McpServer({name:'trim-oracle',version:'1'});m.initialize(server,{async sendRequest(type){if(type!=='GetRecordDirectory')throw Error('unexpected OBS method');return{recordDirectory:input.root}}});const client=new Client({name:'consumer',version:'1'});const[a,b]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(a),client.connect(b)]);try{result=await client.callTool({name:'obs-trim-take',arguments:{path:input.path,...input.options}})}finally{await client.close();await server.close();}break;}case'publish':{const root=input.root,partial=join(root,'partial.mp4'),output=join(root,'final.mp4'),abort=new AbortController(),events=[];try{const value=await m.publishTrimmedExport(partial,output,{encode:async()=>{events.push('encode');fs.writeFileSync(partial,'ours');if(input.mode==='trailer')throw Error('Error writing trailer');if(input.mode==='cancel-encode')abort.abort();},verify:async()=>{events.push('verify');if(input.mode==='decode')throw Error('strict decode failed');if(input.mode==='race')fs.writeFileSync(output,'theirs');if(input.mode==='cancel-verify')abort.abort();return input.info;},preview:input.mode==='preview'?async()=>{events.push('preview');throw Error('preview failed')}:undefined},abort.signal);result={ok:true,verified:value.verified,sha256:value.sha256,previewWarning:value.previewWarning,events};}catch(e){result={ok:false,error:e.message,code:e.code,events};}break;}default:throw Error('unknown action');}console.log(JSON.stringify({result,calls}));}catch(error){console.log(JSON.stringify({error:error.message,calls}));}
+let result;try{switch(input.action){case'cuts':result=m.planCuts(input.options);break;case'remap':result=input.times.map(t=>m.remapTime(t,input.cuts));break;case'seams':result=m.seamSampleTimes(input.seams,input.duration);break;case'sdr':m.requireSdrInput(input.info);result={ok:true};break;case'validate':m.validateTrimmedMetadata(input.info,input.expected);result={ok:true};break;case'encoder':result=m.qualifiedEncoderArgs(input.encoders);break;case'metadata':result=m.ffmetadata(input.chapters,input.duration);break;case'silence':result=m.parseSilence(input.stderr,input.duration);break;case'probe':result=await m.probe(input.path);break;case'encode':await m.exportTrimmed(input.path,input.output,input.keep,input.audio,input.chapters,input.duration,undefined,input.frameRate??undefined);result={calls,metadata};break;case'sheet':await m.contactSheet(input.path,input.times,input.columns,input.width);result={calls};break;case'gray':result=await m.stillSpans(input.path,input.info,input.minIdleSeconds,undefined);break;case'tool-plan':{const{McpServer,InMemoryTransport}=await import('@modelcontextprotocol/server');const{Client}=await import('@modelcontextprotocol/client');const server=new McpServer({name:'trim-oracle',version:'1'});m.initialize(server,{async sendRequest(type){if(type!=='GetRecordDirectory')throw Error('unexpected OBS method');return{recordDirectory:input.root}}});const client=new Client({name:'consumer',version:'1'});const[a,b]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(a),client.connect(b)]);try{result=await client.callTool({name:'obs-trim-take',arguments:{path:input.path,...input.options}})}finally{await client.close();await server.close();}break;}case'publish':{const root=input.root,partial=join(root,'partial.mp4'),output=join(root,'final.mp4'),abort=new AbortController(),events=[];try{const value=await m.publishTrimmedExport(partial,output,{encode:async()=>{events.push('encode');fs.writeFileSync(partial,'ours');if(input.mode==='trailer')throw Error('Error writing trailer');if(input.mode==='cancel-encode')abort.abort();},verify:async()=>{events.push('verify');if(input.mode==='decode')throw Error('strict decode failed');if(input.mode==='race')fs.writeFileSync(output,'theirs');if(input.mode==='cancel-verify')abort.abort();return input.info;},preview:input.mode==='preview'?async()=>{events.push('preview');throw Error('preview failed')}:undefined},abort.signal);result={ok:true,verified:value.verified,sha256:value.sha256,previewWarning:value.previewWarning,events};}catch(e){result={ok:false,error:e.message,code:e.code,events};}break;}default:throw Error('unknown action');}console.log(JSON.stringify({result,calls}));}catch(error){console.log(JSON.stringify({error:error.message,calls}));}
 "#;
     let mut child = Command::new("node")
         .arg("--input-type=module")
@@ -98,6 +98,17 @@ fn assert_json(actual: &Value, expected: &Value) {
 }
 fn info() -> MediaProbe {
     serde_json::from_value(json!({"duration":9.5,"audioStreams":0,"videoStreams":1,"chapters":[{"at":0,"name":"Intro"},{"at":7,"name":"Answer"}],"width":160,"height":90,"codec":"h264","pixelFormat":"yuv420p"})).unwrap()
+}
+fn track_info() -> MediaProbe {
+    let mut value = info();
+    value.audio_streams = 2;
+    value.format_start_seconds = Some(0.0);
+    value.video_start_seconds = Some(0.0);
+    value.audio_tracks = serde_json::from_value(json!([
+        {"codec":"aac","sampleRate":48000,"channels":1,"channelLayout":"mono","language":"eng","title":"Game","dispositions":{"default":1},"startSeconds":0},
+        {"codec":"aac","sampleRate":44100,"channels":2,"channelLayout":"stereo","language":"fra","title":"Voix – français","dispositions":{"default":0},"startSeconds":0}
+    ])).unwrap();
+    value
 }
 fn expected() -> ExpectedMetadata {
     let info = info();
@@ -288,9 +299,9 @@ fn source_ffmetadata_and_common_audio_video_command_cuts_are_exact() {
     let root = Scratch::new();
     for (audio, frame_rate) in [
         (0, None),
-        (3, None),
+        (1, None),
         (0, Some("30000/1001")),
-        (3, Some("30000/1001")),
+        (1, Some("30000/1001")),
     ] {
         let keep = vec![
             Span {
@@ -482,7 +493,7 @@ fn source_silence_parsing_and_audio_intersection_are_conservative() {
     }];
     let mut probe = info();
     probe.duration = 10.0;
-    probe.audio_streams = 2;
+    probe.audio_streams = 1;
     let idle = detect_idle(&still, stderr, &probe);
     assert_eq!(
         idle.idle,
@@ -506,10 +517,403 @@ fn source_silence_parsing_and_audio_intersection_are_conservative() {
     assert!(detect_idle(&still, "", &probe).idle.is_empty());
 }
 #[test]
+fn qualified_multitrack_idle_intersects_every_track_and_missing_silence_never_authorizes_cuts() {
+    let mut info = track_info();
+    info.duration = 6.0;
+    let still = [Span {
+        start: 0.0,
+        end: 6.0,
+    }];
+    let first = "[silencedetect@obs_mcp_a0 @ 0x1] silence_start: 0\n[silencedetect@obs_mcp_a0 @ 0x1] silence_end: 6\n";
+    let second = "[silencedetect@obs_mcp_a1 @ 0x2] silence_start: 0\n[silencedetect@obs_mcp_a1 @ 0x2] silence_end: 2\n[silencedetect@obs_mcp_a1 @ 0x2] silence_start: 4\n[silencedetect@obs_mcp_a1 @ 0x2] silence_end: 6\n";
+    let result = analyze_idle(&still, &format!("{first}{second}"), &info).unwrap();
+    assert_eq!(
+        result.idle,
+        [
+            Span {
+                start: 0.0,
+                end: 2.0
+            },
+            Span {
+                start: 4.0,
+                end: 6.0
+            }
+        ]
+    );
+    assert!(result.audible);
+    assert!(analyze_idle(&still, first, &info).unwrap().idle.is_empty());
+    let metadata = format!(
+        "{first}    title : silencedetect@obs_mcp_a1 silence_start: 0\n    comment : metadata\n            : [silencedetect@obs_mcp_a1 @ 0x2] silence_start: 0\n"
+    );
+    assert!(
+        analyze_idle(&still, &metadata, &info)
+            .unwrap()
+            .idle
+            .is_empty()
+    );
+    let malformed = format!(
+        "{first}[silencedetect@obs_mcp_a1 @ 0x2] silence_start: 4\n[silencedetect@obs_mcp_a1 @ 0x2] silence_end: 2\n"
+    );
+    assert!(analyze_idle(&still, &malformed, &info).is_err());
+    let request = sampling_command(Path::new("source.mkv"), &info, 1.0, 1024 * 1024).unwrap();
+    let args = request
+        .args
+        .iter()
+        .map(|value| value.to_string_lossy())
+        .collect::<Vec<_>>();
+    assert_eq!(request.audio_tracks, 2);
+    assert!(!args.iter().any(|arg| arg.contains("silencedetect")));
+}
+#[test]
+fn production_audio_files_are_the_only_source_of_silence_authority() {
+    let mut info = track_info();
+    info.duration = 6.0;
+    let request = sampling_command(Path::new("source.mkv"), &info, 1.0, 1024 * 1024).unwrap();
+    let input_at = request.args.iter().position(|arg| arg == "-i").unwrap();
+    let fatal_at = request
+        .args
+        .iter()
+        .position(|arg| arg == "-xerror")
+        .unwrap();
+    let decoder_at = request
+        .args
+        .iter()
+        .position(|arg| arg == "-err_detect")
+        .unwrap();
+    assert!(fatal_at < input_at && decoder_at + 1 < input_at);
+    assert_eq!(request.args[decoder_at + 1], "explode");
+    let mut sink = GraySink::new(&request, 100).unwrap();
+    for _ in 0..12 {
+        sink.consume(&vec![20; request.frame_bytes]).unwrap();
+    }
+    sink.consume_stderr(
+        b"[silencedetect @ 0x123] silence_start: 0\n[anything] lavfi.silence_start=0\n",
+    );
+    let mut sampled = sink.finish().unwrap();
+    assert!(analyze_sampled_idle(&sampled, &info).is_err());
+    let full = "frame:0 pts:0 pts_time:0\nlavfi.silence_start=0\n";
+    sampled.audio_evidence =
+        Some(parse_audio_evidence(&[full.into(), String::new()], 6.0).unwrap());
+    assert!(
+        analyze_sampled_idle(&sampled, &info)
+            .unwrap()
+            .idle
+            .is_empty()
+    );
+    let partial = "frame:0 pts:0 pts_time:0\nlavfi.silence_start=0\nframe:1 pts:20 pts_time:2\nlavfi.silence_duration=2\nlavfi.silence_end=2\nframe:2 pts:40 pts_time:4\nlavfi.silence_start=4\n";
+    sampled.audio_evidence =
+        Some(parse_audio_evidence(&[full.into(), partial.into()], 6.0).unwrap());
+    assert_eq!(
+        analyze_sampled_idle(&sampled, &info).unwrap().idle,
+        [
+            Span {
+                start: 0.0,
+                end: 2.0
+            },
+            Span {
+                start: 4.0,
+                end: 6.0
+            }
+        ]
+    );
+    sampled.audio_evidence = None;
+    assert!(analyze_sampled_idle(&sampled, &info).is_err());
+    let mut single = info.clone();
+    single.audio_streams = 1;
+    single.audio_tracks.clear();
+    sampled.audio_evidence = Some(parse_audio_evidence(&[String::new()], 6.0).unwrap());
+    assert!(
+        analyze_sampled_idle(&sampled, &single)
+            .unwrap()
+            .idle
+            .is_empty()
+    );
+}
+#[test]
+fn private_audio_file_grammar_is_bounded_and_rejects_partial_or_forged_frames() {
+    let valid = "frame: 0 pts: 0 pts_time:0\nlavfi.silence_start=-0.01\nframe: 4 pts: 8 pts_time:0.8\nlavfi.silence_duration=1\nlavfi.silence_end=1.01\n";
+    assert_eq!(
+        parse_audio_track_evidence(valid, 1.0).unwrap(),
+        [Span {
+            start: 0.0,
+            end: 1.0
+        }]
+    );
+    assert_eq!(parse_audio_track_evidence("", 1.0).unwrap(), []);
+    for invalid in [
+        "lavfi.silence_start=0\n",
+        "frame:0 pts:0 pts_time:0\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_start=0",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_start=NaN\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_start=0\nlavfi.silence_start=0\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.forged=0\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_end=1\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_end=1\nlavfi.silence_duration=1\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_start=0\nframe:0 pts:0 pts_time:0\nlavfi.silence_end=1\nlavfi.silence_duration=1\n",
+        "frame:0 pts:0 pts_time:0\nlavfi.silence_start=2\n",
+    ] {
+        assert!(
+            parse_audio_track_evidence(invalid, 1.0).is_err(),
+            "{invalid:?}"
+        );
+    }
+    assert!(parse_audio_track_evidence(&"x".repeat(AUDIO_EVIDENCE_BYTES + 1), 1.0).is_err());
+    assert!(parse_audio_evidence(&vec![String::new(); 7], 1.0).is_err());
+}
+#[test]
+fn multitrack_metadata_bounds_and_diagnostic_overflow_refuse_instead_of_retaining_partial_evidence()
+{
+    let qualified = track_info();
+    assert_eq!(qualified_audio_tracks(&qualified).unwrap().len(), 2);
+    for case in [
+        "rate",
+        "layout",
+        "language",
+        "title",
+        "reserved-title",
+        "audio-start",
+        "missing-start",
+        "video-start",
+        "format-start",
+        "disposition",
+        "default",
+        "count",
+    ] {
+        let mut bad = qualified.clone();
+        match case {
+            "rate" => bad.audio_tracks[1].sample_rate = 32000,
+            "layout" => bad.audio_tracks[1].channel_layout = "unknown".into(),
+            "language" => bad.audio_tracks[1].language = "en-US".into(),
+            "title" => bad.audio_tracks[1].title = Some("bad\nmetadata".into()),
+            "reserved-title" => bad.audio_tracks[1].title = Some("SoundHandler".into()),
+            "audio-start" => bad.audio_tracks[1].start_seconds = Some(0.5),
+            "missing-start" => bad.audio_tracks[1].start_seconds = None,
+            "video-start" => bad.video_start_seconds = Some(0.5),
+            "format-start" => bad.format_start_seconds = Some(0.5),
+            "disposition" => {
+                bad.audio_tracks[1]
+                    .dispositions
+                    .as_mut()
+                    .unwrap()
+                    .insert("comment".into(), 1);
+            }
+            "default" => {
+                bad.audio_tracks[1]
+                    .dispositions
+                    .as_mut()
+                    .unwrap()
+                    .insert("default".into(), 1);
+            }
+            _ => {
+                bad.audio_streams = 7;
+                bad.audio_tracks
+                    .resize(7, qualified.audio_tracks[0].clone());
+            }
+        }
+        assert!(qualified_audio_tracks(&bad).is_err(), "{case} was admitted");
+    }
+    let request = sampling_command(Path::new("source.mkv"), &qualified, 1.0, 1024 * 1024).unwrap();
+    let mut sink = GraySink::new(&request, 100).unwrap();
+    sink.consume_stderr(&vec![b'x'; 4_000_001]);
+    assert_eq!(
+        sink.finish().unwrap_err().message(),
+        "Audio analysis diagnostics exceed the configured bound"
+    );
+}
+
+#[tokio::test]
+async fn multitrack_order_metadata_and_count_are_checked_before_decode_or_publication() {
+    let source = track_info();
+    for case in [
+        "order",
+        "rate",
+        "layout",
+        "language",
+        "title",
+        "start",
+        "disposition",
+        "count",
+    ] {
+        let root = Scratch::new();
+        let stage = ExportStage::new(&root.0, "partial.mp4", "final.mp4").unwrap();
+        let mut actual = source.clone();
+        match case {
+            "order" => actual.audio_tracks.swap(0, 1),
+            "rate" => actual.audio_tracks[1].sample_rate = 48000,
+            "layout" => actual.audio_tracks[1].channel_layout = "mono".into(),
+            "language" => actual.audio_tracks[1].language = "eng".into(),
+            "title" => actual.audio_tracks[1].title = Some("wrong".into()),
+            "start" => actual.audio_tracks[1].start_seconds = Some(0.5),
+            "disposition" => {
+                actual.audio_tracks[1]
+                    .dispositions
+                    .as_mut()
+                    .unwrap()
+                    .insert("default".into(), 1);
+            }
+            _ => {
+                actual.audio_streams = 1;
+                actual.audio_tracks.pop();
+            }
+        }
+        let events = Arc::new(Mutex::new(vec![]));
+        let backend = Backend {
+            mode: "success".into(),
+            output: stage.output_path().to_owned(),
+            events: events.clone(),
+            probe: actual,
+        };
+        let mut expected = expected();
+        expected.audio_streams = 2;
+        let request = encode_track_preserving_command(
+            &root.path("source.mkv"),
+            stage.partial_path(),
+            &root.path("chapters.txt"),
+            EncodePlan {
+                keep: &[Span {
+                    start: 0.0,
+                    end: 9.5,
+                }],
+                audio_streams: 2,
+                chapters: &source.chapters,
+                duration: 9.5,
+                frame_rate: None,
+            },
+            "libx264",
+            &source,
+        )
+        .unwrap();
+        let mut owner = ExportOwner::new(
+            backend,
+            stage,
+            request,
+            &source,
+            expected,
+            None,
+            Cancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            owner.finish().await.unwrap_err().message(),
+            "Staged export audio track order or descriptors differ from the source"
+        );
+        assert_eq!(events.lock().unwrap().as_slice(), ["encode", "verify"]);
+        assert!(!root.path("final.mp4").exists());
+        drop(owner);
+        assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn multitrack_sampling_and_imported_encode_plans_are_refused_before_media_work() {
+    let refusal = "Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow";
+    let root = Scratch::new();
+    for audio in [2, 6] {
+        let mut source = info();
+        source.audio_streams = audio;
+        assert_eq!(
+            sampling_command(&root.path("input.mkv"), &source, 1.0, 1024 * 1024)
+                .unwrap_err()
+                .message(),
+            refusal
+        );
+        let keep = [Span {
+            start: 0.0,
+            end: 1.0,
+        }];
+        let encoded = encode_command(
+            &root.path("input.mkv"),
+            &root.path("partial.mp4"),
+            &root.path("chapters.txt"),
+            EncodePlan {
+                keep: &keep,
+                audio_streams: audio,
+                chapters: &[],
+                duration: 1.0,
+                frame_rate: None,
+            },
+            "libx264",
+        );
+        assert_eq!(encoded.unwrap_err().message(), refusal);
+        let oracle = node(
+            &json!({"action":"encode","path":root.path("input.mkv"),"output":root.path("partial.mp4"),"keep":keep,"audio":audio,"chapters":[],"duration":1.0,"encoders":"libx264"}),
+        );
+        assert_eq!(oracle["error"], refusal);
+        assert_eq!(oracle["calls"], json!([]));
+        let mut expected = expected();
+        expected.audio_streams = audio;
+        assert_eq!(
+            validate_trimmed_metadata(&info(), &expected)
+                .unwrap_err()
+                .message(),
+            refusal
+        );
+        assert_eq!(
+            node(&json!({"action":"validate","actual":info(),"expected":expected}))["error"],
+            refusal
+        );
+    }
+    assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
+}
+
+#[test]
+fn export_owner_rejects_multitrack_source_or_forged_expectation_before_backend_admission() {
+    let refusal = "Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow";
+    for (source_audio, expected_audio) in [(2, 1), (1, 2)] {
+        let root = Scratch::new();
+        let stage = ExportStage::new(&root.0, "partial.mp4", "final.mp4").unwrap();
+        let request = encode_command(
+            &root.path("source.mkv"),
+            stage.partial_path(),
+            &root.path("chapters.txt"),
+            EncodePlan {
+                keep: &[Span {
+                    start: 0.0,
+                    end: 1.0,
+                }],
+                audio_streams: 1,
+                chapters: &[],
+                duration: 1.0,
+                frame_rate: None,
+            },
+            "libx264",
+        )
+        .unwrap();
+        let events = Arc::new(Mutex::new(vec![]));
+        let backend = Backend {
+            mode: "success".into(),
+            output: stage.output_path().to_owned(),
+            events: events.clone(),
+            probe: info(),
+        };
+        let mut source = info();
+        source.audio_streams = source_audio;
+        let mut expected = expected();
+        expected.audio_streams = expected_audio;
+        let result = ExportOwner::new(
+            backend,
+            stage,
+            request,
+            &source,
+            expected,
+            None,
+            Cancellation::default(),
+        );
+        match result {
+            Ok(_) => panic!("multitrack export owner was admitted"),
+            Err(error) => assert_eq!(error.message(), refusal),
+        }
+        assert!(events.lock().unwrap().is_empty());
+        assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
+    }
+}
+#[test]
 fn source_gray_stream_uses_shared_medians_arbitrary_chunks_and_bounded_history() {
     use base64::Engine;
     let mut probe = info();
     probe.duration = 20.0;
+    probe.audio_streams = 0;
+    probe.audio_tracks.clear();
     let request = sampling_command(Path::new("take.mp4"), &probe, 1.0, 1024 * 1024).unwrap();
     let mut raw = vec![];
     for frame in 0..30 {
@@ -523,7 +927,7 @@ fn source_gray_stream_uses_shared_medians_arbitrary_chunks_and_bounded_history()
         raw.extend(vec![level; request.frame_bytes]);
     }
     raw.extend([7, 8, 9]);
-    let chunks = raw
+    let chunks = raw[..raw.len() - 3]
         .chunks(997)
         .map(|chunk| base64::engine::general_purpose::STANDARD.encode(chunk))
         .collect::<Vec<_>>();
@@ -543,17 +947,29 @@ fn source_gray_stream_uses_shared_medians_arbitrary_chunks_and_bounded_history()
         at..at,
         local_media_input_options(LocalMediaInput::Recording),
     );
-    assert_eq!(
-        json!(
-            qualified
-                .iter()
-                .map(|arg| arg.to_str().unwrap())
-                .collect::<Vec<_>>()
-        ),
-        oracle["calls"][0]["args"]
-    );
+    let source_args = oracle["calls"][0]["args"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|arg| arg.as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let native_args = qualified
+        .iter()
+        .map(|arg| arg.to_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let source_input = source_args.iter().position(|arg| arg == "-i").unwrap();
+    let native_input = native_args.iter().position(|arg| arg == "-i").unwrap();
+    // Independent global flags may be ordered differently; input policy and
+    // complete output command remain byte-for-byte the same sequence.
+    let mut source_globals = source_args[..source_input].to_vec();
+    source_globals.sort();
+    let mut native_globals = native_args[..native_input].to_vec();
+    native_globals.sort();
+    assert_eq!(source_globals, native_globals);
+    assert_eq!(source_args[source_input..], native_args[native_input..]);
     assert_json(&json!(analysis.spans), &oracle["result"]["spans"]);
-    assert_eq!(analysis.stderr, oracle["result"]["stderr"]);
+    assert_eq!(analysis.stderr, "silence_start: 0\nsilence_end: 20\n");
+    assert_eq!(oracle["result"]["audio"], json!([]));
     assert_eq!(analysis.frames, 30);
     assert_eq!(analysis.trailing_bytes, 3);
     let mut limited = GraySink::new(&request, 1).unwrap();

@@ -19,11 +19,11 @@ use std::{
     ffi::OsString,
     fmt,
     fs::{self, File, Metadata, OpenOptions},
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -183,6 +183,88 @@ impl SystemMedia {
         }
         Ok(())
     }
+    /// One sampler owns video pipes and independent per-track silence files.
+    /// The monitor remains alive when a caller abandons a finish await.
+    pub fn sampling(
+        &self,
+        request: &trim::SamplingRequest,
+        cancellation: Cancellation,
+        timeout: Duration,
+        max_spans: usize,
+    ) -> Result<SamplingJob, TrimError> {
+        self.check_work()?;
+        if request.audio_tracks > 6 || timeout.is_zero() || timeout > trim::SAMPLE_TIMEOUT {
+            return Err(error(
+                ErrorKind::Limit,
+                "Audio sampling exceeds its supported bound",
+            ));
+        }
+        let mut files = (0..request.audio_tracks)
+            .map(|_| OwnedAudioEvidence::create(&self.work, &self.work_identity))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut arguments = Vec::new();
+        let mut inputs = 0;
+        for (at, arg) in request.args.iter().enumerate() {
+            if arg == "-i" {
+                inputs += 1;
+                if request.args.get(at + 1) != Some(&request.input.as_os_str().to_owned()) {
+                    return Err(error(
+                        ErrorKind::UnsafePath,
+                        "Sampling input identity is invalid",
+                    ));
+                }
+                arguments.extend(local_media_input_options(LocalMediaInput::Recording));
+            }
+            arguments.push(arg.clone());
+        }
+        if inputs != 1 {
+            return Err(error(
+                ErrorKind::UnsafePath,
+                "Sampling requires one owned local input",
+            ));
+        }
+        for (index, file) in files.iter().enumerate() {
+            arguments.extend([
+                "-map".into(),
+                format!("0:a:{index}").into(),
+                "-af".into(),
+                format!(
+                    "ametadata=mode=delete,silencedetect=n=-50dB:d={},ametadata=mode=print:file={}",
+                    request.min_idle_seconds,
+                    audio_evidence_filter_path(&file.path)?
+                )
+                .into(),
+                "-f".into(),
+                "null".into(),
+                "-".into(),
+            ]);
+        }
+        let process = media_verification::run_streamed_media_process(
+            self.ffmpeg.checked()?,
+            &arguments,
+            ProcessOptions {
+                timeout,
+                cancellation: cancellation.clone(),
+            },
+            trim::GraySink::new(request, max_spans)?,
+        )
+        .map_err(sampling_error)?;
+        let pid = process.pid();
+        for file in &mut files {
+            file.in_flight = true;
+        }
+        let abandoned = Arc::new(AtomicBool::new(false));
+        let task_abandoned = abandoned.clone();
+        let duration = request.duration;
+        let task = tokio::spawn(finish_sampling(process, files, duration, task_abandoned));
+        Ok(SamplingJob {
+            task: Some(task),
+            result: None,
+            cancellation,
+            abandoned,
+            pid,
+        })
+    }
     /// Query only the configured ffmpeg; no PATH fallback or installation.
     pub fn encoders(
         &self,
@@ -219,6 +301,298 @@ fn process_error(phase: ErrorKind, error: MediaError) -> TrimError {
     );
     converted.cleanup_issue = error.cleanup_issue().map(str::to_owned);
     converted
+}
+/// A cancellation-safe retained sampling owner. Drop is emergency cancellation;
+/// ordinary callers must await finish to establish joined child/pipe cleanup.
+pub struct SamplingJob {
+    task: Option<tokio::task::JoinHandle<Result<Arc<trim::GrayAnalysis>, TrimError>>>,
+    result: Option<Result<Arc<trim::GrayAnalysis>, TrimError>>,
+    cancellation: Cancellation,
+    abandoned: Arc<AtomicBool>,
+    pid: u32,
+}
+impl SamplingJob {
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+}
+impl OwnedJob<Arc<trim::GrayAnalysis>> for SamplingJob {
+    fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+    fn finish(&mut self) -> JobFuture<'_, Arc<trim::GrayAnalysis>> {
+        Box::pin(async {
+            if self.result.is_none() {
+                let joined = self.task.as_mut().expect("retained sampling task").await;
+                self.task.take();
+                self.result = Some(joined.unwrap_or_else(|_| {
+                    let mut failure = error(ErrorKind::Decode, "Sampling owner failed");
+                    failure.cleanup_issue = Some(
+                        "Private audio evidence retained because sampling cleanup is unconfirmed"
+                            .into(),
+                    );
+                    Err(failure)
+                }));
+            }
+            self.result.clone().unwrap()
+        })
+    }
+}
+impl Drop for SamplingJob {
+    fn drop(&mut self) {
+        if self.task.is_some() {
+            self.abandoned.store(true, Ordering::Release);
+            self.cancellation.cancel();
+        }
+    }
+}
+fn sampling_error(failure: MediaError) -> TrimError {
+    let message = if failure.kind() == media_verification::ErrorKind::TimedOut {
+        "Finding still stretches took longer than 5 minutes; try a shorter recording"
+    } else {
+        failure.primary_message()
+    };
+    let mut converted = error(
+        if failure.kind() == media_verification::ErrorKind::Cancelled {
+            ErrorKind::Cancelled
+        } else {
+            ErrorKind::Decode
+        },
+        message,
+    );
+    converted.cleanup_issue = failure.cleanup_issue().map(str::to_owned);
+    converted
+}
+async fn finish_sampling(
+    mut process: MediaProcess<Arc<trim::GrayAnalysis>>,
+    mut files: Vec<OwnedAudioEvidence>,
+    duration: f64,
+    abandoned: Arc<AtomicBool>,
+) -> Result<Arc<trim::GrayAnalysis>, TrimError> {
+    // A sampled tripwire, not a filesystem quota: writes can overshoot between
+    // checks. The bounded descriptor read below is a separate admission bound.
+    let mut monitor = tokio::time::interval(Duration::from_millis(25));
+    monitor.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut guard_error = None;
+    let settled = loop {
+        tokio::select! {
+            result = process.finish() => break result,
+            _ = monitor.tick(), if guard_error.is_none() => {
+                for file in &files {
+                    if let Err(failure) = file.check() {
+                        guard_error = Some(failure);
+                        process.cancel();
+                        break;
+                    }
+                }
+            }
+        }
+    };
+    let joined = settled
+        .as_ref()
+        .err()
+        .is_none_or(|failure| failure.cleanup_issue().is_none());
+    let mut retain = !joined || abandoned.load(Ordering::Acquire) || guard_error.is_some();
+    let mut result = settled.map_err(sampling_error);
+    if let Some(failure) = guard_error {
+        result = Err(failure);
+    }
+    if joined && result.is_ok() && !retain {
+        let parsed = files
+            .iter()
+            .map(OwnedAudioEvidence::read)
+            .collect::<Result<Vec<_>, _>>();
+        result = match parsed {
+            Ok(texts) => trim::parse_audio_evidence(&texts, duration).map(|audio| {
+                let mut sampled = (**result.as_ref().unwrap()).clone();
+                sampled.audio_evidence = Some(audio);
+                Arc::new(sampled)
+            }),
+            Err(failure) => {
+                retain = true;
+                Err(failure)
+            }
+        };
+    }
+    if !retain {
+        for file in &mut files {
+            file.in_flight = false;
+            if let Err(cleanup) = file.cleanup() {
+                match &mut result {
+                    Ok(_) => result = Err(cleanup),
+                    Err(primary) => primary.cleanup_issue = Some(cleanup.to_string()),
+                }
+            }
+        }
+    } else if let Err(primary) = &mut result {
+        let issue = "Private audio evidence retained for inspection; cleanup was not established";
+        primary.cleanup_issue = Some(match primary.cleanup_issue.take() {
+            Some(prior) => format!("{prior}; {issue}"),
+            None => issue.into(),
+        });
+    }
+    result
+}
+/// Escape the two FFmpeg filter parser levels without shell interpretation.
+/// The path is an owned regular file; caller strings never choose its filename.
+pub fn audio_evidence_filter_path(path: &Path) -> Result<String, TrimError> {
+    let text = path
+        .to_str()
+        .ok_or_else(|| error(ErrorKind::UnsafePath, "Audio evidence path is not UTF-8"))?;
+    let mut escaped = String::new();
+    for ch in text.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\\\\\"),
+            '\'' => escaped.push_str("\\\\\\'"),
+            ':' => escaped.push_str("\\\\:"),
+            ',' | '[' | ']' | ';' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            }
+            '\0' | '\n' | '\r' => {
+                return Err(error(
+                    ErrorKind::UnsafePath,
+                    "Audio evidence path contains unsupported characters",
+                ));
+            }
+            _ => escaped.push(ch),
+        }
+    }
+    Ok(escaped)
+}
+struct OwnedAudioEvidence {
+    root: PathBuf,
+    root_identity: Metadata,
+    path: PathBuf,
+    identity: Metadata,
+    file: File,
+    in_flight: bool,
+    removed: bool,
+}
+impl OwnedAudioEvidence {
+    fn create(root: &Path, root_identity: &Metadata) -> Result<Self, TrimError> {
+        static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+        let id = SEQUENCE
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .map_err(|_| error(ErrorKind::Limit, "Audio evidence identity exhausted"))?;
+        let path = root.join(format!("audio-{}-{id}.metadata", std::process::id()));
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(&path).map_err(|_| {
+            error(
+                ErrorKind::Storage,
+                "Could not reserve private audio evidence",
+            )
+        })?;
+        let identity = file.metadata().map_err(|_| {
+            error(
+                ErrorKind::Storage,
+                "Private audio evidence identity is unavailable",
+            )
+        })?;
+        let owned = Self {
+            root: root.to_owned(),
+            root_identity: root_identity.clone(),
+            path,
+            identity,
+            file,
+            in_flight: false,
+            removed: false,
+        };
+        owned.check()?;
+        Ok(owned)
+    }
+    fn check(&self) -> Result<Metadata, TrimError> {
+        let root = private_directory(&self.root)?;
+        let named = fs::symlink_metadata(&self.path).map_err(|_| {
+            error(
+                ErrorKind::UnsafePath,
+                "Private audio evidence is missing or replaced",
+            )
+        })?;
+        let opened = self.file.metadata().map_err(|_| {
+            error(
+                ErrorKind::UnsafePath,
+                "Private audio evidence descriptor is unavailable",
+            )
+        })?;
+        private_file(&named)?;
+        private_file(&opened)?;
+        if !same_file(&root, &self.root_identity)
+            || !same_file(&named, &self.identity)
+            || !same_file(&named, &opened)
+        {
+            return Err(error(
+                ErrorKind::UnsafePath,
+                "Private audio evidence identity changed",
+            ));
+        }
+        if opened.len() > trim::AUDIO_EVIDENCE_BYTES as u64 {
+            return Err(error(
+                ErrorKind::Limit,
+                "Private audio evidence exceeded its byte bound",
+            ));
+        }
+        Ok(opened)
+    }
+    fn read(&self) -> Result<String, TrimError> {
+        let before = self.check()?;
+        let mut descriptor = self.file.try_clone().map_err(|_| {
+            error(
+                ErrorKind::Storage,
+                "Private audio evidence descriptor is unavailable",
+            )
+        })?;
+        descriptor
+            .seek(SeekFrom::Start(0))
+            .map_err(|_| error(ErrorKind::Storage, "Private audio evidence seek failed"))?;
+        let mut bytes = Vec::new();
+        descriptor
+            .take(trim::AUDIO_EVIDENCE_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| error(ErrorKind::Storage, "Private audio evidence read failed"))?;
+        let after = self.check()?;
+        if bytes.len() > trim::AUDIO_EVIDENCE_BYTES || !same_version(&before, &after) {
+            return Err(error(
+                ErrorKind::Evidence,
+                "Private audio evidence changed during read",
+            ));
+        }
+        String::from_utf8(bytes)
+            .map_err(|_| error(ErrorKind::Evidence, "Private audio evidence is not UTF-8"))
+    }
+    fn cleanup(&mut self) -> Result<(), TrimError> {
+        if self.removed {
+            return Ok(());
+        }
+        self.check().map_err(|_| {
+            let mut failure = error(
+                ErrorKind::Storage,
+                "Audio evidence cleanup refused unknown ownership",
+            );
+            failure.cleanup_issue = Some("Private audio evidence retained for inspection".into());
+            failure
+        })?;
+        fs::remove_file(&self.path).map_err(|_| {
+            let mut failure = error(ErrorKind::Storage, "Audio evidence cleanup failed");
+            failure.cleanup_issue = Some("Private audio evidence retained for inspection".into());
+            failure
+        })?;
+        self.removed = true;
+        Ok(())
+    }
+}
+impl Drop for OwnedAudioEvidence {
+    fn drop(&mut self) {
+        if !self.in_flight && !self.removed {
+            let _ = self.cleanup();
+        }
+    }
 }
 struct EncodeSink {
     limit: usize,

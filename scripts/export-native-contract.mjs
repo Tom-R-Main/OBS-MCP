@@ -105,6 +105,7 @@ try {
   const serviceHandlers = {
     'obs-call-request':'advanced-opaque-command','obs-batch':'advanced-opaque-command','obs-call-vendor-request':'advanced-opaque-command','obs-trigger-hotkey-by-name':'advanced-opaque-command','obs-trigger-hotkey-by-key-sequence':'advanced-opaque-command',
     'obs-record-clip':'record-clip',
+    'obs-save-replay-verified':'save-replay-verified',
     'obs-restore':'restore',
     'obs-apply-scene':'apply-scene',
     'obs-capture-window':'capture-window',

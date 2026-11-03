@@ -4,15 +4,12 @@
 //! finish await preserves every admitted provider/media future in this owner.
 //! Dropping the owner itself is emergency cancellation, not joined cleanup.
 use crate::{
-    media_backend::{Bounds as MediaBounds, SystemMedia},
-    media_verification::{
-        self, Cancellation, LocalMediaInput, MediaProcess, ProcessOptions,
-        local_media_input_options,
-    },
+    media_backend::{Bounds as MediaBounds, SamplingJob, SystemMedia},
+    media_verification::Cancellation,
     trim::{
         self, Chapter, CutOptions, Decode, Encode, EncodeRequest, ErrorKind, ExportOwner,
-        ExportStage, GrayAnalysis, GraySink, JobFuture, MediaProbe, OwnedJob, Preview, Probe,
-        SheetRequest, Timeline, TrimError,
+        ExportStage, JobFuture, MediaProbe, OwnedJob, Preview, Probe, SheetRequest, Timeline,
+        TrimError,
     },
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -310,13 +307,14 @@ pub struct Operation {
     chapters: Option<Vec<Chapter>>,
     backend: Option<SystemMedia>,
     probe_job: Option<Box<dyn OwnedJob<MediaProbe>>>,
-    sample_job: Option<MediaProcess<Arc<GrayAnalysis>>>,
+    sample_job: Option<SamplingJob>,
     encoder_job: Option<Box<dyn OwnedJob<Arc<[u8]>>>>,
     sheet_job: Option<Box<dyn OwnedJob<Arc<[u8]>>>>,
     plan: Option<Timeline>,
     output: Option<PathBuf>,
     export: Option<ExportOwner<GuardedBackend>>,
     result: Option<Value>,
+    cleanup_unconfirmed: bool,
 }
 impl fmt::Debug for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -358,10 +356,15 @@ impl Operation {
             output: None,
             export: None,
             result: None,
+            cleanup_unconfirmed: false,
         })
     }
     pub fn cancel(&self) {
         self.cancellation.cancel();
+    }
+    /// Sticky typed cleanup fate, independent of the public tool error text.
+    pub fn cleanup_unconfirmed(&self) -> bool {
+        self.cleanup_unconfirmed
     }
     pub async fn finish(&mut self) -> Value {
         if let Some(result) = &self.result {
@@ -369,7 +372,10 @@ impl Operation {
         }
         let mut result = match self.advance().await {
             Ok(result) => result,
-            Err(error) => error_result(&format!("{}: {error}", self.request.prefix())),
+            Err(error) => {
+                self.cleanup_unconfirmed |= error.cleanup_issue.is_some();
+                error_result(&format!("{}: {error}", self.request.prefix()))
+            }
         };
         source_json_numbers(&mut result);
         self.result = Some(result.clone());
@@ -419,6 +425,9 @@ impl Operation {
             }
             if args.apply {
                 trim::require_sdr_input(&info)?;
+            }
+            if info.audio_streams > 1 {
+                trim::qualified_audio_tracks(&info)?;
             }
         }
         if self.chapters.is_none() {
@@ -489,33 +498,14 @@ impl Operation {
                     args.min_idle_seconds,
                     self.config.max_frame_bytes,
                 )?;
-                let mut arguments = Vec::new();
-                for arg in &request.args {
-                    if arg == "-i" {
-                        arguments.extend(local_media_input_options(LocalMediaInput::Recording));
-                    }
-                    arguments.push(arg.clone());
-                }
-                self.sample_job = Some(
-                    media_verification::run_streamed_media_process(
-                        &self.config.ffmpeg,
-                        &arguments,
-                        ProcessOptions {
-                            timeout: self.config.sampling_timeout,
-                            cancellation: self.cancellation.clone(),
-                        },
-                        GraySink::new(&request, self.config.max_spans)?,
-                    )
-                    .map_err(sample_error)?,
-                );
+                self.sample_job = Some(self.backend.as_ref().unwrap().sampling(
+                    &request,
+                    self.cancellation.clone(),
+                    self.config.sampling_timeout,
+                    self.config.max_spans,
+                )?);
             }
-            let samples = self
-                .sample_job
-                .as_mut()
-                .unwrap()
-                .finish()
-                .await
-                .map_err(sample_error)?;
+            let samples = self.sample_job.as_mut().unwrap().finish().await?;
             source.check(&self.config.authority)?;
             if samples.trailing_bytes != 0 {
                 return Err(err(
@@ -523,7 +513,7 @@ impl Operation {
                     "Grayscale sample ended with an incomplete frame",
                 ));
             }
-            let idle = trim::detect_idle(&samples.spans, &samples.stderr, &info);
+            let idle = trim::analyze_sampled_idle(&samples, &info)?;
             self.plan = Some(trim::timeline(
                 source
                     .path
@@ -612,19 +602,41 @@ impl Operation {
                     name: c.name.clone(),
                 })
                 .collect::<Vec<_>>();
-            let encode = trim::encode_command(
-                &source.path,
-                stage.partial_path(),
-                &self.config.work.join("unused-chapters.ffmetadata"),
-                trim::EncodePlan {
-                    frame_rate: info.frame_rate.as_deref(),
-                    keep: &plan.keep,
-                    audio_streams: info.audio_streams,
-                    chapters: &chapters,
-                    duration: plan.trimmed_seconds,
-                },
-                encoders,
-            )?;
+            let encode_plan = trim::EncodePlan {
+                frame_rate: info.frame_rate.as_deref(),
+                keep: &plan.keep,
+                audio_streams: info.audio_streams,
+                chapters: &chapters,
+                duration: plan.trimmed_seconds,
+            };
+            let encode = if info.audio_streams > 1 {
+                if output
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_none_or(|value| !value.eq_ignore_ascii_case("mp4"))
+                {
+                    return Err(err(
+                        ErrorKind::Evidence,
+                        "Track-preserving trim requires an MP4 output",
+                    ));
+                }
+                trim::encode_track_preserving_command(
+                    &source.path,
+                    stage.partial_path(),
+                    &self.config.work.join("unused-chapters.ffmetadata"),
+                    encode_plan,
+                    encoders,
+                    &info,
+                )?
+            } else {
+                trim::encode_command(
+                    &source.path,
+                    stage.partial_path(),
+                    &self.config.work.join("unused-chapters.ffmetadata"),
+                    encode_plan,
+                    encoders,
+                )?
+            };
             let times = trim::seam_sample_times(&plan.seams, plan.trimmed_seconds);
             let preview = if args.contact_sheet && !times.is_empty() {
                 Some(SheetRequest {
@@ -685,8 +697,16 @@ impl Operation {
         content.insert(0, json!({"type":"text","text":text}));
         report["content"] = Value::Array(content);
         let result = &exported.verified;
+        let verification_scope = if info.audio_streams > 1 {
+            "Cut-plan duration (0.25s tolerance), dimensions, ordered audio track descriptors, chapters and complete all-stream decode; lossy H.264/AAC transcode, editorial content requires review"
+        } else {
+            "Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review"
+        };
         let structured = report["structuredContent"].as_object_mut().unwrap();
-        structured.extend(json!({"committed":true,"outputPath":output,"sha256":exported.file.sha256,"outputDurationSeconds":trim::round_seconds(result.duration),"outputChapters":result.chapters.len(),"verification":{"metadata":"pass","strictDecode":"pass","scope":"Cut-plan duration (0.25s tolerance), dimensions, first audio track, chapters and complete decode; editorial content requires review"},"format":{"codec":result.codec,"pixelFormat":result.pixel_format,"colorTransfer":result.color_transfer.as_deref().unwrap_or("unknown"),"colorPrimaries":result.color_primaries.as_deref().unwrap_or("unknown"),"colorSpace":result.color_space.as_deref().unwrap_or("unknown"),"colorFidelity":"unverified"},"previewStatus":if exported.preview.is_some(){"available"}else if warnings.iter().any(|w|w.contains("contact sheet unavailable")){"unavailable"}else{"not-requested"},"warnings":warnings}).as_object().unwrap().clone());
+        structured.extend(json!({"committed":true,"outputPath":output,"sha256":exported.file.sha256,"outputDurationSeconds":trim::round_seconds(result.duration),"outputChapters":result.chapters.len(),"verification":{"metadata":"pass","strictDecode":"pass","scope":verification_scope},"format":{"codec":result.codec,"pixelFormat":result.pixel_format,"colorTransfer":result.color_transfer.as_deref().unwrap_or("unknown"),"colorPrimaries":result.color_primaries.as_deref().unwrap_or("unknown"),"colorSpace":result.color_space.as_deref().unwrap_or("unknown"),"colorFidelity":"unverified"},"previewStatus":if exported.preview.is_some(){"available"}else if warnings.iter().any(|w|w.contains("contact sheet unavailable")){"unavailable"}else{"not-requested"},"warnings":warnings}).as_object().unwrap().clone());
+        if info.audio_streams > 1 {
+            structured.get_mut("format").unwrap()["audioTracks"] = json!(result.audio_tracks);
+        }
         Ok(report)
     }
 }
@@ -1019,22 +1039,6 @@ fn cancelled(c: &Cancellation) -> Result<(), TrimError> {
     } else {
         Ok(())
     }
-}
-fn sample_error(e: media_verification::MediaError) -> TrimError {
-    let mut error = err(
-        if e.kind() == media_verification::ErrorKind::Cancelled {
-            ErrorKind::Cancelled
-        } else {
-            ErrorKind::Decode
-        },
-        if e.kind() == media_verification::ErrorKind::TimedOut {
-            "Finding still stretches took longer than 5 minutes; try a shorter recording"
-        } else {
-            e.primary_message()
-        },
-    );
-    error.cleanup_issue = e.cleanup_issue().map(str::to_owned);
-    error
 }
 fn err(kind: ErrorKind, text: &str) -> TrimError {
     TrimError::new(kind, text)

@@ -48,6 +48,18 @@ describe("obs-preflight", () => {
     harness.fakeObs.respondWith("GetInputMute", () => { throw new FakeOBSRequestError(600, "Input disappeared"); });
     expect((await preflight({ expectSilent: true })).byId("audio")?.status).toBe("unknown");
   });
+  it("describes configured routes without measuring signal or declaring monitor-only audio silent", async () => {
+    state.inputs[0] = { inputName: "Mic", inputKind: "coreaudio_input_capture", muted: false, tracks: { 1: true } };
+    for (const monitorType of ["OBS_MONITORING_TYPE_NONE", "OBS_MONITORING_TYPE_MONITOR_ONLY", "OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT", null, "INVALID"]) {
+      harness.fakeObs.respondWith("GetInputAudioMonitorType", () => ({ monitorType }));
+      const result = await preflight({ expectSilent: true });
+      expect(result.ready).toBe(false);
+      expect(result.byId("audio")).toMatchObject({status: "fail", message: expect.stringContaining("Configured unmuted audio routes")});
+      expect(result.byId("audio")?.message).toContain("Signal levels and monitoring/loopback paths were not measured");
+      expect(result.byId("audio")?.message).not.toContain("Recorded audio comes from");
+    }
+    expect(harness.fakeObs.history().flatMap(({frame}) => frame.op === OBS_OP.RequestBatch && Array.isArray(frame.d.requests) ? frame.d.requests.map((request: {requestType: string}) => request.requestType) : frame.op === OBS_OP.Request ? [frame.d.requestType] : [])).not.toContain("GetInputAudioMonitorType");
+  });
   it("reports ready with no failures or warnings for a healthy setup", async () => {
     const { ready, checks, result } = await preflight();
 

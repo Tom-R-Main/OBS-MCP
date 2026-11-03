@@ -144,10 +144,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   registerObsRequestTool(server, client, {
     name: "obs-save-replay-buffer",
     title: "Save Replay Buffer",
-    description: "Saves the contents of the replay buffer output",
+    description: "Requests a replay buffer save. Acceptance does not confirm that a new file has finished writing; the last replay path may still refer to an earlier save",
     requestType: "SaveReplayBuffer",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    successMessage: () => "Replay buffer saved",
+    successMessage: () => "Replay buffer save requested; file completion has not been observed",
   });
 
   // GetLastReplayBufferReplay tool

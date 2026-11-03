@@ -559,7 +559,7 @@ async fn audio(
             unreadable.push(*name);
             if !require_verified {
                 audible.push(format!(
-                    "{name} (audio routing unavailable; assumed recorded)"
+                    "{name} (audio routing unavailable; conservatively assumed configured)"
                 ));
             }
             continue;
@@ -578,7 +578,7 @@ async fn audio(
             check(
                 "audio",
                 Status::Pass,
-                "No unmuted input feeds a recorded audio track",
+                "No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured.",
             )
         } else {
             check(
@@ -596,7 +596,7 @@ async fn audio(
                 Status::Warn
             },
             format!(
-                "Recorded audio comes from: {}. macOS screen_capture inputs carry application audio; mute them or clear their tracks for a silent recording",
+                "Configured unmuted audio routes (or conservative routing assumptions) on selected recording tracks: {}. Signal levels and monitoring/loopback paths were not measured. Mute these inputs or clear their recorded-track routing to meet the conservative silence policy",
                 audible.join("; ")
             ),
         )

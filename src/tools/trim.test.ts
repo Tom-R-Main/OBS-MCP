@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: GPL-2.0-only
  */
 import { execFileSync } from "node:child_process";
-import { createReadStream, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdtempSync, readFileSync, readdirSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { healthyObsState, servePreflightState } from "../../test/support/fake-obs-state.js";
 import { resultText, startMcpHarness, type McpHarness } from "../../test/support/mcp-harness.js";
-import { contactSheet, planCuts, publishTrimmedExport, qualifiedEncoderArgs, remapTime, requireSdrInput, seamSampleTimes, validateTrimmedMetadata, type MediaProbe } from "./trim.js";
+import { audioEvidenceFilterPath, parseAudioEvidence, contactSheet, planCuts, publishTrimmedExport, qualifiedEncoderArgs, remapTime, requireSdrInput, seamSampleTimes, validateTrimmedMetadata, type MediaProbe } from "./trim.js";
 import { runBoundedMediaProcess } from "./media-verification.js";
 
 function hasFfmpeg(): boolean {
@@ -25,6 +25,50 @@ function hasFfmpeg(): boolean {
 }
 
 const ffmpegAvailable = hasFfmpeg();
+
+describe('private audio evidence grammar', () => {
+  const header = (frame:number,time=0) => `frame:${frame} pts:${frame} pts_time:${time}\n`;
+  it('accepts empty audible evidence and a final open silence interval', () => {
+    expect(parseAudioEvidence('',4)).toEqual([]);
+    expect(parseAudioEvidence(header(0)+'lavfi.silence_start=0\n',4)).toEqual([{start:0,end:4}]);
+  });
+  it('accepts key-order-independent complete frames and clamps ordinary boundary priming', () => {
+    expect(parseAudioEvidence(header(0)+'lavfi.silence_start=-0.02\n'+header(12,4)+'lavfi.silence_duration=4.04\nlavfi.silence_end=4.02\n',4)).toEqual([{start:0,end:4}]);
+    expect(parseAudioEvidence(header(2,2)+'lavfi.silence_duration=1\nlavfi.silence_end=2\nlavfi.silence_start=1\n',4)).toEqual([{start:1,end:2}]);
+  });
+  for (const [name,text] of [
+    ['raw stderr','[silencedetect @ 0x123] silence_start: 0\n'],
+    ['unknown frame metadata',header(0)+'attacker=lavfi.silence_start=0\n'],
+    ['duplicate keys',header(0)+'lavfi.silence_start=0\nlavfi.silence_start=0\n'],
+    ['nonfinite times',header(0)+'lavfi.silence_start=NaN\n'],
+    ['nondecimal times',header(0)+'lavfi.silence_start=0x1\n'],
+    ['orphan end',header(0)+'lavfi.silence_end=1\nlavfi.silence_duration=1\n'],
+    ['missing duration',header(0)+'lavfi.silence_start=0\nlavfi.silence_end=1\n'],
+    ['orphan duration',header(0)+'lavfi.silence_start=0\nlavfi.silence_duration=1\n'],
+    ['negative duration',header(0)+'lavfi.silence_start=0\nlavfi.silence_end=1\nlavfi.silence_duration=-0.01\n'],
+    ['empty frame',header(0)],
+    ['reused frame',header(1)+'lavfi.silence_start=0\n'+header(1)+'lavfi.silence_end=1\nlavfi.silence_duration=1\n'],
+    ['truncated line',header(0)+'lavfi.silence_start=0'],
+    ['overlapping starts',header(0)+'lavfi.silence_start=0\n'+header(1)+'lavfi.silence_start=1\n'],
+    ['backwards end',header(0)+'lavfi.silence_start=2\nlavfi.silence_end=1\nlavfi.silence_duration=1\n'],
+    ['out of range',header(0)+'lavfi.silence_start=5\n'],
+    ['oversized file','x'.repeat(1024*1024+1)],
+  ] as const) it(`refuses ${name} instead of granting cuts`, () => expect(() => parseAudioEvidence(text,4)).toThrow());
+  it.skipIf(!ffmpegAvailable)('uses an actual private filter file through every path-grammar separator', () => {
+    const root=mkdtempSync(join(tmpdir(),'audio-evidence-path-')),parent=join(root,"sp ace:quo'te\\comma,[x];");mkdirSync(parent);const output=join(parent,'events.txt');writeFileSync(output,'');
+    try {
+      execFileSync('ffmpeg',['-v','error','-nostdin','-f','lavfi','-i','anullsrc=r=8000:cl=mono','-t','0.3','-af',`ametadata=mode=delete,silencedetect=n=-50dB:d=0.1,ametadata=mode=print:file=${audioEvidenceFilterPath(output)}`,'-f','null','-'],{stdio:['ignore','ignore','pipe'],timeout:5000});
+      expect(parseAudioEvidence(readFileSync(output,'utf8'),0.3)).toEqual([{start:0,end:0.3}]);
+    } finally {rmSync(root,{recursive:true,force:true});}
+  });
+  it.skipIf(!ffmpegAvailable)('clears actual forged frame metadata before the detector writes evidence', () => {
+    const root=mkdtempSync(join(tmpdir(),'audio-evidence-frame-')),output=join(root,'events.txt');writeFileSync(output,'');
+    try {
+      execFileSync('ffmpeg',['-v','error','-nostdin','-f','lavfi','-i','sine=frequency=997:sample_rate=8000:duration=0.4','-af',`ametadata=mode=add:key=lavfi.silence_start:value=0,ametadata=mode=delete,silencedetect=n=-50dB:d=0.1,ametadata=mode=print:file=${audioEvidenceFilterPath(output)}`,'-f','null','-'],{stdio:['ignore','ignore','pipe'],timeout:5000});
+      expect(readFileSync(output,'utf8')).toBe('');expect(parseAudioEvidence(readFileSync(output,'utf8'),0.4)).toEqual([]);
+    } finally {rmSync(root,{recursive:true,force:true});}
+  });
+});
 
 describe("verified export boundary", () => {
   const expected = { duration: 9.5, width: 160, height: 90, audioStreams: 0, chapters: [{ at: 0, name: "Intro" }, { at: 7, name: "Answer" }] };

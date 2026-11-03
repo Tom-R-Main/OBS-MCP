@@ -4,7 +4,7 @@ The current executable enters the retained Rust service directly. Stdio and loop
 
 ## Current capability boundary
 
-Production exposes up to 164 ordinary tools with approved host/media adapters. Advanced exposes 163 ordinary tools and excludes guarded Take, media, Stage and recovery owners. The 178-name union spans both immutable profiles. Three dynamic group controllers are conditional additions for stdio; HTTP uses static groups. Read-only mode, filters and adapter availability still apply.
+Production exposes up to 165 ordinary tools with approved host/media adapters. Advanced exposes 163 ordinary tools and excludes guarded Take, media, Stage and recovery owners. The 179-name union spans both immutable profiles. Three dynamic group controllers are conditional additions for stdio; HTTP uses static groups. Read-only mode, filters and adapter availability still apply.
 
 The composed service owns planning/audit, Apply Scene and Capture Window, snapshots/manual Restore, guarded preparation/recovery, bounded recording and media jobs, confirmation/resume, resources and cooperating control. Advanced raw, batch, vendor, hotkey and manual output commands retain their separate policy and durable guarded-reentry barriers. See [native profiles](native-profiles.md); a visible tool or successful ACK never grants another workflow's recording, Stop or file authority.
 
@@ -67,6 +67,8 @@ All children reported close and were absent; proxy peers, raw sockets and listen
 This proves the bounded Mac custom-CA proxy-backed authentication/read journey. It does not establish a system-root positive, Linux TLS, general production TLS admission or installed-client activation. Default core TLS remains off and `wss:` refuses without downgrade or SDK handoff.
 
 ## Remaining work
+
+The [workflow qualification matrix](workflow-qualification.md) expands checks across live shows, meetings, multitrack media, overlays, teaching and recovery, and separates fixture coverage from device/destination gaps.
 
 1. Qualify real Linux exact-window and applicable user-authorized Wayland capture; keep the tester VM's missing oracle/package scope separate from CI.
 2. Complete the remaining TLS platform, trust and lifetime qualification before general production admission. The Mac evaluation does not establish Linux TLS acceptance.

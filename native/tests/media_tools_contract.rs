@@ -113,6 +113,10 @@ async fn clip(root: &Scratch, audio: &str) -> PathBuf {
             } else {
                 "anullsrc=r=48000:cl=mono"
             },
+        ]));
+    }
+    if audio == "multitrack" {
+        make.extend(args(&[
             "-f",
             "lavfi",
             "-i",
@@ -126,7 +130,10 @@ async fn clip(root: &Scratch, audio: &str) -> PathBuf {
         "[v]",
     ]));
     if audio != "none" {
-        make.extend(args(&["-map", "2:a:0", "-map", "3:a:0", "-c:a", "aac"]));
+        make.extend(args(&["-map", "2:a:0", "-c:a", "aac"]));
+    }
+    if audio == "multitrack" {
+        make.extend(args(&["-map", "3:a:0"]));
     }
     make.extend(args(&[
         "-c:v",
@@ -234,7 +241,7 @@ fn assert_success(result: &Value) {
 async fn actual_contact_sheet_mcp_oracle_matches_explicit_default_sidecar_legend_and_every_content_field()
  {
     let root = Scratch::new();
-    clip(&root, "silent").await;
+    clip(&root, "multitrack").await;
     for arguments in [
         json!({"path":"source.mkv","times":[0.5,4.5,1.5],"columns":2,"width":80}),
         json!({"path":"source.mkv"}),
@@ -270,8 +277,8 @@ async fn actual_contact_sheet_mcp_oracle_matches_explicit_default_sidecar_legend
 }
 
 #[tokio::test]
-async fn actual_trim_mcp_oracle_matches_default_plan_audio_first_track_chapters_remap_and_apply_report()
- {
+async fn actual_trim_mcp_oracle_matches_default_plan_single_audio_chapters_remap_and_apply_report()
+{
     let root = Scratch::new();
     clip(&root, "silent").await;
     fs::write(

@@ -1,5 +1,5 @@
 {
-  "scope": "Actual frozen163 Source+SDK registry/controllers; no OBS. Invalid SDK projections retained for later frontend ownership.",
+  "scope": "Actual current tranche175 compiled Source + pinned SDK registry/controllers (179 ordinary tools); no OBS. Original 14-case matrix and 5 invalid SDK inputs retained; responses regenerated through public MCP.",
   "contract": {
     "groups": [
       {
@@ -64,8 +64,8 @@
       },
       {
         "group": "outputs",
-        "enabled": 17,
-        "total": 17,
+        "enabled": 18,
+        "total": 18,
         "covers": "virtual camera, replay buffer, and generic outputs"
       },
       {
@@ -308,6 +308,7 @@
       "obs-stop-output",
       "obs-get-output-settings",
       "obs-set-output-settings",
+      "obs-save-replay-verified",
       "obs-get-record-status",
       "obs-toggle-record",
       "obs-start-record",
@@ -495,6 +496,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -675,6 +677,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -913,6 +916,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -998,7 +1002,7 @@
           "content": [
             {
               "type": "text",
-              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
             }
           ],
           "structuredContent": {
@@ -1066,7 +1070,7 @@
               {
                 "group": "outputs",
                 "enabled": 0,
-                "total": 17,
+                "total": 18,
                 "covers": "virtual camera, replay buffer, and generic outputs"
               },
               {
@@ -1251,6 +1255,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -1355,7 +1360,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -1423,7 +1428,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -1586,6 +1591,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -1690,7 +1696,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -1758,7 +1764,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -1936,6 +1942,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -2026,7 +2033,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -2094,7 +2101,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -2303,6 +2310,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -2373,7 +2381,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -2441,7 +2449,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -2640,6 +2648,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -2744,7 +2753,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -2812,7 +2821,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -2986,6 +2995,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -3166,6 +3176,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -3235,7 +3246,7 @@
           "content": [
             {
               "type": "text",
-              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
+              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
             }
           ],
           "structuredContent": {
@@ -3302,8 +3313,8 @@
               },
               {
                 "group": "outputs",
-                "enabled": 17,
-                "total": 17,
+                "enabled": 18,
+                "total": 18,
                 "covers": "virtual camera, replay buffer, and generic outputs"
               },
               {
@@ -3517,6 +3528,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -3677,6 +3689,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-studio-mode",
               "obs-set-studio-mode",
               "obs-open-input-properties",
@@ -3718,7 +3731,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -3785,8 +3798,8 @@
                   },
                   {
                     "group": "outputs",
-                    "enabled": 17,
-                    "total": 17,
+                    "enabled": 18,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -3951,6 +3964,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -4111,6 +4125,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-studio-mode",
               "obs-set-studio-mode",
               "obs-open-input-properties",
@@ -4152,7 +4167,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -4219,8 +4234,8 @@
                   },
                   {
                     "group": "outputs",
-                    "enabled": 17,
-                    "total": 17,
+                    "enabled": 18,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -4434,6 +4449,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -4614,6 +4630,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -4683,7 +4700,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -4750,8 +4767,8 @@
                   },
                   {
                     "group": "outputs",
-                    "enabled": 17,
-                    "total": 17,
+                    "enabled": 18,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -4992,6 +5009,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -5163,7 +5181,7 @@
           "content": [
             {
               "type": "text",
-              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
             }
           ],
           "structuredContent": {
@@ -5231,7 +5249,7 @@
               {
                 "group": "outputs",
                 "enabled": 0,
-                "total": 17,
+                "total": 18,
                 "covers": "virtual camera, replay buffer, and generic outputs"
               },
               {
@@ -5268,7 +5286,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "Enabled 17 tool(s) in outputs: obs-get-virtual-cam-status, obs-toggle-virtual-cam, obs-start-virtual-cam, obs-stop-virtual-cam, obs-get-replay-buffer-status, obs-toggle-replay-buffer, obs-start-replay-buffer, obs-stop-replay-buffer, obs-save-replay-buffer, obs-get-last-replay-buffer-replay, obs-get-output-list, obs-get-output-status, obs-toggle-output, obs-start-output, obs-stop-output, obs-get-output-settings, obs-set-output-settings"
+                "text": "Enabled 18 tool(s) in outputs: obs-get-virtual-cam-status, obs-toggle-virtual-cam, obs-start-virtual-cam, obs-stop-virtual-cam, obs-get-replay-buffer-status, obs-toggle-replay-buffer, obs-start-replay-buffer, obs-stop-replay-buffer, obs-save-replay-buffer, obs-get-last-replay-buffer-replay, obs-get-output-list, obs-get-output-status, obs-toggle-output, obs-start-output, obs-stop-output, obs-get-output-settings, obs-set-output-settings, obs-save-replay-verified"
               }
             ],
             "structuredContent": {
@@ -5292,7 +5310,8 @@
                 "obs-start-output",
                 "obs-stop-output",
                 "obs-get-output-settings",
-                "obs-set-output-settings"
+                "obs-set-output-settings",
+                "obs-save-replay-verified"
               ]
             }
           },
@@ -5412,6 +5431,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -5547,6 +5567,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -5600,7 +5621,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -5667,8 +5688,8 @@
                   },
                   {
                     "group": "outputs",
-                    "enabled": 17,
-                    "total": 17,
+                    "enabled": 18,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -5853,6 +5874,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -5988,6 +6010,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-canvas-list",
               "obs-get-input-audio-tracks",
               "obs-set-input-audio-tracks",
@@ -6022,7 +6045,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -6089,8 +6112,8 @@
                   },
                   {
                     "group": "outputs",
-                    "enabled": 17,
-                    "total": 17,
+                    "enabled": 18,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -6255,6 +6278,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -6342,7 +6366,7 @@
           "content": [
             {
               "type": "text",
-              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\npart record (2/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\npart record (2/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
             }
           ],
           "structuredContent": {
@@ -6410,7 +6434,7 @@
               {
                 "group": "outputs",
                 "enabled": 0,
-                "total": 17,
+                "total": 18,
                 "covers": "virtual camera, replay buffer, and generic outputs"
               },
               {
@@ -6576,6 +6600,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -6661,7 +6686,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\noff record (0/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -6729,7 +6754,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -6912,6 +6937,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -7016,7 +7042,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\noff inputs (0/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\noff outputs (0/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -7084,7 +7110,7 @@
                   {
                     "group": "outputs",
                     "enabled": 0,
-                    "total": 17,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {
@@ -8106,6 +8132,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -8286,6 +8313,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -8355,7 +8383,7 @@
           "content": [
             {
               "type": "text",
-              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
+              "text": "on  general (14/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\non  scenes (15/15): scenes, canvases, program and preview scene, obs-apply-scene\non  scene-items (20/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\non  sources (3/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\non  media (4/4): media input playback\non  filters (10/10): source filters\non  transitions (14/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\non  stream (5/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\non  config (17/17): profiles, scene collections, video settings, persistent data\non  ui (8/8): studio mode, dialogs, projectors\non  protocol (3/3): describing and calling any OBS request, request batches"
             }
           ],
           "structuredContent": {
@@ -8422,8 +8450,8 @@
               },
               {
                 "group": "outputs",
-                "enabled": 17,
-                "total": 17,
+                "enabled": 18,
+                "total": 18,
                 "covers": "virtual camera, replay buffer, and generic outputs"
               },
               {
@@ -8792,6 +8820,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-toggle-record",
           "obs-start-record",
@@ -8895,6 +8924,7 @@
           "obs-stop-output",
           "obs-get-output-settings",
           "obs-set-output-settings",
+          "obs-save-replay-verified",
           "obs-get-record-status",
           "obs-get-input-audio-tracks",
           "obs-set-input-audio-tracks",
@@ -8910,7 +8940,7 @@
           "content": [
             {
               "type": "text",
-              "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\npart record (1/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+              "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\npart record (1/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
             }
           ],
           "structuredContent": {
@@ -8977,8 +9007,8 @@
               },
               {
                 "group": "outputs",
-                "enabled": 17,
-                "total": 17,
+                "enabled": 18,
+                "total": 18,
                 "covers": "virtual camera, replay buffer, and generic outputs"
               },
               {
@@ -9160,6 +9190,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -9263,6 +9294,7 @@
               "obs-stop-output",
               "obs-get-output-settings",
               "obs-set-output-settings",
+              "obs-save-replay-verified",
               "obs-get-record-status",
               "obs-toggle-record",
               "obs-start-record",
@@ -9296,7 +9328,7 @@
               "content": [
                 {
                   "type": "text",
-                  "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (17/17): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
+                  "text": "off general (0/14): status, version, statistics, hotkeys, vendor requests, custom events, sleep\noff scenes (0/15): scenes, canvases, program and preview scene, obs-apply-scene\noff scene-items (0/20): scene items, groups, transforms, ordering, locking, blend modes, snapshots and restore\noff sources (0/3): source screenshots and active state\non  inputs (29/29): inputs, input settings and properties, audio, deinterlacing, obs-capture-window\noff media (0/4): media input playback\noff filters (0/10): source filters\noff transitions (0/14): transitions, overrides, the T-Bar\non  record (19/19): recording, chapters, preflight, clips, watched takes, trimming, contact sheets\noff stream (0/5): streaming and captions\non  outputs (18/18): virtual camera, replay buffer, and generic outputs\noff config (0/17): profiles, scene collections, video settings, persistent data\noff ui (0/8): studio mode, dialogs, projectors\noff protocol (0/3): describing and calling any OBS request, request batches"
                 }
               ],
               "structuredContent": {
@@ -9363,8 +9395,8 @@
                   },
                   {
                     "group": "outputs",
-                    "enabled": 17,
-                    "total": 17,
+                    "enabled": 18,
+                    "total": 18,
                     "covers": "virtual camera, replay buffer, and generic outputs"
                   },
                   {

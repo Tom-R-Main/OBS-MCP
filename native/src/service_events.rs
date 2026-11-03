@@ -264,6 +264,7 @@ impl Drop for ObservedFrame {
 pub(crate) struct EventHub {
     slot: Mutex<Option<Weak<FeedState>>>,
     outputs: Arc<crate::output_events::Registry>,
+    replays: Arc<crate::replay_events::Registry>,
     resources: Option<crate::resource_events::Publisher>,
 }
 impl EventHub {
@@ -274,6 +275,7 @@ impl EventHub {
         Self {
             slot: Mutex::new(None),
             outputs: Arc::new(crate::output_events::Registry::new(token)),
+            replays: Arc::new(crate::replay_events::Registry::new(token)),
             resources,
         }
     }
@@ -282,6 +284,12 @@ impl EventHub {
         handle: SessionHandle,
     ) -> Result<crate::output_events::OutputEvents, crate::output_events::OutputEventError> {
         self.outputs.view(handle)
+    }
+    pub(crate) fn replay_events(
+        &self,
+        handle: SessionHandle,
+    ) -> Result<crate::replay_events::ReplayEvents, String> {
+        self.replays.view(handle)
     }
     /// Call under this same lock as revision/progress publication so a newly
     /// attached consumer starts at a published cursor, never a mixed interval.
@@ -293,6 +301,7 @@ impl EventHub {
         let mut slot = self.slot.lock().map_err(|_| invalidated())?;
         update();
         self.outputs.publish(&event);
+        self.replays.publish(&event);
         // Project owned URI/recipient data only; resource backpressure cannot
         // revoke the physical observer or retain this event's permits.
         if let Some(resources) = &self.resources {
@@ -371,6 +380,7 @@ impl EventHub {
     }
     pub(crate) fn revoke(&self) {
         self.outputs.revoke();
+        self.replays.revoke();
         if let Ok(mut slot) = self.slot.lock()
             && let Some(scope) = slot.take().and_then(|scope| scope.upgrade())
         {

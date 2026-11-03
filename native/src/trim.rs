@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     cmp::Ordering,
+    collections::BTreeMap,
     ffi::OsString,
     fmt,
     fs::{self, File, Metadata, OpenOptions},
@@ -308,11 +309,30 @@ pub fn plan_report(plan: &Timeline, min_idle_seconds: f64, apply: bool) -> Value
     }
     json!({"content":[{"type":"text","text":lines.join("\n")}],"structuredContent":plan})
 }
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioTrack {
+    pub codec: String,
+    pub sample_rate: u32,
+    pub channels: u8,
+    pub channel_layout: String,
+    pub language: String,
+    pub title: Option<String>,
+    pub dispositions: Option<BTreeMap<String, u8>>,
+    #[serde(default)]
+    pub start_seconds: Option<f64>,
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaProbe {
     pub duration: f64,
     pub audio_streams: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub audio_tracks: Vec<AudioTrack>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_start_seconds: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_start_seconds: Option<f64>,
     pub video_streams: usize,
     pub chapters: Vec<Chapter>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -521,6 +541,61 @@ pub fn parse_probe(data: &Value) -> MediaProbe {
             .iter()
             .filter(|s| s["codec_type"] == "audio")
             .count(),
+        audio_tracks: streams
+            .iter()
+            .filter(|s| s["codec_type"] == "audio")
+            .map(|stream| {
+                let tag = |name: &str| {
+                    stream["tags"]
+                        .as_object()
+                        .and_then(|tags| {
+                            tags.iter().find(|(key, _)| key.eq_ignore_ascii_case(name))
+                        })
+                        .and_then(|(_, value)| value.as_str())
+                };
+                let title = tag("title").filter(|title| !title.is_empty()).or_else(|| {
+                    tag("handler_name").filter(|title| !matches!(*title, "SoundHandler" | ""))
+                });
+                let dispositions = stream["disposition"].as_object().and_then(|values| {
+                    values
+                        .iter()
+                        .map(|(key, value)| {
+                            value
+                                .as_u64()
+                                .filter(|n| *n <= 1)
+                                .map(|n| (key.clone(), n as u8))
+                        })
+                        .collect::<Option<BTreeMap<_, _>>>()
+                });
+                AudioTrack {
+                    codec: stream["codec_name"].as_str().unwrap_or("").into(),
+                    sample_rate: stream["sample_rate"]
+                        .as_str()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0),
+                    channels: stream["channels"]
+                        .as_u64()
+                        .and_then(|v| u8::try_from(v).ok())
+                        .unwrap_or(0),
+                    channel_layout: stream["channel_layout"].as_str().unwrap_or("").into(),
+                    language: tag("language").unwrap_or("und").into(),
+                    title: title.map(str::to_owned),
+                    start_seconds: stream["start_time"]
+                        .as_str()
+                        .and_then(|value| value.parse::<f64>().ok())
+                        .filter(|value| value.is_finite()),
+                    dispositions,
+                }
+            })
+            .collect(),
+        format_start_seconds: data["format"]["start_time"]
+            .as_str()
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite()),
+        video_start_seconds: video
+            .and_then(|stream| stream["start_time"].as_str())
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite()),
         video_streams: streams
             .iter()
             .filter(|s| s["codec_type"] == "video")
@@ -551,6 +626,100 @@ pub fn parse_probe(data: &Value) -> MediaProbe {
         color_range: text("color_range"),
         frame_rate,
     }
+}
+fn require_single_audio_track(audio_streams: usize) -> Result<(), TrimError> {
+    if audio_streams > 1 {
+        return Err(evidence(
+            "Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow",
+        ));
+    }
+    Ok(())
+}
+pub fn qualified_audio_tracks(info: &MediaProbe) -> Result<&[AudioTrack], TrimError> {
+    if !(2..=6).contains(&info.audio_streams) || info.audio_tracks.len() != info.audio_streams {
+        return Err(evidence(
+            "Multitrack trim requires complete metadata for two through six audio tracks",
+        ));
+    }
+    let near_zero =
+        |value: Option<f64>| value.is_some_and(|value| value.is_finite() && value.abs() <= 0.05);
+    if !near_zero(info.format_start_seconds)
+        || !near_zero(info.video_start_seconds)
+        || info.audio_tracks.iter().any(|track| {
+            !near_zero(track.start_seconds)
+                || !track
+                    .start_seconds
+                    .zip(info.video_start_seconds)
+                    .is_some_and(|(audio, video)| (audio - video).abs() <= 0.05)
+        })
+    {
+        return Err(evidence(
+            "Multitrack trim requires declared audio/video/format starts within 50 ms of zero and each other",
+        ));
+    }
+    let mut defaults = 0;
+    for track in &info.audio_tracks {
+        if !matches!(
+            track.codec.as_str(),
+            "aac" | "flac" | "opus" | "pcm_s16le" | "pcm_s24le" | "pcm_s32le" | "pcm_f32le"
+        ) || !matches!(track.sample_rate, 44100 | 48000)
+            || !matches!(
+                (track.channels, track.channel_layout.as_str()),
+                (1, "mono") | (2, "stereo")
+            )
+            || track.language.len() != 3
+            || !track.language.bytes().all(|c| c.is_ascii_lowercase())
+            || track.title.as_ref().is_some_and(|title| {
+                title == "SoundHandler" || title.len() > 1024 || title.chars().any(char::is_control)
+            })
+        {
+            return Err(evidence(
+                "Multitrack trim requires supported codecs, mono/stereo 44.1/48 kHz audio and representable track metadata",
+            ));
+        }
+        let dispositions = track
+            .dispositions
+            .as_ref()
+            .ok_or_else(|| evidence("Multitrack audio dispositions are unavailable"))?;
+        if dispositions
+            .iter()
+            .any(|(key, value)| *value > 1 || (*value == 1 && key != "default"))
+        {
+            return Err(evidence(
+                "Multitrack trim supports only the default audio disposition",
+            ));
+        }
+        defaults += usize::from(dispositions.get("default") == Some(&1));
+    }
+    if defaults != 1 {
+        return Err(evidence(
+            "Multitrack MP4 trim requires exactly one default audio track",
+        ));
+    }
+    Ok(&info.audio_tracks)
+}
+fn same_audio_descriptor(actual: &AudioTrack, expected: &AudioTrack) -> bool {
+    actual.codec == "aac"
+        && actual
+            .start_seconds
+            .is_some_and(|value| value.is_finite() && value.abs() <= 0.05)
+        && actual.sample_rate == expected.sample_rate
+        && actual.channels == expected.channels
+        && actual.channel_layout == expected.channel_layout
+        && actual.language == expected.language
+        && actual.title == expected.title
+        && actual.dispositions.as_ref().is_some_and(|values| {
+            values
+                .iter()
+                .all(|(name, value)| *value == 0 || name == "default")
+                && values.get("default").copied().unwrap_or(0)
+                    == expected
+                        .dispositions
+                        .as_ref()
+                        .and_then(|values| values.get("default"))
+                        .copied()
+                        .unwrap_or(0)
+        })
 }
 pub fn require_sdr_input(info: &MediaProbe) -> Result<(), TrimError> {
     if matches!(
@@ -591,6 +760,14 @@ pub fn validate_trimmed_metadata(
     actual: &MediaProbe,
     expected: &ExpectedMetadata,
 ) -> Result<(), TrimError> {
+    require_single_audio_track(expected.audio_streams)?;
+    validate_export_metadata(actual, expected, None)
+}
+fn validate_export_metadata(
+    actual: &MediaProbe,
+    expected: &ExpectedMetadata,
+    tracks: Option<&[AudioTrack]>,
+) -> Result<(), TrimError> {
     if !actual.duration.is_finite() || (actual.duration - expected.duration).abs() > 0.25 {
         return Err(evidence("Staged export duration differs from the cut plan"));
     }
@@ -608,7 +785,20 @@ pub fn validate_trimmed_metadata(
     if expected.frame_rate.is_some() && actual.frame_rate != expected.frame_rate {
         return Err(evidence("Staged export frame rate differs from the source"));
     }
-    if actual.audio_streams != expected.audio_streams.min(1) {
+    if let Some(tracks) = tracks {
+        if actual.audio_streams != expected.audio_streams
+            || actual.audio_tracks.len() != tracks.len()
+            || !actual
+                .audio_tracks
+                .iter()
+                .zip(tracks)
+                .all(|(actual, expected)| same_audio_descriptor(actual, expected))
+        {
+            return Err(evidence(
+                "Staged export audio track order or descriptors differ from the source",
+            ));
+        }
+    } else if actual.audio_streams != expected.audio_streams.min(1) {
         return Err(evidence(
             "Staged export audio stream count differs from the first-track policy",
         ));
@@ -683,6 +873,7 @@ pub fn ffmetadata(chapters: &[Chapter], duration: f64) -> String {
 #[derive(Clone)]
 pub struct EncodeRequest {
     args: Vec<OsString>,
+    audio_tracks: Vec<AudioTrack>,
     pub metadata: String,
     pub metadata_path: PathBuf,
     pub input: PathBuf,
@@ -704,6 +895,33 @@ pub fn encode_command(
     metadata: &Path,
     plan: EncodePlan<'_>,
     encoders: &str,
+) -> Result<EncodeRequest, TrimError> {
+    require_single_audio_track(plan.audio_streams)?;
+    encode_command_inner(input, output, metadata, plan, encoders, &[])
+}
+pub fn encode_track_preserving_command(
+    input: &Path,
+    output: &Path,
+    metadata: &Path,
+    plan: EncodePlan<'_>,
+    encoders: &str,
+    source: &MediaProbe,
+) -> Result<EncodeRequest, TrimError> {
+    let tracks = qualified_audio_tracks(source)?;
+    if plan.audio_streams != tracks.len() || plan.keep.len() > 256 {
+        return Err(evidence(
+            "Track-preserving export plan exceeds its qualified bounds",
+        ));
+    }
+    encode_command_inner(input, output, metadata, plan, encoders, tracks)
+}
+fn encode_command_inner(
+    input: &Path,
+    output: &Path,
+    metadata: &Path,
+    plan: EncodePlan<'_>,
+    encoders: &str,
+    tracks: &[AudioTrack],
 ) -> Result<EncodeRequest, TrimError> {
     let EncodePlan {
         keep,
@@ -727,12 +945,22 @@ pub fn encode_command(
                 number(s.start),
                 number(s.end)
             );
-            if audio {
+            if tracks.is_empty() && audio {
                 format!(
                     "{video};[0:a:0]atrim=start={}:end={},asetpts=PTS-STARTPTS[a{i}]",
                     number(s.start),
                     number(s.end)
                 )
+            } else if !tracks.is_empty() {
+                let mut filters = vec![video];
+                filters.extend(tracks.iter().enumerate().map(|(track, _)| {
+                    format!(
+                        "[0:a:{track}]atrim=start={}:end={},asetpts=PTS-STARTPTS[a{i}_{track}]",
+                        number(s.start),
+                        number(s.end)
+                    )
+                }));
+                filters.join(";")
             } else {
                 video
             }
@@ -742,7 +970,11 @@ pub fn encode_command(
         .map(|i| {
             format!(
                 "[v{i}]{}",
-                if audio {
+                if !tracks.is_empty() {
+                    (0..tracks.len())
+                        .map(|track| format!("[a{i}_{track}]"))
+                        .collect::<String>()
+                } else if audio {
                     format!("[a{i}]")
                 } else {
                     String::new()
@@ -755,9 +987,23 @@ pub fn encode_command(
         "{};{inputs}concat=n={}:v=1:a={}{}{}{}",
         parts.join(";"),
         keep.len(),
-        usize::from(audio),
+        if tracks.is_empty() {
+            usize::from(audio)
+        } else {
+            tracks.len()
+        },
         if rate.is_some() { "[joined]" } else { "[v]" },
-        if audio { "[a]" } else { "" },
+        if tracks.is_empty() {
+            if audio {
+                "[a]".to_owned()
+            } else {
+                String::new()
+            }
+        } else {
+            (0..tracks.len())
+                .map(|track| format!("[a{track}]"))
+                .collect::<String>()
+        },
         rate.as_ref()
             .map(|rate| format!(";[joined]fps=fps={rate}[v]"))
             .unwrap_or_default()
@@ -777,7 +1023,42 @@ pub fn encode_command(
         "-map".into(),
         "[v]".into(),
     ];
-    if audio {
+    if !tracks.is_empty() {
+        for (index, track) in tracks.iter().enumerate() {
+            args.extend(["-map".into(), format!("[a{index}]").into()]);
+            for (option, value) in [
+                (format!("-ar:a:{index}"), track.sample_rate.to_string()),
+                (format!("-ac:a:{index}"), track.channels.to_string()),
+                (
+                    format!("-channel_layout:a:{index}"),
+                    track.channel_layout.clone(),
+                ),
+                (
+                    format!("-metadata:s:a:{index}"),
+                    format!("language={}", track.language),
+                ),
+                (
+                    format!("-metadata:s:a:{index}"),
+                    format!("title={}", track.title.as_deref().unwrap_or("")),
+                ),
+                (
+                    format!("-metadata:s:a:{index}"),
+                    format!("handler_name={}", track.title.as_deref().unwrap_or("")),
+                ),
+                (
+                    format!("-disposition:a:{index}"),
+                    if track.dispositions.as_ref().and_then(|v| v.get("default")) == Some(&1) {
+                        "default".into()
+                    } else {
+                        "0".into()
+                    },
+                ),
+            ] {
+                args.extend([option.into(), value.into()]);
+            }
+        }
+        args.extend(["-c:a", "aac", "-b:a", "160k"].map(OsString::from));
+    } else if audio {
         args.extend(["-map", "[a]", "-c:a", "aac", "-b:a", "160k"].map(OsString::from));
     }
     args.extend(["-map_metadata", "1", "-map_chapters", "1"].map(OsString::from));
@@ -793,6 +1074,7 @@ pub fn encode_command(
     ]);
     Ok(EncodeRequest {
         args,
+        audio_tracks: tracks.to_vec(),
         metadata: ffmetadata(chapters, duration),
         metadata_path: metadata.to_owned(),
         input: input.to_owned(),
@@ -916,8 +1198,241 @@ pub fn detect_idle(still: &[Span], stderr: &str, info: &MediaProbe) -> IdleAnaly
         audible: true,
     }
 }
+/// Trusted synthetic detector logs only. Production uses analyze_sampled_idle.
+pub fn analyze_idle(
+    still: &[Span],
+    stderr: &str,
+    info: &MediaProbe,
+) -> Result<IdleAnalysis, TrimError> {
+    if info.audio_streams <= 1 {
+        return Ok(detect_idle(still, stderr, info));
+    }
+    analyze_named_idle(still, stderr, info, "obs_mcp_a")
+}
+fn analyze_named_idle(
+    still: &[Span],
+    stderr: &str,
+    info: &MediaProbe,
+    prefix: &str,
+) -> Result<IdleAnalysis, TrimError> {
+    if info.audio_streams > 1 {
+        qualified_audio_tracks(info)?;
+    }
+    let mut common = vec![Span {
+        start: 0.0,
+        end: info.duration,
+    }];
+    let mut all_silent = true;
+    for index in 0..info.audio_streams {
+        let marker = format!("[silencedetect@{prefix}{index} @");
+        let lines = stderr
+            .lines()
+            .filter(|line| line.trim_start().starts_with(&marker))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let silent = parse_silence(&lines, info.duration);
+        if silent.len() > 100_000
+            || silent.iter().any(|span| {
+                !span.start.is_finite()
+                    || !span.end.is_finite()
+                    || span.start < 0.0
+                    || span.end < span.start
+                    || span.end > info.duration + 0.1
+            })
+            || silent.windows(2).any(|spans| spans[0].end > spans[1].start)
+        {
+            return Err(evidence(
+                "Audio silence intervals are incomplete or exceed their bound",
+            ));
+        }
+        all_silent &=
+            silent.len() == 1 && silent[0].start <= 0.1 && silent[0].end >= info.duration - 0.1;
+        common = intersect_spans(&common, &silent);
+    }
+    Ok(IdleAnalysis {
+        idle: intersect_spans(still, &common),
+        audible: !all_silent,
+    })
+}
+pub const AUDIO_EVIDENCE_BYTES: usize = 1024 * 1024;
+pub const AUDIO_EVIDENCE_EVENTS: usize = 100_000;
+#[derive(Clone, Debug)]
+pub struct AudioEvidence {
+    tracks: Vec<Vec<Span>>,
+}
+/// Parse only independent, inode-checked producer files after joined cleanup.
+/// Neither stderr nor caller-supplied frame metadata is evidence.
+pub fn parse_audio_evidence(texts: &[String], duration: f64) -> Result<AudioEvidence, TrimError> {
+    if texts.len() > 6 {
+        return Err(evidence("Audio analysis supports at most six tracks"));
+    }
+    let tracks = texts
+        .iter()
+        .map(|text| parse_audio_track_evidence(text, duration))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(AudioEvidence { tracks })
+}
+pub fn parse_audio_track_evidence(text: &str, duration: f64) -> Result<Vec<Span>, TrimError> {
+    if !duration.is_finite()
+        || duration <= 0.0
+        || text.len() > AUDIO_EVIDENCE_BYTES
+        || (!text.is_empty() && !text.ends_with('\n'))
+    {
+        return Err(evidence(
+            "Audio evidence is incomplete or exceeds its bound",
+        ));
+    }
+    let mut frame: Option<u64> = None;
+    let mut fields: BTreeMap<&str, f64> = BTreeMap::new();
+    let mut start = None;
+    let mut spans = vec![];
+    let mut events = 0;
+    for line in text.lines() {
+        if line.starts_with("frame:") {
+            if frame.is_some() {
+                finish_audio_frame(&fields, &mut start, &mut spans, duration)?;
+            }
+            let (frame_raw, rest) = line
+                .strip_prefix("frame:")
+                .unwrap()
+                .trim_start()
+                .split_once("pts:")
+                .ok_or_else(|| evidence("Audio evidence frame sequence is invalid"))?;
+            let (pts_raw, time_raw) = rest
+                .split_once("pts_time:")
+                .ok_or_else(|| evidence("Audio evidence frame sequence is invalid"))?;
+            let next = frame_raw.trim().parse::<u64>().ok();
+            let pts = Some(pts_raw.trim());
+            let time = time_raw.trim().parse::<f64>().ok();
+            if !next.is_some_and(|next| {
+                next <= 9_007_199_254_740_991 && frame.is_none_or(|prior| next > prior)
+            }) || !pts.is_some_and(|value| value == "NOPTS" || value.parse::<i64>().is_ok())
+                || !time.is_some_and(f64::is_finite)
+            {
+                return Err(evidence("Audio evidence frame sequence is invalid"));
+            }
+            frame = next;
+            fields.clear();
+            continue;
+        }
+        let (key, raw) = line
+            .split_once('=')
+            .ok_or_else(|| evidence("Audio evidence contains unexpected or duplicate metadata"))?;
+        let name = key
+            .strip_prefix("lavfi.silence_")
+            .filter(|name| matches!(*name, "start" | "end" | "duration"));
+        events += 1;
+        let name = name
+            .filter(|name| {
+                frame.is_some() && !fields.contains_key(name) && events <= AUDIO_EVIDENCE_EVENTS
+            })
+            .ok_or_else(|| evidence("Audio evidence contains unexpected or duplicate metadata"))?;
+        let value = raw
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite() && *v >= -0.1 && *v <= duration + 0.1)
+            .ok_or_else(|| evidence("Audio evidence timestamp is outside the recording"))?;
+        fields.insert(name, value);
+    }
+    if frame.is_some() {
+        finish_audio_frame(&fields, &mut start, &mut spans, duration)?;
+    }
+    if let Some(start) = start {
+        spans.push(Span {
+            start,
+            end: duration,
+        });
+    }
+    if spans
+        .iter()
+        .enumerate()
+        .any(|(i, span)| span.end < span.start || (i > 0 && spans[i - 1].end > span.start))
+    {
+        return Err(evidence("Audio silence evidence overlaps"));
+    }
+    Ok(spans)
+}
+fn finish_audio_frame(
+    fields: &BTreeMap<&str, f64>,
+    start: &mut Option<f64>,
+    spans: &mut Vec<Span>,
+    duration: f64,
+) -> Result<(), TrimError> {
+    if fields.is_empty() || fields.contains_key("end") != fields.contains_key("duration") {
+        return Err(evidence("Audio evidence frame is incomplete"));
+    }
+    if fields.get("duration").is_some_and(|value| *value < 0.0) {
+        return Err(evidence("Audio evidence silence duration is negative"));
+    }
+    if let Some(value) = fields.get("start") {
+        if start.is_some() {
+            return Err(evidence("Audio evidence has overlapping silence starts"));
+        }
+        *start = Some(value.max(0.0));
+    }
+    if let Some(end) = fields.get("end") {
+        let at = start
+            .take()
+            .filter(|at| end >= at)
+            .ok_or_else(|| evidence("Audio evidence has an unmatched silence end"))?;
+        spans.push(Span {
+            start: at,
+            end: end.min(duration),
+        });
+    }
+    Ok(())
+}
+pub fn analyze_sampled_idle(
+    samples: &GrayAnalysis,
+    info: &MediaProbe,
+) -> Result<IdleAnalysis, TrimError> {
+    if info.audio_streams == 0 {
+        return Ok(detect_idle(&samples.spans, "", info));
+    }
+    if info.audio_streams > 1 {
+        qualified_audio_tracks(info)?;
+    }
+    let audio = samples
+        .audio_evidence
+        .as_ref()
+        .filter(|value| value.tracks.len() == info.audio_streams)
+        .ok_or_else(|| evidence("Private audio evidence is unavailable"))?;
+    let mut common = vec![Span {
+        start: 0.0,
+        end: info.duration,
+    }];
+    let mut all_silent = true;
+    for silent in &audio.tracks {
+        all_silent &=
+            silent.len() == 1 && silent[0].start <= 0.1 && silent[0].end >= info.duration - 0.1;
+        common = intersect_spans(&common, silent);
+    }
+    Ok(IdleAnalysis {
+        idle: intersect_spans(&samples.spans, &common),
+        audible: !all_silent,
+    })
+}
+fn intersect_spans(a: &[Span], b: &[Span]) -> Vec<Span> {
+    let (mut left, mut right) = (0, 0);
+    let mut out = vec![];
+    while left < a.len() && right < b.len() {
+        let start = max(a[left].start, b[right].start);
+        let end = min(a[left].end, b[right].end);
+        if end > start {
+            out.push(Span { start, end });
+        }
+        if a[left].end < b[right].end {
+            left += 1;
+        } else {
+            right += 1;
+        }
+    }
+    out
+}
 #[derive(Clone, Debug)]
 pub struct SamplingRequest {
+    pub audio_tracks: usize,
+    pub input: PathBuf,
     pub args: Vec<OsString>,
     pub height: usize,
     pub frame_bytes: usize,
@@ -930,6 +1445,12 @@ pub fn sampling_command(
     min_idle_seconds: f64,
     max_frame_bytes: usize,
 ) -> Result<SamplingRequest, TrimError> {
+    if info.audio_streams > 1 {
+        if info.audio_tracks.is_empty() {
+            require_single_audio_track(info.audio_streams)?;
+        }
+        qualified_audio_tracks(info)?;
+    }
     let aspect = match (info.width, info.height) {
         (Some(w), Some(h)) if w != 0.0 && h != 0.0 && !w.is_nan() && !h.is_nan() => h / w,
         _ => 9.0 / 16.0,
@@ -951,8 +1472,11 @@ pub fn sampling_command(
                 "Grayscale sample dimensions exceed the configured bound",
             )
         })?;
-    let mut args = vec![
+    let args = vec![
         "-hide_banner".into(),
+        "-xerror".into(),
+        "-err_detect".into(),
+        "explode".into(),
         "-nostats".into(),
         "-i".into(),
         path.as_os_str().to_owned(),
@@ -964,18 +1488,9 @@ pub fn sampling_command(
         "rawvideo".into(),
         "pipe:1".into(),
     ];
-    if info.audio_streams > 0 {
-        args.extend([
-            OsString::from("-map"),
-            OsString::from("0:a:0"),
-            OsString::from("-af"),
-            format!("silencedetect=n=-50dB:d={}", number(min_idle_seconds)).into(),
-            "-f".into(),
-            "null".into(),
-            "-".into(),
-        ]);
-    }
     Ok(SamplingRequest {
+        audio_tracks: info.audio_streams,
+        input: path.to_owned(),
         args,
         height,
         frame_bytes,
@@ -985,6 +1500,7 @@ pub fn sampling_command(
 }
 #[derive(Clone, Debug)]
 pub struct GrayAnalysis {
+    pub audio_evidence: Option<AudioEvidence>,
     pub spans: Vec<Span>,
     pub frames: u64,
     pub trailing_bytes: usize,
@@ -998,6 +1514,7 @@ pub struct GraySink {
     frames: u64,
     max_spans: usize,
     stderr: Vec<u16>,
+    stderr_overflow: bool,
 }
 impl GraySink {
     pub fn new(request: &SamplingRequest, max_spans: usize) -> Result<Self, TrimError> {
@@ -1015,6 +1532,7 @@ impl GraySink {
             frames: 0,
             max_spans,
             stderr: vec![],
+            stderr_overflow: false,
         })
     }
     pub fn consume(&mut self, mut bytes: &[u8]) -> Result<(), TrimError> {
@@ -1041,13 +1559,22 @@ impl GraySink {
         Ok(())
     }
     pub fn consume_stderr(&mut self, bytes: &[u8]) {
+        if self.stderr_overflow {
+            return;
+        }
         self.stderr
             .extend(String::from_utf8_lossy(bytes).encode_utf16());
         if self.stderr.len() > 4_000_000 {
-            self.stderr.drain(..self.stderr.len() - 2_000_000);
+            self.stderr.clear();
+            self.stderr_overflow = true;
         }
     }
     pub fn finish(mut self) -> Result<GrayAnalysis, TrimError> {
+        if self.stderr_overflow {
+            return Err(evidence(
+                "Audio analysis diagnostics exceed the configured bound",
+            ));
+        }
         let spans = self
             .tracker
             .finish(min(self.duration, self.frames as f64 / SAMPLE_FPS))
@@ -1064,6 +1591,7 @@ impl GraySink {
             ));
         }
         Ok(GrayAnalysis {
+            audio_evidence: None,
             spans,
             frames: self.frames,
             trailing_bytes: self.pending.len(),
@@ -1078,7 +1606,11 @@ impl crate::media_verification::StdoutSink for GraySink {
     }
     fn consume_stderr(&mut self, chunk: &[u8]) -> Result<(), String> {
         GraySink::consume_stderr(self, chunk);
-        Ok(())
+        if self.stderr_overflow {
+            Err("Audio analysis diagnostics exceed the configured bound".into())
+        } else {
+            Ok(())
+        }
     }
     fn finish(self) -> Result<Self::Output, String> {
         GraySink::finish(self)
@@ -1526,6 +2058,7 @@ pub struct ExportOwner<B> {
     stage: ExportStage,
     encode_request: EncodeRequest,
     expected: ExpectedMetadata,
+    expected_audio_tracks: Vec<AudioTrack>,
     preview_request: Option<SheetRequest>,
     cancellation: Cancellation,
     encode_job: Option<Box<dyn OwnedJob<()>>>,
@@ -1549,6 +2082,22 @@ impl<B: Encode + Probe + Decode + Preview> ExportOwner<B> {
         preview_request: Option<SheetRequest>,
         cancellation: Cancellation,
     ) -> Result<Self, TrimError> {
+        let expected_audio_tracks = if source.audio_streams > 1 || expected.audio_streams > 1 {
+            if encode_request.audio_tracks.is_empty() {
+                require_single_audio_track(source.audio_streams.max(expected.audio_streams))?;
+            }
+            let tracks = qualified_audio_tracks(source)?;
+            if expected.audio_streams != source.audio_streams
+                || tracks != encode_request.audio_tracks.as_slice()
+            {
+                return Err(evidence(
+                    "Export audio descriptors differ from the qualified source",
+                ));
+            }
+            tracks.to_vec()
+        } else {
+            vec![]
+        };
         require_sdr_input(source)?;
         if encode_request.output != stage.partial
             || encode_request.input == stage.partial
@@ -1568,6 +2117,7 @@ impl<B: Encode + Probe + Decode + Preview> ExportOwner<B> {
             stage,
             encode_request,
             expected,
+            expected_audio_tracks,
             preview_request,
             cancellation,
             encode_job: None,
@@ -1666,7 +2216,15 @@ impl<B: Encode + Probe + Decode + Preview> ExportOwner<B> {
                     );
                 }
                 let info = self.probe_job.as_mut().unwrap().finish().await?;
-                validate_trimmed_metadata(&info, &self.expected)?;
+                validate_export_metadata(
+                    &info,
+                    &self.expected,
+                    if self.expected_audio_tracks.is_empty() {
+                        None
+                    } else {
+                        Some(&self.expected_audio_tracks)
+                    },
+                )?;
                 self.probe_job.take();
                 self.probed = Some(info);
             }

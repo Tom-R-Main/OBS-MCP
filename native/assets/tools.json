@@ -4555,7 +4555,7 @@
     {
       "name": "obs-save-replay-buffer",
       "title": "Save Replay Buffer",
-      "description": "Saves the contents of the replay buffer output",
+      "description": "Requests a replay buffer save. Acceptance does not confirm that a new file has finished writing; the last replay path may still refer to an earlier save",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -4927,6 +4927,30 @@
         "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "obs-save-replay-verified",
+      "title": "Save and Verify Replay Buffer",
+      "description": "Requests one replay save and verifies a new local file under the approved recording root. Request attribution remains unverified: OBS save events contain no request ID. Requires explicit approved root, state directory and media executables; never starts/stops outputs or retries a save. OBS naming can overwrite existing replay files; verification does not prevent overwrites.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "timeoutSeconds": {
+            "default": 15,
+            "description": "Original total operation budget, including save, event and local file verification",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
         "openWorldHint": false
       }
     },
@@ -6858,7 +6882,7 @@
     {
       "name": "obs-preflight",
       "title": "Recording Preflight",
-      "description": "Check for the conditions that make OBS silently refuse or botch a recording: an active recording, an invalid output path, low disk space, an unusable encoder, unapplied output settings, audible inputs, and blank (0×0) sources. Read-only; run it before obs-start-record",
+      "description": "Check for the conditions that make OBS silently refuse or botch a recording: an active recording, an invalid output path, low disk space, an unusable encoder, unapplied output settings, configured unmuted audio routes, and blank (0×0) sources. Signal levels and monitoring/loopback paths are not measured. Read-only; run before guarded obs-take-start or obs-record-clip",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -6871,7 +6895,7 @@
           },
           "expectSilent": {
             "default": false,
-            "description": "Treat any audible input as a failure instead of a warning",
+            "description": "Treat configured or conservatively assumed unmuted routes to recorded audio tracks as a failure instead of a warning; signal and monitoring/loopback paths are not measured",
             "type": "boolean"
           }
         },
@@ -6887,7 +6911,7 @@
     {
       "name": "obs-record-clip",
       "title": "Record Clip",
-      "description": "Record a clip of up to 50s in one call: runs obs-preflight, starts recording and waits for OBS to confirm, adds chapter markers, stops, then checks the file's length and audio with ffprobe/ffmpeg when available. For longer takes use obs-start-record and obs-stop-record",
+      "description": "Record a clip of up to 50s in one call: runs obs-preflight, starts recording and waits for OBS to confirm, adds chapter markers, stops, then checks the file's length and audio with ffprobe/ffmpeg when available. For longer takes use obs-take-start, obs-take-mark, obs-take-status and obs-take-stop with the guarded Production workflow",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -7186,7 +7210,7 @@
     {
       "name": "obs-trim-take",
       "title": "Trim Dead Time",
-      "description": "Plan, and optionally export, a copy of a recording with its dead time cut: stretches where the picture does not change (and the sound, if any, is silent). A spinner or shimmering label counts as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before the next chapter and the end, and moves chapters to match. Without apply it only returns the plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory",
+      "description": "Plan, and optionally export, a copy of a recording with its dead time cut: stretches where the picture does not change (and the sound, if any, is silent). A spinner or shimmering label counts as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before the next chapter and the end, and moves chapters to match. Without apply it only returns the plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory. Preserves up to six qualified mono/stereo 44.1/48 kHz audio tracks with near-zero timestamps as lossy AAC in MP4; unsupported metadata is refused",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -9217,6 +9241,7 @@
       "obs-stop-output": "outputs",
       "obs-get-output-settings": "outputs",
       "obs-set-output-settings": "outputs",
+      "obs-save-replay-verified": "outputs",
       "obs-get-record-status": "record",
       "obs-toggle-record": "record",
       "obs-start-record": "record",
@@ -9562,6 +9587,7 @@
         "obs-stop-output",
         "obs-get-output-settings",
         "obs-set-output-settings",
+        "obs-save-replay-verified",
         "obs-get-record-status",
         "obs-toggle-record",
         "obs-start-record",
@@ -10183,6 +10209,22 @@
           "required": [
             "durationSeconds"
           ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema"
+        }
+      },
+      "obs-save-replay-verified": {
+        "handler": "save-replay-verified",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "timeoutSeconds": {
+              "default": 15,
+              "description": "Original total operation budget, including save, event and local file verification",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
           "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },
@@ -12381,7 +12423,7 @@
             },
             "expectSilent": {
               "default": false,
-              "description": "Treat any audible input as a failure instead of a warning",
+              "description": "Treat configured or conservatively assumed unmuted routes to recorded audio tracks as a failure instead of a warning; signal and monitoring/loopback paths are not measured",
               "type": "boolean"
             }
           },

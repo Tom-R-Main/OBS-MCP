@@ -4903,7 +4903,7 @@
         },
         "expectSilent": {
           "default": false,
-          "description": "Treat any audible input as a failure instead of a warning",
+          "description": "Treat configured or conservatively assumed unmuted routes to recorded audio tracks as a failure instead of a warning; signal and monitoring/loopback paths are not measured",
           "type": "boolean"
         }
       },
@@ -5384,6 +5384,29 @@
     "annotations": {
       "readOnlyHint": false,
       "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "obs-save-replay-verified",
+    "title": "Save and Verify Replay Buffer",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "timeoutSeconds": {
+          "default": 15,
+          "description": "Original total operation budget, including save, event and local file verification",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
       "idempotentHint": false,
       "openWorldHint": false
     }
