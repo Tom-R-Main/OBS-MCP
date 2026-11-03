@@ -10,3 +10,7 @@ export function nativeManifest(root: string, platform?: NodeJS.Platform, arch?: 
 export function nativeBundleFiles(root: string): string[];
 export function nativeBuildFeatures(value?: string): string[];
 export function nativeBuildSource(root: string): {sha256: string; files: Record<string,string>};
+
+export interface NativeArtifactOwner {path:string;dev:number;ino:number}
+export function nativeArtifactOwner(root:string,prefix?:string):NativeArtifactOwner;
+export function nativeArtifactCleanup(owner:NativeArtifactOwner):void;

@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Development packaging metadata. Never imports or starts the Source server.
-import {existsSync,lstatSync,readFileSync,readdirSync} from 'node:fs';
+import {existsSync,lstatSync,readFileSync,readdirSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {join,relative} from 'node:path';
 const json=path=>JSON.parse(readFileSync(path,'utf8'));
+// Invocation-local ownership only: never deletes an inherited Cargo target.
+export function nativeArtifactOwner(root,prefix='obs-native-artifact-'){
+ const parent=join(root,'native/target');mkdirSync(parent,{recursive:true});
+ const path=mkdtempSync(join(parent,prefix)),info=lstatSync(path);
+ return {path,dev:info.dev,ino:info.ino};
+}
+export function nativeArtifactCleanup(owner){
+ const info=lstatSync(owner.path);
+ if(!info.isDirectory()||info.isSymbolicLink()||info.dev!==owner.dev||info.ino!==owner.ino)throw new Error('Native private artifact owner changed; retained for inspection');
+ rmSync(owner.path,{recursive:true});
+}
 export function nativeBuildFeatures(value=''){
  if(value==='')return [];
  if(value==='platform-tls-evaluation')return [value];
@@ -11,6 +22,7 @@ export function nativeBuildFeatures(value=''){
 }
 export function nativeBuildSource(root){
  const files=['native/Cargo.toml','native/Cargo.lock','native/rust-toolchain.toml','docs/protocol.json'];
+ if(existsSync(join(root,'native/build.rs')))files.push('native/build.rs');
  const walk=path=>{const info=lstatSync(join(root,path));if(info.isSymbolicLink())throw new Error('Native build identity refuses symbolic links');if(info.isDirectory()){for(const name of readdirSync(join(root,path)).sort())if(!['target','.cargo-home','.git','node_modules','dist','__pycache__','.venv'].includes(name))walk(path+'/'+name);}else if(info.isFile())files.push(path);else throw new Error('Native build identity requires regular files');};
  for(const path of['native/src','native/assets','native/platform','native/crates'])if(existsSync(join(root,path)))walk(path);
  const hashes={};for(const path of files.sort()){const file=join(root,path),info=lstatSync(file);if(!info.isFile()||info.isSymbolicLink())throw new Error('Native build identity requires regular files');hashes[path]=createHash('sha256').update(readFileSync(file)).digest('hex');}
@@ -42,6 +54,7 @@ export function nativeManifest(root,platform=process.platform,arch=process.arch,
 }
 export function nativeBundleFiles(root){
  const files=['LICENSE','NOTICE.md','README.md','icon.png','native/Cargo.toml','native/Cargo.lock','native/rust-toolchain.toml','docs/protocol.json','docs/native-distribution.md','docs/native-profiles.md','docs/native-dependencies.md','docs/native-architecture.md','docs/full-rust-cutover.md','docs/native-migration-ledger.json','docs/production-assistant.md','.agents/skills/obs-demo/SKILL.md'];
+ if(existsSync(join(root,'native/build.rs')))files.push('native/build.rs');
  for(const directory of['native/src','native/assets','native/tests','native/platform','native/crates','licenses','docs/recipes','assets/identity']){
   if(!existsSync(join(root,directory)))continue;
   const walk=path=>{for(const name of readdirSync(path).sort()){const file=join(path,name),info=lstatSync(file);if(info.isSymbolicLink())throw new Error('Native source bundle refuses symbolic links');if(info.isDirectory()){if(!['target','.cargo-home','.git','node_modules','dist','__pycache__','.venv'].includes(name))walk(file);}else if(info.isFile()){const entry=relative(root,file);if(entry.startsWith('native/tests/')&&/\.[cm]?js$/.test(entry))continue;files.push(entry);}else throw new Error('Native source bundle requires regular files');}};walk(join(root,directory));
