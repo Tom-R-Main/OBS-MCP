@@ -179,3 +179,31 @@ describe('Stop confirmation outcomes match on Source and native',()=>{
   expect(trace(native,'StopReplayBuffer')).toHaveLength(1);
  },30_000);
 });
+
+describe('native Stop confirmation holds no shared capacity',()=>{
+ it('dispatches another safety Stop at once while one is still confirming',async()=>{
+  const configure=(fake:FakeOBSServer)=>{fake.respondWith('GetStreamStatus',()=>({outputActive:true}));fake.respondWith('GetVirtualCamStatus',()=>({outputActive:false}));};
+  const native=await start(true,false,false,false,{},configure);
+  const first=native.client.callTool({name:'obs-stop-stream',arguments:{}});
+  await native.fake.waitForRequest('GetStreamStatus',{timeoutMs:10_000});
+  const at=Date.now();const after=native.fake.cursor();
+  const second=await native.client.callTool({name:'obs-stop-virtual-cam',arguments:{}});
+  await native.fake.waitForRequest('StopVirtualCam',{after,timeoutMs:2_000});
+  expect(Date.now()-at).toBeLessThan(2_000);
+  expect(second).toMatchObject({content:[{type:'text',text:'Virtual camera stopped'}]});
+  const stream=await first;
+  expect(JSON.stringify(stream)).toContain('did not observe streaming stop within 10s');
+ },30_000);
+ it('retires an unanswered confirmation status read without losing the OBS connection',async()=>{
+  const configure=(fake:FakeOBSServer)=>{fake.respondWith('GetReplayBufferStatus',()=>({outputActive:false}));fake.queueSuccess('GetReplayBufferStatus',{outputActive:false},60_000);fake.respondWith('GetStats',()=>({availableDiskSpace:50000,renderSkippedFrames:0,renderTotalFrames:0}));};
+  const native=await start(true,false,false,false,{},configure);
+  const stop=await native.client.callTool({name:'obs-stop-replay-buffer',arguments:{}});
+  expect(stop.isError).toBe(true);
+  expect(JSON.stringify(stop)).toContain('did not observe the replay buffer stop within 10s');
+  const version=await native.client.callTool({name:'obs-get-version',arguments:{}});
+  expect(version.isError).not.toBe(true);
+  const status=await native.client.callTool({name:'obs-get-replay-buffer-status',arguments:{}});
+  expect(status).toMatchObject({structuredContent:{outputActive:false}});
+  expect(native.fake.connectionCount).toBe(1);
+ },30_000);
+});

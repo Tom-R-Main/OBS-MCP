@@ -910,9 +910,120 @@ pub async fn execute_with_services(
     )
     .await
 }
+/// Waits, after an accepted safety Stop, for OBS to report the output
+/// inactive. It holds no receipt port, dispatch slot or queue capacity, so
+/// the Service runs it apart from the single safety-stop dispatch job.
+pub struct StopConfirmation {
+    session: SessionHandle,
+    dispatched_on: ConnectionToken,
+    kind: SafetyStopRequest,
+    deadline: Instant,
+    budget: Duration,
+    cancel: Cancellation,
+    success: Value,
+}
+impl StopConfirmation {
+    /// The caller's cancellation; cancelling it ends confirmation as unconfirmed.
+    pub fn cancellation(&self) -> Cancellation {
+        self.cancel.clone()
+    }
+    pub async fn run(self) -> Value {
+        match confirm_stopped(
+            &self.session,
+            self.dispatched_on,
+            self.kind,
+            self.deadline,
+            self.budget,
+            &self.cancel,
+        )
+        .await
+        {
+            Some(text) => error(text),
+            None => self.success,
+        }
+    }
+}
+/// Either the finished tool result or, for an accepted safety Stop, the
+/// confirmation still to run.
+pub enum SafetyOutcome {
+    Done(Value),
+    Confirm(Box<StopConfirmation>),
+}
+/// The Service's safety-stop dispatch: returns once OBS answers the Stop,
+/// handing back any confirmation instead of awaiting it.
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_safety_stop(
+    store: OperationStore,
+    call: Call,
+    session: SessionHandle,
+    control: SharedControl,
+    clock: Clock,
+    caller: String,
+    cancel: Cancellation,
+    id: String,
+    timeout: Duration,
+    admitted_at: Instant,
+    services: GenericServices,
+) -> SafetyOutcome {
+    let mut deferred = None;
+    let value = execute_inner(
+        store,
+        call,
+        session,
+        control,
+        clock,
+        caller,
+        cancel,
+        id,
+        timeout,
+        admitted_at,
+        services,
+        None,
+        Some(&mut deferred),
+    )
+    .await;
+    match deferred {
+        Some(confirmation) => SafetyOutcome::Confirm(Box::new(confirmation)),
+        None => SafetyOutcome::Done(value),
+    }
+}
 pub(crate) type DispatchObservation = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute_with_dispatch_hook(
+    store: OperationStore,
+    call: Call,
+    session: SessionHandle,
+    control: SharedControl,
+    clock: Clock,
+    caller: String,
+    cancel: Cancellation,
+    id: String,
+    timeout: Duration,
+    admitted_at: Instant,
+    services: GenericServices,
+    observation: Option<DispatchObservation>,
+) -> Value {
+    execute_inner(
+        store,
+        call,
+        session,
+        control,
+        clock,
+        caller,
+        cancel,
+        id,
+        timeout,
+        admitted_at,
+        services,
+        observation,
+        None,
+    )
+    .await
+}
+/// `deferred`: when Some, an accepted safety Stop's confirmation is stored
+/// there instead of awaited, and the returned Value is not the tool result.
+#[allow(clippy::too_many_arguments)]
+async fn execute_inner(
     mut store: OperationStore,
     call: Call,
     session: SessionHandle,
@@ -925,6 +1036,7 @@ pub(crate) async fn execute_with_dispatch_hook(
     admitted_at: Instant,
     services: GenericServices,
     observation: Option<DispatchObservation>,
+    deferred: Option<&mut Option<StopConfirmation>>,
 ) -> Value {
     if call.is_opaque() {
         let capabilities = services.readback.and_then(|readback| readback.capabilities);
@@ -1109,18 +1221,23 @@ pub(crate) async fn execute_with_dispatch_hook(
     }
     match response {
         Ok(response) => {
-            if let Some(kind) = call.safety_stop_kind()
-                && let Some(text) = confirm_stopped(
-                    &session,
+            if let Some(kind) = call.safety_stop_kind() {
+                let confirmation = StopConfirmation {
+                    session: session.clone(),
                     dispatched_on,
                     kind,
                     deadline,
-                    timeout,
-                    &readback_cancel,
-                )
-                .await
-            {
-                return error(text);
+                    budget: timeout,
+                    cancel: readback_cancel.clone(),
+                    success: call.success(response),
+                };
+                return match deferred {
+                    Some(slot) => {
+                        *slot = Some(confirmation);
+                        Value::Null
+                    }
+                    None => confirmation.run().await,
+                };
             }
             if let Some(follow_up) = call.follow_up {
                 let context = services
@@ -1184,9 +1301,10 @@ fn stop_definition(kind: SafetyStopRequest) -> (&'static str, &'static str, bool
     }
 }
 const STOP_POLL: Duration = Duration::from_millis(100);
-/// A request whose deadline passes after dispatch invalidates the connection,
-/// so no status read is sent with less than this left; the stop is then
-/// reported unconfirmed instead.
+/// No status read is started with less than this left; the stop is then
+/// reported unconfirmed. A fully sent status read that goes unanswered past
+/// its deadline is retired locally, like a typed observation, so it never
+/// costs the shared connection.
 const STATUS_READ_MIN: Duration = Duration::from_millis(500);
 /// OBS acknowledges Stop* before the output stops: about 1.1 s for a stream,
 /// plus any stream delay, and 0.25 s for the replay buffer on OBS 32.2.2. A

@@ -2053,15 +2053,21 @@ fn unknown_active(active: &mut ActiveCommands, reason: &Invalidation) {
     }
 }
 
-/// Only response custody of an already fully flushed typed observation may
-/// expire locally. Effects, arbitrary requests and incomplete writes retain the
-/// conservative session-wide Unknown/retirement policy.
+/// Only response custody of an already fully flushed typed observation, or of
+/// the fixed no-data status read confirming a safety Stop, may expire locally.
+/// Effects, arbitrary requests and incomplete writes retain the conservative
+/// session-wide Unknown/retirement policy.
 fn retire_observations(active: &mut ActiveCommands) -> bool {
     let mut retired = false;
     let now = Instant::now();
     for slot in active {
         let reason = slot.as_ref().and_then(|command| {
-            if !command.flushed || !matches!(command.kind, CommandKind::Observation(_)) {
+            if !command.flushed
+                || !matches!(
+                    command.kind,
+                    CommandKind::Observation(_) | CommandKind::SafetyStatus(_)
+                )
+            {
                 return None;
             }
             if now >= command.deadline {
