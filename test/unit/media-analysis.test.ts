@@ -47,6 +47,7 @@ describe("scenario signal checks", () => {
     expect(measureSync([1, 2, 3], [1.02, 2.03, 3.02, 3.5])).toEqual({ medianOffset: expect.closeTo(0.02, 5), pairs: 3, spread: expect.closeTo(0.01, 5) });
     expect(measureSync([1, 2], [5])).toBeUndefined();
   });
+
 });
 
 describe.skipIf(!hasMediaTools)("multi-track recording inspection (synthetic media, no OBS)", () => {
@@ -62,12 +63,16 @@ describe.skipIf(!hasMediaTools)("multi-track recording inspection (synthetic med
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  /** Mux the fixtures the way OBS would write tracks 1-3: sync beeps, mic, game. */
+  /**
+   * Mux the fixtures the way OBS would write tracks 1-3: sync beeps, mic, game.
+   * The sync clip sits in the corner of a 1080p canvas, as an unscaled OBS source does.
+   */
   function muxTracks(source: ScenarioFixtures, name: string, container = "mp4"): string {
     const output = join(dir, `${name}.${container}`);
     execFileSync("ffmpeg", [
       "-v", "error", "-y",
       "-i", source.syncClip, "-i", source.micTone, "-i", source.gameTone,
+      "-vf", "pad=1920:1080:0:0:black",
       "-map", "0:v", "-map", "0:a", "-map", "1:a", "-map", "2:a",
       "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
       "-c:a", "aac", "-b:a", "160k", "-shortest", output,

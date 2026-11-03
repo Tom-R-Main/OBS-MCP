@@ -65,7 +65,7 @@ export interface LumaFrame {
   luma: number;
 }
 
-/** Times of frames where mean luma first crosses halfway between the darkest and brightest frame. */
+/** Times of frames where luma first crosses halfway between the darkest and brightest frame. */
 export function flashTimes(frames: readonly LumaFrame[], { minGapSeconds = 0.3, minContrast = 64 } = {}): number[] {
   if (frames.length === 0) return [];
   const lumas = frames.map(({ luma }) => luma);

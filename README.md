@@ -384,7 +384,7 @@ Add `OBS_MCP_LIVE_RECORD=1` to the mutation command to also record a one-second 
 
 #### Scenario tests
 
-Scenario tests build a real use case through MCP tools, record it, and check the file with `ffmpeg` and `ffprobe` instead of trusting what OBS reports. They need both tools on `PATH`, a disposable scene collection, and stopped outputs. The first scenario checks multi-track recording for editing: two tones stand in for a microphone and a game on tracks 2 and 3, and a flash-and-beep clip on track 1 measures audio/video sync. It fails if a track carries the wrong source, if sync is off by more than 100 ms, or if a 200 ms audio sync offset does not move the audio by 200 ms ± 40 ms in the file.
+Scenario tests build a real use case through MCP tools, record it, and check the file with `ffmpeg` and `ffprobe` instead of trusting what OBS reports. They need both tools on `PATH`, a disposable scene collection, and stopped outputs. The first scenario checks multi-track recording for editing: two tones stand in for a microphone and a game on tracks 2 and 3, and a flash-and-beep clip on track 1 measures audio/video sync. It fails if a track carries the wrong source or if sync is off by more than 100 ms. Correcting sync with an audio sync offset is not covered yet: on OBS 32.2.2, changing the offset on a playing media source did not move the recorded audio by the requested amount.
 
 Set the profile used with the disposable collection to record audio tracks 1, 2 and 3 (Settings > Output > Recording), restart OBS, then run:
 
@@ -395,7 +395,7 @@ OBS_MCP_LIVE_SCENE_COLLECTION="OBS MCP Test" \
 npm run test:obs-live -- test/live/obs-scenarios.test.ts
 ```
 
-While it runs, the test mutes every other audio input, points the recording directory at a temporary folder, and switches the program scene to its own scene. Afterwards it puts all three back and removes its scene and inputs. `OBS_MCP_LIVE_SERVER=native` runs the same scenario against `native/target/release/obs-mcp-native` in the Advanced profile, with a temporary `OBS_MCP_STATE_DIR` so its operation receipts never reach a real state namespace. The signal checks have hermetic tests in `test/unit/media-analysis.test.ts`.
+While it runs, the test mutes every other audio input, points the recording directory at a temporary folder, and switches the program scene to its own scene. Afterwards it puts all three back and removes its scene and inputs. `OBS_MCP_LIVE_SERVER=native` runs the same scenario against `native/target/release/obs-mcp-native` (or `OBS_MCP_LIVE_NATIVE_BIN`) in the Advanced profile, with a temporary `OBS_MCP_STATE_DIR` so its operation receipts never reach a real state namespace. The signal checks have hermetic tests in `test/unit/media-analysis.test.ts`.
 
 Pull-request CI checks the dependency policy before installation. Native-default delivery must run the hermetic development gate on a supported pinned Node toolchain and separately exercise the extracted executable with Node unavailable. Historical Node20 matrix results are not native-only distribution acceptance. Dependency auditing checks the lockfile in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
 

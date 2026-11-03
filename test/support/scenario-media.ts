@@ -85,7 +85,11 @@ export function decodeAudio(file: string, audioIndex: number): { samples: Float3
   return { samples: Float32Array.from(samples), start: Number(stream.start_time ?? 0) };
 }
 
-/** Mean luma of every video frame, at its container presentation time. */
+/**
+ * Luma of each frame's brightest cell in a 16x9 grid, at its container
+ * presentation time. The brightest cell, not the frame mean, so a source that
+ * covers only part of the canvas still registers.
+ */
 export function lumaTimeline(file: string): LumaFrame[] {
   const times = execFileSync("ffprobe", [
     "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=best_effort_timestamp_time", "-of", "csv=p=0", file,
@@ -99,9 +103,9 @@ export function lumaTimeline(file: string): LumaFrame[] {
   const frameSize = width * height;
   const count = Math.min(times.length, Math.floor(pixels.byteLength / frameSize));
   return Array.from({ length: count }, (_, frame) => {
-    let sum = 0;
-    for (let offset = frame * frameSize; offset < (frame + 1) * frameSize; offset += 1) sum += pixels[offset]!;
-    return { time: times[frame]!, luma: sum / frameSize };
+    let brightest = 0;
+    for (let offset = frame * frameSize; offset < (frame + 1) * frameSize; offset += 1) brightest = Math.max(brightest, pixels[offset]!);
+    return { time: times[frame]!, luma: brightest };
   });
 }
 
