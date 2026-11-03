@@ -148,6 +148,65 @@ describe("obs-preflight", () => {
     expect(byId("audio")?.message).not.toContain("Camera");
   });
 
+  describe("inputs OBS does not mix", () => {
+    // Live OBS 32.2.2: inputs reported inactive (hidden, in a scene that is not
+    // on program, or only in the Studio Mode preview) were absent from the
+    // recording; active ones, including nested scenes, were recorded.
+    function serveActivity(active: Record<string, boolean | Error>, special: Record<string, string | null> | Error = { desktop1: null, mic1: null }): void {
+      harness.fakeObs.respondWith("GetSourceActive", (data) => {
+        const value = active[String(data.sourceName)];
+        if (value instanceof Error || value === undefined) throw new FakeOBSRequestError(600, "activity unavailable");
+        return { videoActive: value, videoShowing: value };
+      });
+      harness.fakeObs.respondWith("GetSpecialInputs", () => {
+        if (special instanceof Error) throw new FakeOBSRequestError(600, special.message);
+        return special;
+      });
+    }
+    beforeEach(() => {
+      state.inputs.push(
+        { inputName: "Live Tone", inputKind: "ffmpeg_source", muted: false, tracks: { 1: true } },
+        { inputName: "Other Scene Tone", inputKind: "ffmpeg_source", muted: false, tracks: { 1: true } },
+      );
+    });
+
+    it("leaves out inactive inputs and says so, while still failing on active ones", async () => {
+      serveActivity({ "Live Tone": true, "Other Scene Tone": false });
+      const { byId } = await preflight({ expectSilent: true });
+      expect(byId("audio")).toMatchObject({ status: "fail", message: expect.stringContaining("Live Tone (track 1)") });
+      expect(byId("audio")?.message).not.toContain("Other Scene Tone (track");
+      expect(byId("audio")?.message).toContain("OBS reports them inactive");
+      expect(byId("audio")?.message).toContain("switching scenes during the take can make them audible: Other Scene Tone.");
+    });
+
+    it("passes a silent take when every unmuted routed input is inactive", async () => {
+      serveActivity({ "Live Tone": false, "Other Scene Tone": false });
+      const { byId } = await preflight({ expectSilent: true });
+      expect(byId("audio")).toMatchObject({ status: "pass", message: expect.stringContaining("Signal levels and monitoring/loopback paths were not measured.") });
+      expect(byId("audio")?.message).toContain("Live Tone, Other Scene Tone.");
+    });
+
+    it("keeps counting global audio inputs even when OBS reports them inactive", async () => {
+      serveActivity({ "Live Tone": false, "Other Scene Tone": false }, { desktop1: "Live Tone", mic1: null });
+      const { byId } = await preflight({ expectSilent: true });
+      expect(byId("audio")).toMatchObject({ status: "fail", message: expect.stringContaining("Live Tone (track 1)") });
+    });
+
+    it("counts an input whose activity cannot be read", async () => {
+      serveActivity({ "Live Tone": false, "Other Scene Tone": new Error("gone") });
+      const { byId } = await preflight({ expectSilent: true });
+      expect(byId("audio")).toMatchObject({ status: "fail", message: expect.stringContaining("Other Scene Tone (track 1)") });
+    });
+
+    it("counts every input when OBS cannot say which inputs are global", async () => {
+      serveActivity({ "Live Tone": false, "Other Scene Tone": false }, new Error("special inputs unavailable"));
+      const { byId } = await preflight({ expectSilent: true });
+      expect(byId("audio")?.status).toBe("fail");
+      expect(byId("audio")?.message).toContain("Live Tone (track 1); Other Scene Tone (track 1)");
+      expect(byId("audio")?.message).not.toContain("inactive");
+    });
+  });
+
   it("follows the tracks Simple mode records, not just track 1", async () => {
     state.profile["SimpleOutput/RecTracks"] = "3";
     state.inputs[0] = { inputName: "Chrome", inputKind: "screen_capture", muted: false, tracks: { 1: false, 2: true } };

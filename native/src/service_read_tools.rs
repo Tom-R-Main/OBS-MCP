@@ -376,6 +376,9 @@ impl Adapter for Scope {
             hostname: Some(self.hostname.clone()),
             platform: self.platform.clone(),
             pending_output_settings: self.pending.load(Ordering::Acquire),
+            reads_activity: self.capabilities.as_ref().is_some_and(|known| {
+                known.contains("GetSourceActive") && known.contains("GetSpecialInputs")
+            }),
         }
     }
     fn read(&self, request: ReadRequest, data: Option<Value>) -> preflight::ReadFuture<'_, Value> {

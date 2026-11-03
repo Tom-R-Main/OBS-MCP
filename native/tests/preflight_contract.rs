@@ -148,6 +148,7 @@ impl Adapter for Reader {
             hostname: self.hostname.clone(),
             platform: self.input["platform"].as_str().map(str::to_owned),
             pending_output_settings: self.input["pending"] == true,
+            reads_activity: self.input["readsActivity"] == true,
         }
     }
     fn read(&self, request: ReadRequest, data: Option<Value>) -> ReadFuture<'_, Value> {
