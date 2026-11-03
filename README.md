@@ -397,6 +397,42 @@ npm run test:obs-live -- test/live/obs-scenarios.test.ts
 
 While it runs, the test mutes every other audio input, points the recording directory at a temporary folder, and switches the program scene to its own scene. Afterwards it puts all three back and removes its scene and inputs. `OBS_MCP_LIVE_SERVER=native` runs the same scenario against `native/target/release/obs-mcp-native` (or `OBS_MCP_LIVE_NATIVE_BIN`) in the Advanced profile, with a temporary `OBS_MCP_STATE_DIR` so its operation receipts never reach a real state namespace. The signal checks have hermetic tests in `test/unit/media-analysis.test.ts`.
 
+#### Persona tests
+
+[Six personas](docs/personas.md) each pursue their goals end to end against a real OBS, through `native/target/release/obs-mcp-native` (or `OBS_MCP_LIVE_NATIVE_BIN`) in the Production profile:
+
+- a streamer with overlays
+- a vlogger editing in Resolve
+- a consultant using the virtual camera
+- a competitive gamer saving replays
+- a lecturer switching layouts
+- a founder recording a product demo
+
+Each check reads what OBS produced: a recording, a replay, what a local RTMP server received, or a screenshot.
+
+**Profile setup.** Use a disposable collection with a 1920×1080 canvas. Its profile needs:
+
+- Simple output mode, with recording format Hybrid MP4
+- audio tracks 1, 2 and 3
+- the replay buffer enabled
+
+Restart OBS after changing the profile.
+
+**Requirements.**
+
+- `ffmpeg` and `ffprobe` must be on `PATH`.
+- The product-demo persona needs Python with `tkinter`, and Screen Recording permission for OBS.
+- `OBS_MCP_LIVE_VCAM_FRAMES=1` also reads frames from the OBS Virtual Camera device. That needs camera permission for the process running the tests.
+
+```bash
+OBS_MCP_LIVE_TEST=1 \
+OBS_MCP_LIVE_PERSONAS=1 \
+OBS_MCP_LIVE_SCENE_COLLECTION="OBS MCP Test" \
+npx vitest run --config vitest.live.config.ts test/live/personas.test.ts
+```
+
+**What changes while it runs.** Each persona creates and removes its own scenes and inputs. It stops any output it started, leaves Studio Mode, and puts back the program scene and recording directory. The streamer persona points the profile's stream service at a temporary local RTMP server, and restores the original settings if they were not empty.
+
 Pull-request CI checks the dependency policy before installation. Native-default delivery must run the hermetic development gate on a supported pinned Node toolchain and separately exercise the extracted executable with Node unavailable. Historical Node20 matrix results are not native-only distribution acceptance. Dependency auditing checks the lockfile in a separate weekly workflow so registry advisories do not make otherwise reproducible pull-request checks flaky.
 
 ### Dependency safety
