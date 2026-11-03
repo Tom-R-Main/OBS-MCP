@@ -554,3 +554,26 @@ pub(crate) async fn capture_apply<F: FnOnce() -> CaptureMetadata + Send>(
     };
     capture_with_metadata(context, request, metadata).await
 }
+
+/// Internal Capture auto-history lane; the public snapshot schema stays unchanged.
+pub(crate) async fn capture_window<F: FnOnce() -> CaptureMetadata + Send>(
+    context: Context,
+    request: &crate::capture_window::Request,
+    metadata: F,
+) -> Result<Snapshot, SnapshotError> {
+    capture_with_metadata(
+        context,
+        Request {
+            list: false,
+            options: CaptureOptions {
+                scenes: Some(vec![request.scene_name().into()]),
+                inputs: Some(vec![request.input_name().into()]),
+                label: Some("before obs-capture-window".into()),
+                auto: true,
+                ..Default::default()
+            },
+        },
+        metadata,
+    )
+    .await
+}

@@ -24,6 +24,7 @@ pub enum ScopeKind {
     ManualRecordStop,
     RestoreBatch,
     ApplyScene,
+    CaptureWindow,
 }
 impl ScopeKind {
     fn is_public_stop(self) -> bool {
@@ -216,6 +217,20 @@ fn safety_admission(
 }
 
 impl DispatchFence {
+    pub(crate) fn is_capture_window(&self) -> Result<bool, StoreError> {
+        let state = self
+            .shared
+            .state
+            .lock()
+            .map_err(|_| StoreError::Unavailable)?;
+        if state.poisoned {
+            return Err(StoreError::DurabilityUncertain);
+        }
+        Ok(
+            state.scopes.get(&self.id).ok_or(StoreError::Conflict)?.kind
+                == ScopeKind::CaptureWindow,
+        )
+    }
     pub(crate) fn is_apply_scene(&self) -> Result<bool, StoreError> {
         let state = self
             .shared
@@ -547,6 +562,58 @@ impl ReceiptPort {
                 return Err(StoreError::Conflict);
             }
             state.store.update_restore(receipt, phase, counts, utc)
+        })
+    }
+    pub(crate) fn prepare_capture(
+        &mut self,
+        id: &str,
+        generation: u64,
+        plan: crate::operation_store::CapturePlan,
+        utc: &str,
+    ) -> Result<crate::operation_store::CaptureReceipt, StoreError> {
+        self.apply(|state| {
+            let scope = state.scopes.get(&self.id).ok_or(StoreError::Conflict)?;
+            if scope.kind != ScopeKind::CaptureWindow {
+                return Err(StoreError::Conflict);
+            }
+            if state.poisoned {
+                return Err(StoreError::DurabilityUncertain);
+            }
+            let reserved = state.scopes.values().filter(|s| s.stop_reserved).count();
+            if self
+                .shared
+                .view
+                .capacity_used()?
+                .saturating_add(reserved)
+                .saturating_add(1)
+                > crate::operation_store::MAX_RECEIPTS
+                || scope.ids.len() >= crate::operation_store::MAX_RECEIPTS
+            {
+                return Err(StoreError::InventoryLimit);
+            }
+            let receipt = state.store.prepare_capture(id, generation, plan, utc)?;
+            state
+                .scopes
+                .get_mut(&self.id)
+                .unwrap()
+                .ids
+                .insert(id.into());
+            Ok(receipt)
+        })
+    }
+    pub(crate) fn update_capture(
+        &mut self,
+        receipt: &crate::operation_store::CaptureReceipt,
+        update: crate::operation_store::CaptureUpdate,
+        utc: &str,
+    ) -> Result<crate::operation_store::CaptureReceipt, StoreError> {
+        self.apply(|state| {
+            if !state.scopes.get(&self.id).is_some_and(|s| {
+                s.kind == ScopeKind::CaptureWindow && s.ids.contains(receipt.operation_id())
+            }) {
+                return Err(StoreError::Conflict);
+            }
+            state.store.update_capture(receipt, update, utc)
         })
     }
     pub(crate) fn prepare_apply(

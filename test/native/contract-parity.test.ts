@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture, productionSourceTools } from "../support/native-default-fixture.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ type Fixture = (fake: FakeOBSServer) => void;
 type Session = { lane: Lane; client: Client; transport: StdioClientTransport; fake: FakeOBSServer };
 const sessions: Session[] = [];
 
-async function start(lane: Lane, legacy: boolean, fixture: Fixture = () => undefined): Promise<Session> {
+async function start(lane: Lane, legacy: boolean, fixture: Fixture = () => undefined, profile: "production" | "advanced" = "production"): Promise<Session> {
   const fake = await FakeOBSServer.start();
   fixture(fake);
   const state = join(process.env.OBS_MCP_STATE_DIR!, `${lane}-${sessions.length}`);
@@ -39,6 +40,8 @@ async function start(lane: Lane, legacy: boolean, fixture: Fixture = () => undef
       OBS_MCP_READ_ONLY: "false",
       OBS_MCP_DYNAMIC_TOOLSETS: "false",
       OBS_MCP_CONFIRM_LIVE: "false",
+      ...(lane === "native" ? nativeDefaultFixture(root, true) : {}),
+      OBS_MCP_NATIVE_PROFILE: profile,
     },
     stderr: "pipe",
   });
@@ -49,10 +52,10 @@ async function start(lane: Lane, legacy: boolean, fixture: Fixture = () => undef
   return session;
 }
 
-async function pair(legacy: boolean, fixture?: Fixture) {
+async function pair(legacy: boolean, fixture?: Fixture, profile: "production" | "advanced" = "production") {
   // Serial startup keeps setup load from becoming a protocol timing assertion.
   const oracle = await start("typescript", legacy, fixture);
-  const native = await start("native", legacy, fixture);
+  const native = await start("native", legacy, fixture, profile);
   return [oracle, native] as const;
 }
 
@@ -99,7 +102,7 @@ describe.each([false, true])("production contract differential (legacy=%s)", (le
     const expected = (await oracle.client.listTools()).tools;
     // The oracle is a separately launched predecessor, not tools.json or a copied list.
     expect(expected.length).toBeGreaterThan(0);
-    expect((await native.client.listTools()).tools).toEqual(expected);
+    expect((await native.client.listTools()).tools).toEqual(productionSourceTools(expected));
   });
 
   it("preserves results and ordered effects across read, mutation, defaulted mutation and subsequent reads", async () => {
@@ -146,8 +149,8 @@ describe.each([false, true])("production contract differential (legacy=%s)", (le
     const oracleCalls = requests(oracle.fake).filter(record => record.frame.d.requestType !== "GetVersion");
     expect(new Set(oracleCalls.map(record => record.connectionId)).size).toBe(1);
     const calls = requests(native.fake).filter(record => record.frame.d.requestType !== "GetVersion");
-    expect(new Set(calls.map(record => record.connectionId)).size).toBe(2);
-    expect(calls[0]?.connectionId).not.toBe(calls[1]?.connectionId);
+    expect(new Set(calls.map(record => record.connectionId)).size).toBe(1);
+    expect(calls[0]?.connectionId).toBe(calls[1]?.connectionId);
     expect(new Set(calls.slice(1).map(record => record.connectionId)).size).toBe(1);
   });
 
@@ -166,7 +169,7 @@ describe.each([false, true])("production contract differential (legacy=%s)", (le
     }
   });
 
-  it("retains capture enumeration refusals through dedicated, raw and batch routes with zero writes", async () => {
+  it("retains exact Advanced capture enumeration refusals through dedicated, raw and batch routes with zero writes", async () => {
     const [oracle, native] = await pair(legacy, fake => {
       fake.respondWith("GetInputSettings", () => ({
         inputKind: "screen_capture", inputSettings: { type: 0, display_uuid: "chosen-display" },
@@ -174,7 +177,7 @@ describe.each([false, true])("production contract differential (legacy=%s)", (le
       // Respond if a regression reaches the dangerous request, so it fails quickly.
       fake.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [] }));
       fake.respondWith("SetInputSettings", () => ({}));
-    });
+    }, "advanced");
     const data = { inputName: "Capture", propertyName: "display_uuid" };
     const argumentsByTool = [
       { name: "obs-get-input-property-list-items", arguments: data },
@@ -201,4 +204,28 @@ describe.each([false, true])("production contract differential (legacy=%s)", (le
     expect(results[1]).toEqual(results[0]);
     expect(effects(native.fake)).toEqual(effects(oracle.fake));
   });
+  it("keeps Production dedicated enumeration guarded and refuses raw/batch promotion before connection", async () => {
+    const fixture: Fixture = fake => {
+      fake.respondWith("GetInputSettings", () => ({ inputKind: "screen_capture", inputSettings: { type: 0, display_uuid: "chosen-display" } }));
+      fake.respondWith("GetInputPropertiesListPropertyItems", () => ({ propertyItems: [] }));
+      fake.respondWith("SetInputSettings", () => ({}));
+    };
+    const [oracle, native] = await pair(legacy, fixture);
+    const data = { inputName: "Capture", propertyName: "display_uuid" };
+    const dedicated = { name: "obs-get-input-property-list-items", arguments: data };
+    expect(await native.client.callTool(dedicated)).toEqual(await oracle.client.callTool(dedicated));
+    expect(effects(native.fake)).toEqual(effects(oracle.fake));
+    expect(effects(native.fake).every(effect => effect.requestType === "GetInputSettings")).toBe(true);
+    const production = await start("native", legacy, fixture);
+    const names = (await production.client.listTools()).tools.map(tool => tool.name);
+    for (const request of [
+      { name: "obs-call-request", arguments: { requestType: "GetInputPropertiesListPropertyItems", requestData: data } },
+      { name: "obs-batch", arguments: { requests: [{ requestType: "SetInputSettings", requestData: {} }, { requestType: "GetInputPropertiesListPropertyItems", requestData: data }] } },
+    ]) {
+      expect(names).not.toContain(request.name);
+      await expect(production.client.callTool(request)).rejects.toMatchObject({ code: -32601 });
+    }
+    expect(production.fake.connectionCount).toBe(0); expect(production.fake.history()).toEqual([]);
+  });
+
 });

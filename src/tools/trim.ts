@@ -166,8 +166,18 @@ export type MediaProbe = {
   duration: number; audioStreams: number; videoStreams: number; chapters: Chapter[];
   width?: number; height?: number; codec?: string; pixelFormat?: string; bitDepth?: number;
   colorTransfer?: string; colorPrimaries?: string; colorSpace?: string; colorRange?: string;
+  frameRate?: string;
 };
 type Probe = MediaProbe;
+
+function rationalFrameRate(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^[1-9][0-9]{0,9}\/[1-9][0-9]{0,9}$/.test(value)) return undefined;
+  const [numerator, denominator] = value.split("/").map(Number) as [number, number];
+  if (numerator > 2147483647 || denominator > 2147483647 || numerator > denominator * 1000) return undefined;
+  const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+  const divisor = gcd(numerator, denominator);
+  return `${numerator / divisor}/${denominator / divisor}`;
+}
 
 async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   const { stdout } = await execFileAsync("ffprobe", [
@@ -176,6 +186,10 @@ async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
   const data = JSON.parse(stdout) as JsonObject;
   const streams = Array.isArray(data.streams) ? data.streams.filter(isObject) : [];
   const video = streams.find((stream) => stream.codec_type === "video");
+  const averageRate = rationalFrameRate(video?.avg_frame_rate);
+  // Retain an agreed declared cadence. Conflicting or unavailable rate
+  // metadata supplies no fixed-rate target; it does not prove packet timing.
+  const frameRate = averageRate && averageRate === rationalFrameRate(video?.r_frame_rate) ? averageRate : undefined;
   const chapters = (Array.isArray(data.chapters) ? data.chapters.filter(isObject) : []).map((chapter, index) => ({
     at: Number(chapter.start_time),
     name: isObject(chapter.tags) && typeof chapter.tags.title === "string" ? chapter.tags.title : `Chapter ${index + 1}`,
@@ -194,6 +208,7 @@ async function probe(path: string, signal?: AbortSignal): Promise<Probe> {
       colorPrimaries: typeof video.color_primaries === "string" ? video.color_primaries : undefined,
       colorSpace: typeof video.color_space === "string" ? video.color_space : undefined,
       colorRange: typeof video.color_range === "string" ? video.color_range : undefined,
+      ...(frameRate ? { frameRate } : {}),
     } : {}),
   };
 }
@@ -215,10 +230,11 @@ export function requireSdrInput(info: MediaProbe): void {
 
 const chapterTitle = (name: string) => name.replace(/[\u0000-\u001f\u007f]/g, " ");
 
-export function validateTrimmedMetadata(actual: MediaProbe, expected: { duration: number; width?: number; height?: number; audioStreams: number; chapters: Chapter[] }): void {
+export function validateTrimmedMetadata(actual: MediaProbe, expected: { duration: number; width?: number; height?: number; audioStreams: number; chapters: Chapter[]; frameRate?: string }): void {
   if (!Number.isFinite(actual.duration) || Math.abs(actual.duration - expected.duration) > 0.25) throw new Error("Staged export duration differs from the cut plan");
   if (actual.videoStreams !== 1 || actual.codec !== "h264" || actual.pixelFormat !== "yuv420p") throw new Error("Staged export must contain one H.264 yuv420p video stream");
   if (actual.width !== expected.width || actual.height !== expected.height) throw new Error("Staged export dimensions differ from the source");
+  if (expected.frameRate !== undefined && actual.frameRate !== expected.frameRate) throw new Error("Staged export frame rate differs from the source");
   if (actual.audioStreams !== Math.min(1, expected.audioStreams)) throw new Error("Staged export audio stream count differs from the first-track policy");
   if (actual.chapters.length !== expected.chapters.length || expected.chapters.some((chapter, i) => {
     const observed = actual.chapters[i];
@@ -388,7 +404,10 @@ async function exportTrimmed(
   chapters: Chapter[],
   duration: number,
   signal?: AbortSignal,
+  frameRate?: string,
 ): Promise<void> {
+  const rate = rationalFrameRate(frameRate);
+  if (frameRate !== undefined && !rate) throw new Error("Invalid export frame rate");
   const work = mkdtempSync(join(tmpdir(), "obs-mcp-trim-"));
   try {
     const metadata = join(work, "chapters.txt");
@@ -399,7 +418,9 @@ async function exportTrimmed(
       ...(withAudio ? [`[0:a:0]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${index}]`] : []),
     ].join(";"));
     const inputs = keep.map((_span, index) => `[v${index}]${withAudio ? `[a${index}]` : ""}`).join("");
-    const filter = `${parts.join(";")};${inputs}concat=n=${keep.length}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
+    // Audio lengths can move concat seams off the source frame grid. Restore
+    // the declared cadence after concatenation, before encoding/muxing.
+    const filter = `${parts.join(";")};${inputs}concat=n=${keep.length}:v=1:a=${withAudio ? 1 : 0}${rate ? "[joined]" : "[v]"}${withAudio ? "[a]" : ""}${rate ? `;[joined]fps=fps=${rate}[v]` : ""}`;
     await execFileAsync("ffmpeg", [
       "-hide_banner", "-nostats", "-y", ...localMediaInputOptions(), "-i", path, "-f", "ffmetadata", ...localMediaInputOptions("metadata"), "-i", metadata,
       "-filter_complex", filter, "-map", "[v]", ...(withAudio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []),
@@ -535,10 +556,10 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         if (partial === path || pathTaken(partial)) return errorResult("Could not choose a temporary name for the export; try again");
         const times = seamSampleTimes(seams, plan.trimmedSeconds);
         const exported = await publishTrimmedExport(partial, outputPath, {
-          encode: () => exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal),
+          encode: () => exportTrimmed(path, partial, keep, info.audioStreams, newChapters, plan.trimmedSeconds, signal, info.frameRate),
           verify: async () => {
             const result = await probe(partial, signal);
-            validateTrimmedMetadata(result, { duration: plan.trimmedSeconds, width: info.width, height: info.height, audioStreams: info.audioStreams, chapters: newChapters });
+            validateTrimmedMetadata(result, { duration: plan.trimmedSeconds, width: info.width, height: info.height, audioStreams: info.audioStreams, chapters: newChapters, frameRate: info.frameRate });
             await strictDecode(partial, signal);
             return result;
           },

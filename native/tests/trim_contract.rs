@@ -52,7 +52,7 @@ const fake=async(command,args,options)=>{calls.push({command,args,timeout:option
 cp.execFile=function(){};cp.execFile[promisify.custom]=fake;
 if(input.action==='gray'||input.action==='tool-plan')cp.spawn=(command,args)=>{calls.push({command,args});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>{};setImmediate(()=>{for(const chunk of input.chunks)child.stdout.emit('data',Buffer.from(chunk,'base64'));for(const chunk of input.stderrChunks??[])child.stderr.emit('data',Buffer.from(chunk));child.emit('close',0)});return child;};
 syncBuiltinESMExports();const base=pathToFileURL(join(process.cwd(),'build/tools/trim.js'));let source=fs.readFileSync(base,'utf8').replace(/from\s*(['"])([^'"]+)\1/g,(_all,_q,spec)=>`from ${JSON.stringify(spec.startsWith('.')?new URL(spec,base).href:spec.startsWith('node:')?spec:import.meta.resolve(spec))}`);source+='\nexport{ffmetadata,exportTrimmed,parseSilence,probe,stillSpans,detectIdle,takeLogChapters};';const m=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-let result;try{switch(input.action){case'cuts':result=m.planCuts(input.options);break;case'remap':result=input.times.map(t=>m.remapTime(t,input.cuts));break;case'seams':result=m.seamSampleTimes(input.seams,input.duration);break;case'sdr':m.requireSdrInput(input.info);result={ok:true};break;case'validate':m.validateTrimmedMetadata(input.info,input.expected);result={ok:true};break;case'encoder':result=m.qualifiedEncoderArgs(input.encoders);break;case'metadata':result=m.ffmetadata(input.chapters,input.duration);break;case'silence':result=m.parseSilence(input.stderr,input.duration);break;case'probe':result=await m.probe(input.path);break;case'encode':await m.exportTrimmed(input.path,input.output,input.keep,input.audio,input.chapters,input.duration);result={calls,metadata};break;case'sheet':await m.contactSheet(input.path,input.times,input.columns,input.width);result={calls};break;case'gray':result=await m.stillSpans(input.path,input.info,input.minIdleSeconds,[],undefined);break;case'tool-plan':{const{McpServer,InMemoryTransport}=await import('@modelcontextprotocol/server');const{Client}=await import('@modelcontextprotocol/client');const server=new McpServer({name:'trim-oracle',version:'1'});m.initialize(server,{async sendRequest(type){if(type!=='GetRecordDirectory')throw Error('unexpected OBS method');return{recordDirectory:input.root}}});const client=new Client({name:'consumer',version:'1'});const[a,b]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(a),client.connect(b)]);try{result=await client.callTool({name:'obs-trim-take',arguments:{path:input.path,...input.options}})}finally{await client.close();await server.close();}break;}case'publish':{const root=input.root,partial=join(root,'partial.mp4'),output=join(root,'final.mp4'),abort=new AbortController(),events=[];try{const value=await m.publishTrimmedExport(partial,output,{encode:async()=>{events.push('encode');fs.writeFileSync(partial,'ours');if(input.mode==='trailer')throw Error('Error writing trailer');if(input.mode==='cancel-encode')abort.abort();},verify:async()=>{events.push('verify');if(input.mode==='decode')throw Error('strict decode failed');if(input.mode==='race')fs.writeFileSync(output,'theirs');if(input.mode==='cancel-verify')abort.abort();return input.info;},preview:input.mode==='preview'?async()=>{events.push('preview');throw Error('preview failed')}:undefined},abort.signal);result={ok:true,verified:value.verified,sha256:value.sha256,previewWarning:value.previewWarning,events};}catch(e){result={ok:false,error:e.message,code:e.code,events};}break;}default:throw Error('unknown action');}console.log(JSON.stringify({result,calls}));}catch(error){console.log(JSON.stringify({error:error.message,calls}));}
+let result;try{switch(input.action){case'cuts':result=m.planCuts(input.options);break;case'remap':result=input.times.map(t=>m.remapTime(t,input.cuts));break;case'seams':result=m.seamSampleTimes(input.seams,input.duration);break;case'sdr':m.requireSdrInput(input.info);result={ok:true};break;case'validate':m.validateTrimmedMetadata(input.info,input.expected);result={ok:true};break;case'encoder':result=m.qualifiedEncoderArgs(input.encoders);break;case'metadata':result=m.ffmetadata(input.chapters,input.duration);break;case'silence':result=m.parseSilence(input.stderr,input.duration);break;case'probe':result=await m.probe(input.path);break;case'encode':await m.exportTrimmed(input.path,input.output,input.keep,input.audio,input.chapters,input.duration,undefined,input.frameRate??undefined);result={calls,metadata};break;case'sheet':await m.contactSheet(input.path,input.times,input.columns,input.width);result={calls};break;case'gray':result=await m.stillSpans(input.path,input.info,input.minIdleSeconds,[],undefined);break;case'tool-plan':{const{McpServer,InMemoryTransport}=await import('@modelcontextprotocol/server');const{Client}=await import('@modelcontextprotocol/client');const server=new McpServer({name:'trim-oracle',version:'1'});m.initialize(server,{async sendRequest(type){if(type!=='GetRecordDirectory')throw Error('unexpected OBS method');return{recordDirectory:input.root}}});const client=new Client({name:'consumer',version:'1'});const[a,b]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(a),client.connect(b)]);try{result=await client.callTool({name:'obs-trim-take',arguments:{path:input.path,...input.options}})}finally{await client.close();await server.close();}break;}case'publish':{const root=input.root,partial=join(root,'partial.mp4'),output=join(root,'final.mp4'),abort=new AbortController(),events=[];try{const value=await m.publishTrimmedExport(partial,output,{encode:async()=>{events.push('encode');fs.writeFileSync(partial,'ours');if(input.mode==='trailer')throw Error('Error writing trailer');if(input.mode==='cancel-encode')abort.abort();},verify:async()=>{events.push('verify');if(input.mode==='decode')throw Error('strict decode failed');if(input.mode==='race')fs.writeFileSync(output,'theirs');if(input.mode==='cancel-verify')abort.abort();return input.info;},preview:input.mode==='preview'?async()=>{events.push('preview');throw Error('preview failed')}:undefined},abort.signal);result={ok:true,verified:value.verified,sha256:value.sha256,previewWarning:value.previewWarning,events};}catch(e){result={ok:false,error:e.message,code:e.code,events};}break;}default:throw Error('unknown action');}console.log(JSON.stringify({result,calls}));}catch(error){console.log(JSON.stringify({error:error.message,calls}));}
 "#;
     let mut child = Command::new("node")
         .arg("--input-type=module")
@@ -102,6 +102,7 @@ fn info() -> MediaProbe {
 fn expected() -> ExpectedMetadata {
     let info = info();
     ExpectedMetadata {
+        frame_rate: None,
         duration: info.duration,
         width: info.width,
         height: info.height,
@@ -285,7 +286,12 @@ fn source_ffmetadata_and_common_audio_video_command_cuts_are_exact() {
         node(&json!({"action":"metadata","chapters":chapters,"duration":9.5}))["result"]
     );
     let root = Scratch::new();
-    for audio in [0, 3] {
+    for (audio, frame_rate) in [
+        (0, None),
+        (3, None),
+        (0, Some("30000/1001")),
+        (3, Some("30000/1001")),
+    ] {
         let keep = vec![
             Span {
                 start: 0.0,
@@ -297,7 +303,7 @@ fn source_ffmetadata_and_common_audio_video_command_cuts_are_exact() {
             },
         ];
         let source = node(
-            &json!({"action":"encode","path":root.path("input.mov"),"output":root.path("partial.mp4"),"keep":keep,"audio":audio,"chapters":chapters,"duration":7.5,"encoders":"libx264"}),
+            &json!({"action":"encode","path":root.path("input.mov"),"output":root.path("partial.mp4"),"keep":keep,"audio":audio,"chapters":chapters,"duration":7.5,"encoders":"libx264","frameRate":frame_rate}),
         );
         let calls = source["result"]["calls"].as_array().unwrap();
         let encoded = calls
@@ -326,6 +332,7 @@ fn source_ffmetadata_and_common_audio_video_command_cuts_are_exact() {
             &root.path("partial.mp4"),
             metadata_path,
             EncodePlan {
+                frame_rate,
                 keep: &keep,
                 audio_streams: audio,
                 chapters: &chapters,
@@ -426,6 +433,41 @@ fn source_probe_number_projection_and_contact_sheet_commands_match() {
         contact_sheet_times(Some(&[10.0]), &[], 9.5),
         Vec::<f64>::new()
     );
+}
+
+#[test]
+fn declared_cadence_projection_and_refusal_match_source() {
+    for (average, nominal, expected_rate) in [
+        ("30000/1001", "60000/2002", Some("30000/1001")),
+        ("30/1", "60/2", Some("30/1")),
+        ("24000/1001", "24000/1001", Some("24000/1001")),
+        ("25/1", "30/1", None),
+        ("0/0", "30/1", None),
+        ("1/0", "1/0", None),
+        ("1001/1", "1001/1", None),
+        ("2147483648/2147483648", "2147483648/2147483648", None),
+        ("30/1,fps=999999", "30/1,fps=999999", None),
+    ] {
+        let raw = json!({"format":{"duration":"1"},"streams":[{"codec_type":"video","avg_frame_rate":average,"r_frame_rate":nominal}]});
+        let parsed = parse_probe(&raw);
+        assert_eq!(parsed.frame_rate.as_deref(), expected_rate);
+        assert_json(
+            &json!(parsed),
+            &node(&json!({"action":"probe","path":"fixture.mp4","probeData":raw}))["result"],
+        );
+    }
+    let mut expected = expected();
+    expected.frame_rate = Some("30000/1001".into());
+    for rate in [None, Some("60000/1001"), Some("30000/1001")] {
+        let mut actual = info();
+        actual.frame_rate = rate.map(str::to_owned);
+        let native = validate_trimmed_metadata(&actual, &expected);
+        let source = node(&json!({"action":"validate","info":actual,"expected":expected}));
+        assert_eq!(native.is_ok(), rate == Some("30000/1001"));
+        if let Err(error) = native {
+            assert_eq!(error.message(), source["error"]);
+        }
+    }
 }
 #[test]
 fn source_silence_parsing_and_audio_intersection_are_conservative() {
@@ -720,6 +762,7 @@ fn owner(
         stage.partial_path(),
         &root.path("chapters.txt"),
         EncodePlan {
+            frame_rate: None,
             keep: &[Span {
                 start: 0.0,
                 end: 9.5,

@@ -20,7 +20,9 @@ use crate::{
         EvidenceState, ObservationError, ReadAdapter, ReadFuture, ReadRequest, invalidates_event,
     },
     service_events::{EventHub, TakeEventFeed},
-    session::{ALL_EVENTS, EventReceiver, SessionHandle},
+    session::{
+        ALL_EVENTS, BeforeDispatch, EventReceiver, Invalidation, RequestError, SessionHandle,
+    },
 };
 
 pub const REQUIRED_AUDIT_EVENTS: u64 = ALL_EVENTS | (1 << 19);
@@ -58,6 +60,7 @@ pub struct ObservationBridge {
     task: Option<JoinHandle<()>>,
     full_profile: bool,
     event_hub: Arc<EventHub>,
+    resources: Option<crate::resource_events::Publisher>,
 }
 
 /// Cloneable dispatch evidence, with no socket task, join handle or authority
@@ -104,7 +107,28 @@ impl ObservationBridge {
         events: EventReceiver,
         supported: Option<HashSet<String>>,
     ) -> Result<Self, ObservationError> {
-        Self::bind_profile(handle, events, supported, invalidates_event, true)
+        Self::bind_profile(handle, events, supported, invalidates_event, true, None)
+    }
+
+    /// Install the weak resource publisher before the sole observer can run.
+    pub fn bind_with_resource_events(
+        handle: SessionHandle,
+        events: EventReceiver,
+        supported: Option<HashSet<String>>,
+        resources: crate::resource_events::Publisher,
+    ) -> Result<Self, ObservationError> {
+        Self::bind_profile(
+            handle,
+            events,
+            supported,
+            invalidates_event,
+            true,
+            Some(resources),
+        )
+    }
+    /// This weak view grants no observer, job, or transport ownership.
+    pub fn resource_events(&self) -> Option<crate::resource_events::Publisher> {
+        self.resources.clone()
     }
 
     /// An ephemeral workflow may have a narrower source-defined invalidation
@@ -118,7 +142,7 @@ impl ObservationBridge {
         supported: Option<HashSet<String>>,
         invalidates: fn(&str) -> bool,
     ) -> Result<Self, ObservationError> {
-        Self::bind_profile(handle, events, supported, invalidates, false)
+        Self::bind_profile(handle, events, supported, invalidates, false, None)
     }
 
     fn bind_profile(
@@ -127,6 +151,7 @@ impl ObservationBridge {
         supported: Option<HashSet<String>>,
         invalidates: fn(&str) -> bool,
         full_profile: bool,
+        resources: Option<crate::resource_events::Publisher>,
     ) -> Result<Self, ObservationError> {
         if handle.token() != events.connection_token() || handle.invalidation().is_some() {
             return Err(invalidated());
@@ -145,7 +170,7 @@ impl ObservationBridge {
         let publish = state.clone();
         let audit_progress = audit_processed.clone();
         let audit_publish = audit_state.clone();
-        let event_hub = Arc::new(EventHub::new(token));
+        let event_hub = Arc::new(EventHub::new(token, resources.clone()));
         let delivery = event_hub.clone();
         let task = tokio::spawn(async move {
             let _lifetime =
@@ -206,6 +231,7 @@ impl ObservationBridge {
             task: Some(task),
             full_profile,
             event_hub,
+            resources,
         })
     }
 
@@ -503,7 +529,7 @@ impl ReadAdapter for SessionReader {
                 })?;
             let response = self
                 .handle
-                .request(self.handle.token(), request.as_str(), data, remaining)
+                .observational_until(self.handle.token(), request, data, deadline)
                 .await;
             // Rejections are observations too: code 604 must not outrun a
             // relevant event already received before its reply. Callers can
@@ -511,6 +537,16 @@ impl ReadAdapter for SessionReader {
             let cursor = self.handle.event_cursor();
             self.cursor_barrier(cursor, deadline).await?;
             response.map_err(|error| {
+                if matches!(
+                    error,
+                    RequestError::Unknown(Invalidation::DeadlineAfterDispatch)
+                        | RequestError::BeforeDispatch(BeforeDispatch::Deadline)
+                ) {
+                    // Reconstruct the original millisecond budget rather than
+                    // losing a millisecond to this adapter's admission work.
+                    let millis = remaining.as_nanos().div_ceil(1_000_000);
+                    return ObservationError::timed_out(request, millis);
+                }
                 if let Some(code) = error.rejection_code() {
                     ObservationError::rejected(
                         code,

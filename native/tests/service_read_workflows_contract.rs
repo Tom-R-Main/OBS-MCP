@@ -188,13 +188,14 @@ import {McpServer,InMemoryTransport} from '@modelcontextprotocol/server';
 import {Client} from '@modelcontextprotocol/client';
 import {initialize as plan} from './build/tools/scene-template.js';
 import {initialize as audit} from './build/tools/scene-audit.js';
+import {OBSRequestError} from './build/client.js';
 const chunks=[];for await(const chunk of process.stdin)chunks.push(chunk);const input=JSON.parse(Buffer.concat(chunks).toString());
 const RealDate=Date;globalThis.Date=class extends RealDate{constructor(...args){super(...(args.length?args:[1793448000000]));}static now(){return 1793448000000;}};
 if(input.limit!=null)process.env.OBS_MCP_MAX_SCREENSHOT_BYTES=input.limit;else delete process.env.OBS_MCP_MAX_SCREENSHOT_BYTES;
 const trace=[];class Reader extends EventEmitter{
 connect(){return Promise.resolve()}
 getConnectionStatus(){return {identified:true,generation:input.generation}}supportsRequest(type){return input.supported?input.supported.includes(type):true}isConnected(){return true}
-async sendRequest(type,data){if(input.supported&&!input.supported.includes(type))throw Error(`OBS WebSocket does not advertise support for request '${type}'`);trace.push({type,data:data??null});if(type===input.injectAt)for(const event of input.events??[])this.emit('event',event);const queue=input.replies[type];if(!queue?.length)throw Error('Unexpected fixture read');return structuredClone(queue.length>1?queue.shift():queue[0]);}}
+async sendRequest(type,data){if(input.supported&&!input.supported.includes(type))throw Error(`OBS WebSocket does not advertise support for request '${type}'`);trace.push({type,data:data??null});if(type===input.injectAt){for(const event of input.events??[])this.emit('event',event);if(input.reject)throw new OBSRequestError(type,500,'PRIVATE WORKFLOW REJECTION');}const queue=input.replies[type];if(!queue?.length)throw Error('Unexpected fixture read');return structuredClone(queue.length>1?queue.shift():queue[0]);}}
 const reader=new Reader(),server=new McpServer({name:'service-read-oracle',version:'1'});(input.kind==='plan'?plan:audit)(server,reader);
 const client=new Client({name:'read-consumer',version:'1'}),[a,b]=InMemoryTransport.createLinkedPair();
 try{await Promise.all([server.connect(a),client.connect(b)]);const result=await client.callTool({name:input.kind==='plan'?'obs-plan-scene-template':'obs-audit-scene',arguments:input.args});for(const block of result.content??[])if(block.type==='text')block.text=JSON.parse(block.text);console.log(JSON.stringify({result,trace}));}finally{await client.close();await server.close();}
@@ -233,9 +234,10 @@ async fn compare(kind: &str, args: Value, hooks: Hooks, limit: Option<&str>) -> 
     let original = hooks.replies.lock().unwrap().clone();
     let events = hooks.events.clone();
     let inject = hooks.inject_at.clone();
+    let reject = hooks.reject;
     let fixture = Fixture::new(hooks).await;
     let expected = source(
-        &json!({"kind":kind,"args":args,"replies":original,"generation":fixture.owner.token().generation(),"events":events,"injectAt":inject,"limit":limit}),
+        &json!({"kind":kind,"args":args,"replies":original,"generation":fixture.owner.token().generation(),"events":events,"injectAt":inject,"reject":reject,"limit":limit}),
     );
     let result = if kind == "plan" {
         service_read_workflows::plan(
@@ -376,7 +378,7 @@ async fn frontend_timeout_retains_work_and_request_cancellation_drains_the_admit
 }
 
 #[tokio::test]
-async fn unsupported_unicode_peer_errors_and_expired_work_refuse_explicitly() {
+async fn unsupported_unicode_and_expired_work_refuse_but_peer_errors_retain_report() {
     for kind in ["plan", "audit"] {
         let hooks = Hooks::new(vec![], "");
         hooks.replies.lock().unwrap()["GetSceneList"][0]["scenes"][0]["évidence"] = json!(true);
@@ -416,10 +418,12 @@ async fn unsupported_unicode_peer_errors_and_expired_work_refuse_explicitly() {
         ScreenshotLimit::parse(None),
     )
     .await
-    .unwrap_err();
-    assert_eq!(error.request_code(), Some(500));
-    assert!(error.message.contains("PRIVATE WORKFLOW REJECTION"));
-    assert!(!format!("{error:?}").contains("PRIVATE WORKFLOW"));
+    .unwrap();
+    assert_eq!(error["structuredContent"]["status"], "unknown");
+    assert_eq!(
+        error["structuredContent"]["checks"][1]["message"],
+        "OBS request GetInputList failed with code 500: PRIVATE WORKFLOW REJECTION"
+    );
     let count = fixture.hooks.trace.lock().unwrap().len();
     let error = service_read_workflows::plan(
         fixture.bridge.clone(),
@@ -469,17 +473,20 @@ async fn admitted_rpc_deadline_is_bounded_and_cannot_publish_late_evidence_or_re
         assert_eq!(result.unwrap()["structuredContent"]["status"], "unknown");
         assert_eq!(fixture.hooks.trace.lock().unwrap().len(), 1);
         assert!(!fixture.hooks.settled.load(Ordering::Acquire));
-        // The returned unknown result is not a socket-shutdown receipt. Its
-        // service-owned actor separately publishes terminal state and is joined
-        // below; no replay or later evidence becomes workflow authority.
-        timeout(WAIT, async {
-            while fixture.owner.handle().invalidation().is_none() {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap();
+        // This fixed typed read fully flushed before its response deadline.
+        // Its late ACK grants no workflow authority and never forces a new
+        // connection. A fresh read must progress on the original socket.
+        assert!(fixture.owner.handle().invalidation().is_none());
         fixture.hooks.release.notify_one();
+        fixture
+            .owner
+            .handle()
+            .request(fixture.owner.token(), "GetVideoSettings", json!({}), WAIT)
+            .await
+            .unwrap();
+        assert_eq!(fixture.hooks.trace.lock().unwrap().len(), 2);
+        assert!(fixture.hooks.settled.load(Ordering::Acquire));
+        assert!(fixture.owner.handle().invalidation().is_none());
         fixture.close().await;
     }
 }
@@ -577,5 +584,24 @@ async fn same_connection_capability_overlay_refuses_unadvertised_reads_without_d
                 .any(|read| read["type"] == "GetVideoSettings")
         );
         fixture.close().await;
+    }
+}
+
+#[tokio::test]
+async fn typed_peer_rejection_and_prior_event_keep_source_audit_report_and_read_trace() {
+    for events in [vec![], vec!["SceneItemTransformChanged"]] {
+        let mut hooks = Hooks::new(events, "GetSceneItemTransform");
+        hooks.reject = true;
+        let report = compare("audit", audit_args(false), hooks, None).await;
+        assert_eq!(report["structuredContent"]["status"], "unknown");
+        assert_eq!(report["structuredContent"]["requests"], 5);
+        assert_eq!(
+            report["structuredContent"]["items"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(report["structuredContent"]["checks"].as_array().unwrap().iter().any(|check|check["message"].as_str().is_some_and(|m|m.contains("OBS request GetSceneItemTransform failed with code 500: PRIVATE WORKFLOW REJECTION"))));
     }
 }

@@ -248,7 +248,7 @@ fn unsupported_contexts_drift_and_input_output_caps_are_explicit_and_redacted() 
 }
 
 #[test]
-fn opaque_record_diagnostics_match_source_without_admitting_raw_batch_execution() {
+fn opaque_record_diagnostics_match_source_and_raw_batch_is_advanced_only() {
     // Unknown-valued records are now supported for closed settings callbacks.
     // That also makes this schema diagnosable; route admission is independent.
     for legacy in [false, true] {
@@ -257,5 +257,65 @@ fn opaque_record_diagnostics_match_source_without_admitting_raw_batch_execution(
     for owner in ["requests", "locals"] {
         assert!(catalog()[owner].get("obs-batch").is_none());
     }
-    assert!(catalog()["service"]["handlers"].get("obs-batch").is_none());
+    assert_eq!(
+        catalog()["service"]["handlers"]["obs-batch"]["handler"],
+        "advanced-opaque-command"
+    );
+    assert!(!obs_mcp_native::native_profile::NativeProfile::Production.allows("obs-batch"));
+    assert!(obs_mcp_native::native_profile::NativeProfile::Advanced.allows("obs-batch"));
+}
+
+#[test]
+fn scene_template_closed_schema_diagnostics_match_source_in_both_eras() {
+    let valid = json!({"sceneCollection":"Audit collection","sceneName":"Review","template":{"version":1,"name":"Presentation","canvas":{"width":1920,"height":1080},"roles":[{"role":"slides","inputKinds":["screen_capture"],"transform":{"positionX":12},"enabled":true,"locked":true,"index":0}]},"bindings":[]});
+    let mut cases = Vec::new();
+    for (pointer, value) in [
+        ("/template/canvas/width", json!(0)),
+        ("/template/canvas/height", json!(-1)),
+        ("/template/canvas/width", json!(1.5)),
+        ("/template/roles/0/transform/alignment", json!(3)),
+        ("/template/roles/0/transform/alignment", json!("private")),
+        ("/template/roles/0/transform/extra", json!("PRIVATE VALUE")),
+    ] {
+        let mut args = valid.clone();
+        if let Some(slot) = args.pointer_mut(pointer) {
+            *slot = value;
+        } else {
+            let (parent, key) = pointer.rsplit_once('/').unwrap();
+            args.pointer_mut(parent).unwrap()[key] = value;
+        }
+        cases.push(("obs-plan-scene-template".into(), args));
+    }
+    for legacy in [false, true] {
+        compare(&cases, legacy);
+    }
+    assert_eq!(
+        tool_error(
+            "obs-plan-scene-template",
+            schema("obs-plan-scene-template"),
+            &valid
+        ),
+        Err(ProjectionUnavailable::NoIssues)
+    );
+    let mut ambiguous = valid.clone();
+    ambiguous["template"]["roles"][0]["transform"]["zeta"] = json!("PRIVATE ONE");
+    ambiguous["template"]["roles"][0]["transform"]["alpha"] = json!("PRIVATE TWO");
+    assert_eq!(
+        tool_error(
+            "obs-plan-scene-template",
+            schema("obs-plan-scene-template"),
+            &ambiguous
+        ),
+        Err(ProjectionUnavailable::UnsupportedSchema)
+    );
+    let mut aligned = valid.clone();
+    aligned["template"]["roles"][0]["transform"]["alignment"] = json!(5);
+    assert_eq!(
+        tool_error(
+            "obs-plan-scene-template",
+            schema("obs-plan-scene-template"),
+            &aligned
+        ),
+        Err(ProjectionUnavailable::NoIssues)
+    );
 }

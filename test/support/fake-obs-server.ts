@@ -48,6 +48,7 @@ export type RecordedOBSRequest = RecordedOBSFrame & {
 
 export type FakeOBSOptions = {
   port?: number;
+  holdHello?: boolean;
   password?: string;
   autoGetVersion?: boolean;
   availableRequests?: readonly string[];
@@ -129,6 +130,8 @@ export class FakeOBSServer {
   private readonly scripts = new Map<string, ScriptedAction[]>();
   private readonly responders = new Map<string, FakeOBSResponder>();
   private readonly timers = new Set<NodeJS.Timeout>();
+  private holdHello: boolean;
+  private readonly pendingHellos = new Map<WebSocket, string>();
   private readonly availableRequests: string[];
   private readonly autoGetVersion: boolean;
   private readonly obsStudioVersion: string;
@@ -143,6 +146,7 @@ export class FakeOBSServer {
   private constructor(server: WebSocketServer, options: FakeOBSOptions) {
     this.server = server;
     this.password = options.password;
+    this.holdHello = options.holdHello ?? false;
     this.autoGetVersion = options.autoGetVersion ?? true;
     this.obsStudioVersion = options.obsStudioVersion ?? "32.2.2";
     this.omitHelloStudioVersion = options.omitHelloStudioVersion ?? false;
@@ -168,6 +172,15 @@ export class FakeOBSServer {
 
   get openConnectionCount(): number {
     return this.sockets.size;
+  }
+
+  /** Release a deterministic pre-Identify fence; no fixture timer is involved. */
+  releaseHello(): void {
+    this.holdHello = false;
+    for (const [socket, hello] of this.pendingHellos) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(hello);
+    }
+    this.pendingHellos.clear();
   }
 
   /** The event subscriptions a connection last identified with. */
@@ -278,6 +291,25 @@ export class FakeOBSServer {
     });
   }
 
+  /** Observe peer close callbacks without terminating sockets from the fixture. */
+  async waitForNoOpenConnections(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<void> {
+    if (this.sockets.size === 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const onClosed = () => {
+        if (this.sockets.size !== 0) return;
+        clearTimeout(timer);
+        this.events.off("connectionClosed", onClosed);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        this.events.off("connectionClosed", onClosed);
+        reject(new Error("Timed out waiting for all OBS peers to close"));
+      }, timeoutMs);
+      this.events.on("connectionClosed", onClosed);
+      onClosed();
+    });
+  }
+
   sendEvent(eventType: string, eventData: JsonObject = {}, connectionId?: number): void {
     const socket = this.findOpenSocket(connectionId);
     socket.send(JSON.stringify({
@@ -303,6 +335,7 @@ export class FakeOBSServer {
     this.timers.clear();
     for (const socket of this.sockets.keys()) socket.terminate();
     this.sockets.clear();
+    this.pendingHellos.clear();
     this.events.removeAllListeners();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }
@@ -315,7 +348,7 @@ export class FakeOBSServer {
     const authentication = this.password
       ? { salt: this.salt, challenge: this.challenge }
       : undefined;
-    socket.send(JSON.stringify({
+    const hello = JSON.stringify({
       op: OBS_OP.Hello,
       d: {
         ...(this.omitHelloStudioVersion ? {} : { obsStudioVersion: this.obsStudioVersion }),
@@ -323,7 +356,9 @@ export class FakeOBSServer {
         rpcVersion: 1,
         ...(authentication ? { authentication } : {}),
       },
-    }));
+    });
+    if (this.holdHello) this.pendingHellos.set(socket, hello);
+    else socket.send(hello);
 
     socket.on("message", (data) => {
       const frame = parseFrame(data);
@@ -340,6 +375,7 @@ export class FakeOBSServer {
     });
     socket.once("close", () => {
       this.sockets.delete(socket);
+      this.pendingHellos.delete(socket);
       this.events.emit("connectionClosed", connectionId);
     });
   }

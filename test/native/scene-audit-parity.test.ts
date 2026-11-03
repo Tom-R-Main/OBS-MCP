@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture, recordDefaultOracle } from "../support/native-default-fixture.js";
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ async function start(native: boolean, legacy: boolean, fixture: Fixture = () => 
   const client = new Client({ name: "native-audit-parity", version: "1" }, { versionNegotiation: { mode: legacy ? "legacy" : { pin: "2026-07-28" } } });
   const transport = new StdioClientTransport({ command: native ? binary : process.execPath, args: native ? [] : [compatibility], cwd: root, env: {
     ...getDefaultEnvironment(), OBS_WEBSOCKET_URL: fake.url, OBS_MCP_STATE_DIR: directory, OBS_MCP_COMPAT_ENTRY: compatibility, OBS_MCP_COMPAT_NODE: process.execPath,
-    OBS_MCP_TOOLSETS: "all", OBS_MCP_TOOLS: "", OBS_MCP_READ_ONLY: "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false", OBS_MCP_READ_OBS_CONFIG: "false", ...env,
+    OBS_MCP_TOOLSETS: "all", OBS_MCP_TOOLS: "", OBS_MCP_READ_ONLY: "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false", OBS_MCP_READ_OBS_CONFIG: "false", ...env, ...(native ? nativeDefaultFixture(root) : {}),
   }, stderr: "pipe" });
   transport.stderr?.on("data", () => undefined);
   const session = { client, transport, fake }; sessions.push(session); await client.connect(transport); return session;
@@ -42,7 +43,11 @@ function report(value: unknown) {
 }
 function semantic(result: Awaited<ReturnType<Client["callTool"]>>) {
   return { ...result, structuredContent: result.structuredContent ? report(result.structuredContent) : undefined,
-    content: result.content.map(block => block.type === "text" ? { ...block, text: report(JSON.parse(block.text)) } : block) };
+    content: result.content.map(block => {
+      if (block.type !== "text") return block;
+      // Preserve callback error text verbatim; normalize only actual JSON reports.
+      try { return { ...block, text: report(JSON.parse(block.text)) }; } catch { return block; }
+    }) };
 }
 function trace(session: Session) {
   return session.fake.history().filter(frame => frame.frame.op === 6 && frame.frame.d.requestType !== "GetVersion").map(frame => ({ requestType: frame.frame.d.requestType, requestData: frame.frame.d.requestData ?? {} }));
@@ -51,13 +56,13 @@ function noWrites(session: Session) {
   expect(session.fake.history().filter(({ frame }) => frame.op === 6).every(({ frame }) => SCENE_AUDIT_READS.has(String(frame.d.requestType)))).toBe(true);
   expect(session.fake.history().some(({ frame }) => frame.op === 8)).toBe(false);
 }
-async function closedNative(session: Session) {
-  await vi.waitFor(() => expect(session.fake.openConnectionCount).toBe(0), { timeout: 2_000 });
+async function retainedNative(session: Session) {
+  expect(session.fake.openConnectionCount).toBe(1);
   expect(children(session.transport.pid!)).toEqual([]); noWrites(session);
 }
 afterEach(async () => {
   for (const session of sessions.splice(0)) {
-    try { await session.client.close(); } finally { try { await session.transport.close(); } finally { await session.fake.close(); } }
+    try { await session.client.close(); } finally { try { await session.transport.close(); await vi.waitFor(() => expect(session.fake.openConnectionCount).toBe(0), { timeout: 4_000 }); } finally { await session.fake.close(); } }
   }
 });
 
@@ -80,16 +85,16 @@ describe.each([false, true])("native structural audit (legacy=%s)", legacy => {
     const expected = await oracle.client.callTool(call); const actual = await native.client.callTool(call);
     expect(actual.structuredContent).toMatchObject({ status, scope: "structural", renderedContent: "unverified" });
     expect(semantic(actual)).toEqual(semantic(expected)); expect(trace(native)).toEqual(trace(oracle));
-    expect(native.fake.connectionCount).toBe(1); await closedNative(native); noWrites(oracle);
+    expect(native.fake.connectionCount).toBe(1); await retainedNative(native); noWrites(oracle);
   });
-  it("joins native owners before SDK projects explicit peer failures", async () => {
+  it("preserves the exact Source peer failure on the original native owner", async () => {
     const fixture: Fixture = fake => { fake.respondWith("GetSceneItemTransform", () => { throw new FakeOBSRequestError(500, "qualified peer rejection"); }); };
     const oracle = await start(false, legacy, fixture); const native = await start(true, legacy, fixture);
     const call = { name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review" } };
-    const nextConnection = native.fake.waitForConnectionCount(2, 10_000).then(() => { expect(native.fake.openConnectionCount).toBe(1); });
-    const [actual] = await Promise.all([native.client.callTool(call), nextConnection]);
-    expect(semantic(actual)).toEqual(semantic(await oracle.client.callTool(call)));
-    expect(children(native.transport.pid!)).toHaveLength(1); noWrites(native);
+    const actual = await native.client.callTool(call);
+    const expected = await oracle.client.callTool(call); recordDefaultOracle("audit-peer-rejection", legacy, call, expected, actual);
+    expect(semantic(actual)).toEqual(semantic(expected));
+    expect(children(native.transport.pid!)).toHaveLength(0); noWrites(native);
   });
   it("matches SDK invalid-input projection without scene reads", async () => {
     const oracle = await start(false, legacy); const native = await start(true, legacy);
@@ -99,7 +104,10 @@ describe.each([false, true])("native structural audit (legacy=%s)", legacy => {
   });
   it("validates before opening native OBS even when SDK cannot start", async () => {
     const native = await start(true, legacy, undefined, undefined, { OBS_MCP_COMPAT_NODE: join(root, "native/target/nonexistent-audit-test-node") });
-    await expect(native.client.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", includeScreenshot: "yes" } })).rejects.toThrow();
+    const oracle = await start(false, legacy);
+    const call = { name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review", includeScreenshot: "yes" } };
+    const expected = await oracle.client.callTool(call); expect(expected.isError).toBe(true);
+    expect(await native.client.callTool(call)).toEqual(expected);
     expect(native.fake.connectionCount).toBe(0); expect(native.fake.history()).toEqual([]);
   });
   it("filters hidden workflow before any native setup", async () => {
@@ -107,11 +115,10 @@ describe.each([false, true])("native structural audit (legacy=%s)", legacy => {
     await expect(native.client.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review" } })).rejects.toThrow();
     expect(native.fake.connectionCount).toBe(0); expect(native.fake.history()).toEqual([]);
   });
-  it("retires its fast socket before auditing and closes the audit before reply", async () => {
+  it("retains one socket across initial reads and auditing until frontend shutdown", async () => {
     const native = await start(true, legacy);
     await native.client.callTool({ name: "obs-get-version", arguments: {} });
-    const replacement = native.fake.waitForConnectionCount(2).then(() => { expect(native.fake.openConnectionCount).toBe(1); });
     const result = await native.client.callTool({ name: "obs-audit-scene", arguments: { sceneCollection: "Audit collection", sceneName: "Review" } });
-    expect(result.structuredContent).toMatchObject({ status: "pass" }); await replacement; await closedNative(native);
+    expect(result.structuredContent).toMatchObject({ status: "pass" }); expect(native.fake.connectionCount).toBe(1); await retainedNative(native);
   });
 });

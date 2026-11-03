@@ -103,10 +103,13 @@ try {
   if (!audit?.inputSchema || audit.annotations?.readOnlyHint !== true) throw new Error('Missing actual read-only scene audit schema');
   const workflows = { 'obs-plan-scene-template': { handler: 'scene-template-plan', inputSchema: plan.inputSchema }, 'obs-audit-scene': { handler: 'scene-audit', inputSchema: audit.inputSchema } };
   const serviceHandlers = {
+    'obs-call-request':'advanced-opaque-command','obs-batch':'advanced-opaque-command','obs-call-vendor-request':'advanced-opaque-command','obs-trigger-hotkey-by-name':'advanced-opaque-command','obs-trigger-hotkey-by-key-sequence':'advanced-opaque-command',
     'obs-record-clip':'record-clip',
     'obs-restore':'restore',
     'obs-apply-scene':'apply-scene',
+    'obs-capture-window':'capture-window',
     'obs-stop-record':'manual-record-stop',
+    'obs-start-record':'advanced-manual-command','obs-toggle-record':'advanced-manual-command','obs-start-output':'advanced-manual-command','obs-stop-output':'advanced-manual-command','obs-toggle-output':'advanced-manual-command',
     'obs-toggle-stream':'literal-setter', 'obs-toggle-virtual-cam':'literal-setter', 'obs-toggle-replay-buffer':'literal-setter',
     'obs-start-stream':'confirmed-output-start', 'obs-start-virtual-cam':'confirmed-output-start', 'obs-start-replay-buffer':'confirmed-output-start',
     'obs-stop-stream':'literal-setter', 'obs-stop-virtual-cam':'literal-setter', 'obs-stop-replay-buffer':'literal-setter',
@@ -127,7 +130,7 @@ try {
     'obs-prepare-demo':'prepare-demo', 'obs-recover-demo':'recover-demo',
     'obs-claim-control':'claim-control', 'obs-release-control':'release-control', 'obs-control-status':'control-status',
   };
-  const service = { activation: 'OBS_MCP_NATIVE_STATEFUL', handlers: Object.fromEntries(Object.entries(serviceHandlers).map(([name,handler])=>{
+  const service = { activation: 'native-default', handlers: Object.fromEntries(Object.entries(serviceHandlers).map(([name,handler])=>{
     const tool=tools.find(tool=>tool.name===name);
     if(!tool?.inputSchema) throw new Error(`Missing actual persistent native service schema: ${name}`);
     return [name,{handler,inputSchema:tool.inputSchema}];
@@ -138,7 +141,7 @@ try {
   const path = fileURLToPath(new URL('../native/assets/tools.json', import.meta.url));
   const bytes = JSON.stringify(manifest, null, 2)+'\n';
   if (!existsSync(path) || !readFileSync(path).equals(Buffer.from(bytes))) writeFileSync(path, bytes);
-  console.log(JSON.stringify({ tools: tools.length, nativeReadOnly: Object.keys(requests).length, nativeLocal: Object.keys(locals).length, nativeReadOnlyWorkflow: Object.keys(workflows).length, compatibility: tools.length-Object.keys(requests).length-Object.keys(locals).length-Object.keys(workflows).length }));
+  console.log(JSON.stringify({ tools: tools.length, nativeReadOnly: Object.keys(requests).length, nativeLocal: Object.keys(locals).length, nativeReadOnlyWorkflow: Object.keys(workflows).length, nativeService: tools.filter(({name})=>!Object.hasOwn(requests,name)&&!Object.hasOwn(locals,name)&&!Object.hasOwn(workflows,name)&&Object.hasOwn(service.handlers,name)).length, unimplemented: tools.filter(({name})=>!Object.hasOwn(requests,name)&&!Object.hasOwn(locals,name)&&!Object.hasOwn(workflows,name)&&!Object.hasOwn(service.handlers,name)).length, compatibility:0 }));
 } finally { await client.close(); await server.close(); }
 }
 

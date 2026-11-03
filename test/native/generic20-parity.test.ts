@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 import { expectNativeInventory } from '../support/native-inventory.js';
+import { NATIVE_STATEFUL_DEFERRED_TOOL_NAMES } from '../support/tool-count.js';
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
@@ -92,7 +93,7 @@ it('rechecks a queued non-idempotent caller lease at send and preserves the exac
  }
 });
 it('exposes precisely the declared native inventory with approved host adapters and exact Source contracts',async()=>{
- const oracle=await start(false,false,true);const native=await start(true,false,true);const actual=(await native.client.listTools()).tools;const expected=(await oracle.client.listTools()).tools;const catalog=JSON.parse(readFileSync(join(root,'native/assets/tools.json'),'utf8')) as {requests:Record<string,unknown>;locals:Record<string,unknown>;service:{handlers:Record<string,unknown>}};const captureExcluded=new Set(['obs-start-stream','obs-stop-stream','obs-toggle-stream']);const declared=[...new Set([...Object.keys(catalog.requests),...Object.keys(catalog.locals),...Object.keys(catalog.service.handlers)])].filter(name=>!captureExcluded.has(name)).sort();expect(actual.map(tool=>tool.name).sort()).toEqual(declared);expectNativeInventory(actual,expected);expect(native.fake.connectionCount).toBe(0);expect(children(native)).toEqual([]);
+ const oracle=await start(false,false,true);const native=await start(true,false,true);const actual=(await native.client.listTools()).tools;const expected=(await oracle.client.listTools()).tools;const catalog=JSON.parse(readFileSync(join(root,'native/assets/tools.json'),'utf8')) as {requests:Record<string,unknown>;locals:Record<string,unknown>;service:{handlers:Record<string,unknown>}};const captureExcluded=new Set<string>(NATIVE_STATEFUL_DEFERRED_TOOL_NAMES);const declared=[...new Set([...Object.keys(catalog.requests),...Object.keys(catalog.locals),...Object.keys(catalog.service.handlers)])].filter(name=>!captureExcluded.has(name)).sort();expect(actual.map(tool=>tool.name).sort()).toEqual(declared);expectNativeInventory(actual,expected);expect(native.fake.connectionCount).toBe(0);expect(children(native)).toEqual([]);
 });
 
 // An owned raw public frontend writes both frames in one stdin operation; two

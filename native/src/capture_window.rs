@@ -39,10 +39,10 @@ impl fmt::Debug for Failure {
     }
 }
 impl Failure {
-    fn direct(message: impl Into<String>) -> Self {
+    pub(crate) fn direct(message: impl Into<String>) -> Self {
         Self::new(FailureKind::Direct, message.into())
     }
-    fn thrown(message: impl Into<String>) -> Self {
+    pub(crate) fn thrown(message: impl Into<String>) -> Self {
         Self::new(FailureKind::Thrown, message.into())
     }
     fn new(kind: FailureKind, message: String) -> Self {
@@ -96,7 +96,7 @@ fn invalid() -> Failure {
     Failure::thrown("Invalid capture-window arguments")
 }
 /// These are selective native admission bounds, not Source schema constraints or RSS bounds.
-fn bounded(values: &[&Value]) -> Result<(), Failure> {
+pub(crate) fn bounded(values: &[&Value]) -> Result<(), Failure> {
     fn walk(
         value: &Value,
         depth: usize,
@@ -155,7 +155,7 @@ fn bounded_strings(values: &[&str]) -> Result<(), Failure> {
     }
     Ok(())
 }
-fn report(value: Value) -> Result<Value, Failure> {
+pub(crate) fn report(value: Value) -> Result<Value, Failure> {
     js_json::encoded_len(
         &value,
         js_json::Limits {
@@ -383,7 +383,7 @@ impl fmt::Debug for InputIdentity {
     }
 }
 impl InputIdentity {
-    fn parse(value: &Value) -> Result<Self, Failure> {
+    pub(crate) fn parse(value: &Value) -> Result<Self, Failure> {
         Ok(Self {
             name: value["inputName"]
                 .as_str()
@@ -457,7 +457,7 @@ impl Readings<'_> {
             })
     }
 }
-fn scene(request: &Request, value: &Value) -> Result<SceneIdentity, Failure> {
+pub(crate) fn scene(request: &Request, value: &Value) -> Result<SceneIdentity, Failure> {
     let matches = value["scenes"]
         .as_array()
         .into_iter()
@@ -482,17 +482,17 @@ fn scene(request: &Request, value: &Value) -> Result<SceneIdentity, Failure> {
         uuid: uuid.into(),
     })
 }
-fn inputs(value: &Value) -> Result<&[Value], Failure> {
+pub(crate) fn inputs(value: &Value) -> Result<&[Value], Failure> {
     value["inputs"]
         .as_array()
         .map(Vec::as_slice)
         .ok_or_else(|| Failure::thrown("Capture inventory is unavailable; no capture changed"))
 }
-fn found<'a>(rows: &'a [Value], name: &str) -> Option<&'a Value> {
+pub(crate) fn found<'a>(rows: &'a [Value], name: &str) -> Option<&'a Value> {
     rows.iter()
         .find(|row| row.is_object() && row["inputName"].as_str() == Some(name))
 }
-fn membership(input: &InputIdentity, value: &Value) -> Result<Vec<i64>, Failure> {
+pub(crate) fn membership(input: &InputIdentity, value: &Value) -> Result<Vec<i64>, Failure> {
     let rows = value["sceneItems"].as_array().ok_or_else(|| {
         Failure::thrown("Target-scene membership is unavailable; no capture changed")
     })?;
@@ -510,7 +510,7 @@ fn membership(input: &InputIdentity, value: &Value) -> Result<Vec<i64>, Failure>
     ids.sort();
     Ok(ids)
 }
-fn settings(kind: Kind, response: &Value) -> Result<&Map<String, Value>, Failure> {
+pub(crate) fn settings(kind: Kind, response: &Value) -> Result<&Map<String, Value>, Failure> {
     if response["inputKind"] != kind.name() {
         return Err(Failure::thrown(
             "Capture source identity or settings are unavailable; no capture changed",
@@ -520,7 +520,7 @@ fn settings(kind: Kind, response: &Value) -> Result<&Map<String, Value>, Failure
         Failure::thrown("Capture source identity or settings are unavailable; no capture changed")
     })
 }
-fn inventory_guard(kind: Kind, settings: &Map<String, Value>) -> Result<(), Failure> {
+pub(crate) fn inventory_guard(kind: Kind, settings: &Map<String, Value>) -> Result<(), Failure> {
     if kind.portal() {
         if !capture_backend::configured_window(kind.name(), settings) {
             return Err(Failure::thrown(
@@ -556,7 +556,7 @@ fn item_string(value: Option<&Value>) -> Result<String, Failure> {
         _ => Ok(js_string(value)),
     }
 }
-fn select(request: &Request, kind: Kind, response: &Value) -> Result<Value, Failure> {
+pub(crate) fn select(request: &Request, kind: Kind, response: &Value) -> Result<Value, Failure> {
     let wanted = request
         .window
         .as_deref()
@@ -673,31 +673,16 @@ impl fmt::Debug for Discovery {
             .finish_non_exhaustive()
     }
 }
-pub fn discover(
-    request: Request,
+pub(crate) fn resolve_kind(
+    request: &Request,
     platform: Option<&str>,
     advertised: &[String],
-    readings: Readings<'_>,
-) -> Result<Discovery, Failure> {
-    if let Some(error) = request.selector_refusal() {
-        return Err(error);
-    }
-    if let Some(error) = request.platform_refusal(platform) {
-        return Err(error);
-    }
-    readings.check()?;
-    if advertised.len() > MAX_RECORDS {
-        return Err(limit());
-    }
-    bounded_strings(&advertised.iter().map(String::as_str).collect::<Vec<_>>())?;
-    let mac = platform == Some("macos");
-    let scene = scene(&request, readings.scenes)?;
-    let rows = inputs(readings.inputs)?;
-    let existing = found(rows, &request.input);
+    existing: Option<&Value>,
+) -> Result<Kind, Failure> {
     let existing_kind = existing
         .and_then(|r| r["inputKind"].as_str())
         .and_then(Kind::parse);
-    let kind = if mac {
+    let kind = if platform == Some("macos") {
         Kind::ScreenCapture
     } else {
         let portal = existing_kind.filter(|kind| kind.portal());
@@ -742,6 +727,29 @@ pub fn discover(
             kind.name()
         )));
     }
+    Ok(kind)
+}
+pub fn discover(
+    request: Request,
+    platform: Option<&str>,
+    advertised: &[String],
+    readings: Readings<'_>,
+) -> Result<Discovery, Failure> {
+    if let Some(error) = request.selector_refusal() {
+        return Err(error);
+    }
+    if let Some(error) = request.platform_refusal(platform) {
+        return Err(error);
+    }
+    readings.check()?;
+    if advertised.len() > MAX_RECORDS {
+        return Err(limit());
+    }
+    bounded_strings(&advertised.iter().map(String::as_str).collect::<Vec<_>>())?;
+    let scene = scene(&request, readings.scenes)?;
+    let rows = inputs(readings.inputs)?;
+    let existing = found(rows, &request.input);
+    let kind = resolve_kind(&request, platform, advertised, existing)?;
     let existing = existing.map(InputIdentity::parse).transpose()?;
     let members = existing
         .as_ref()
@@ -817,6 +825,40 @@ impl Discovery {
     }
     pub fn membership(&self) -> &[i64] {
         &self.members
+    }
+    pub(crate) fn settings_value(&self) -> &Value {
+        &self.settings
+    }
+    pub(crate) fn selected_overlay(&self) -> Value {
+        self.selected_settings()
+    }
+    pub(crate) fn compare_identity(&self, value: &Value) -> Result<(), Failure> {
+        bounded(&[value])?;
+        let rows = inputs(value)?;
+        for (name, expected) in [
+            (self.request.input_name(), self.existing.as_ref()),
+            (self.inventory.name(), Some(&self.inventory)),
+        ] {
+            let actual = found(rows, name).map(InputIdentity::parse).transpose()?;
+            if actual.as_ref() != expected {
+                return Err(Failure::direct(SOURCE_CHANGED));
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn after_initial(
+        &self,
+        target: InputIdentity,
+        settings: Value,
+        members: Vec<i64>,
+    ) -> Self {
+        let mut next = self.clone();
+        if next.inventory == target {
+            next.settings = settings;
+        }
+        next.existing = Some(target);
+        next.members = members;
+        next
     }
     pub fn compare(&self, readings: Readings<'_>) -> Result<(), Failure> {
         readings.check()?;

@@ -656,7 +656,15 @@ async fn advertised_absence_and_peer_projection_are_not_conflated() {
         },
     )
     .await;
-    assert!(sample.requires_compatibility());
+    assert!(!sample.requires_compatibility());
+    assert_eq!(_result["structuredContent"]["status"], "unknown");
+    assert!(
+        _result["structuredContent"]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check["message"] == "peer text requires qualified projection")
+    );
     drop(provider);
 }
 

@@ -216,8 +216,8 @@ impl<'a, R: ReadAdapter> AuditSample<'a, R> {
     pub fn requests(&self) -> usize {
         self.requests
     }
-    /// Peer rejection text and unsupported evidence projections belong to the
-    /// compatibility owner until the native projection is separately qualified.
+    /// Unsupported evidence projections cannot become a partial native report.
+    /// Typed peer rejections are already Source-exact report observations.
     pub fn requires_compatibility(&self) -> bool {
         self.requires_compatibility
     }
@@ -256,6 +256,7 @@ impl<'a, R: ReadAdapter> AuditSample<'a, R> {
             )));
         }
         let deadline = self.deadline.min(now + Duration::from_secs(2));
+        let duration_ms = deadline.saturating_duration_since(now).as_millis();
         let work = timeout_at(deadline, self.reader.read(request, data, deadline));
         tokio::pin!(work);
         let value = loop {
@@ -279,11 +280,7 @@ impl<'a, R: ReadAdapter> AuditSample<'a, R> {
         {
             self.invalidated = true;
         }
-        let value = value.inspect_err(|error| {
-            if error.request_code().is_some() {
-                self.requires_compatibility = true;
-            }
-        })?;
+        let value = value.map_err(|error| error.with_original_read_budget(request, duration_ms))?;
         if self.invalidated || Instant::now() >= self.deadline {
             return Err(error(
                 "OBS state changed or scene audit deadline elapsed while sampling",

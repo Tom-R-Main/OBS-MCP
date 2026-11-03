@@ -1,0 +1,26 @@
+Objective-C binding attribution and license provenance
+
+Packages: block2 0.6.2; objc2 0.6.5; objc2-encode 4.1.0.
+Repository: https://github.com/madsmtm/objc2
+Author metadata (each normalized Cargo.toml): Mads Marquart <mads@marquart.dk>
+Declared license (each Cargo.toml and exact upstream declaration): MIT.
+
+MIT-GRANT.txt supplies the standard MIT permission, conditions and disclaimer.
+Only that standard body is copied from the already-reviewed local Tokio MIT license;
+no Tokio copyright or invented copyright holder/year is assigned to these bindings.
+The exact upstream LICENSE.md declarations are reproduced separately, including their Apple SDK discussion.
+A full text scan of the three cached crates found no additional copyright or permission notice.
+
+Exact published crate VCS identities:
+block2@0.6.2: https://github.com/madsmtm/objc2/tree/b4167b582b2f75f9a1be75495c41b765344fd03c/crates/block2
+Upstream declaration: https://github.com/madsmtm/objc2/blob/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md
+objc2@0.6.5: https://github.com/madsmtm/objc2/tree/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/crates/objc2
+Upstream declaration: https://github.com/madsmtm/objc2/blob/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md
+objc2-encode@4.1.0: https://github.com/madsmtm/objc2/tree/8d214f5477365ffcbcbb7de058c86ed9a518efb7/crates/objc2-encode
+Upstream declaration: https://github.com/madsmtm/objc2/blob/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md
+
+All three declarations share Git blob 540ae4c81adb5f64a9f61e222b688880da24300e (1339bytes).
+LICENSE.txt is absent at these exact revisions; no master/main substitution was made.
+The authoritative declarations designate MIT by reference; missing that standalone filename
+is not treated as evidence that upstream withheld a license.
+This notice preservation does not verify or grant Apple SDK redistribution rights.

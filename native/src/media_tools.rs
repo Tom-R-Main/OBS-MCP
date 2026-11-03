@@ -617,6 +617,7 @@ impl Operation {
                 stage.partial_path(),
                 &self.config.work.join("unused-chapters.ffmetadata"),
                 trim::EncodePlan {
+                    frame_rate: info.frame_rate.as_deref(),
                     keep: &plan.keep,
                     audio_streams: info.audio_streams,
                     chapters: &chapters,
@@ -649,6 +650,7 @@ impl Operation {
                 encode,
                 &info,
                 trim::ExpectedMetadata {
+                    frame_rate: info.frame_rate.clone(),
                     duration: plan.trimmed_seconds,
                     width: info.width,
                     height: info.height,

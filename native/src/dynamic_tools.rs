@@ -20,8 +20,6 @@ const GROUPS: usize = 14;
 const GROUP_ENTRIES: usize = 1024;
 const ARGUMENT_BYTES: usize = 64 * 1024;
 const IDENTIFIER_BYTES: usize = 1024;
-const SUBSCRIPTIONS: usize = 1024;
-const SUBSCRIPTION_BYTES: usize = 256 * 1024;
 
 pub(crate) fn controller(name: &str) -> bool {
     CONTROLLERS.contains(&name)
@@ -66,11 +64,6 @@ pub(crate) fn bounded_context(value: &Value) -> bool {
 pub(crate) fn bounded_identity(value: &Value) -> bool {
     encoded_bound(value, IDENTIFIER_BYTES)
 }
-struct Subscriber {
-    id: Value,
-    tools: bool,
-    bytes: usize,
-}
 pub(crate) struct DynamicTools {
     contract: Contract,
     available: Vec<String>,
@@ -80,8 +73,6 @@ pub(crate) struct DynamicTools {
     groups: Vec<String>,
     visibility: Visibility,
     manifest: Value,
-    subscribers: Vec<Subscriber>,
-    subscriber_bytes: usize,
 }
 impl DynamicTools {
     pub(crate) fn new(
@@ -129,8 +120,6 @@ impl DynamicTools {
             groups,
             visibility,
             manifest,
-            subscribers: Vec::new(),
-            subscriber_bytes: 0,
         })
     }
     fn fresh(
@@ -211,6 +200,7 @@ impl DynamicTools {
         args: &Value,
         reply: &OwnedReplyContext,
         output: &Output,
+        targets: &[Value],
     ) -> io::Result<Reservation> {
         let mut preview = Self::fresh(
             &self.contract,
@@ -246,7 +236,7 @@ impl DynamicTools {
         let notices = if transition.effects.is_empty() {
             Vec::new()
         } else {
-            reply.tool_changes(self.subscribers.iter().filter(|s| s.tools).map(|s| &s.id))
+            reply.tool_changes(targets.iter())
         };
         let notifications = if transition.effects.is_empty() || notices.is_empty() {
             None
@@ -278,67 +268,6 @@ impl DynamicTools {
             drop(reserved.commit());
         }
         Ok(reply_reservation)
-    }
-    pub(crate) fn listen(
-        &mut self,
-        reply: &OwnedReplyContext,
-        filter: &Value,
-        valid_filter: bool,
-        output: &Output,
-    ) -> io::Result<Option<Value>> {
-        let Some(id) = reply.subscription_id(IDENTIFIER_BYTES) else {
-            return Ok(Some(
-                reply.error(-32603, "Native subscription identity capacity exceeded"),
-            ));
-        };
-        // Source's limit check precedes body validation and duplicate-ID replacement.
-        if self.subscribers.len() >= SUBSCRIPTIONS {
-            return Ok(Some(reply.error(-32603, "Subscription limit reached")));
-        }
-        if !valid_filter {
-            return Ok(Some(reply.error(-32602,"Invalid params: 'notifications' is required and must be a valid SubscriptionFilter")));
-        }
-        let bytes = serde_json::to_vec(&id).map_err(io::Error::other)?.len();
-        let prior = self.subscribers.iter().position(|s| s.id == id);
-        let retained =
-            self.subscriber_bytes - prior.map_or(0, |index| self.subscribers[index].bytes);
-        if retained
-            .checked_add(bytes)
-            .is_none_or(|n| n > SUBSCRIPTION_BYTES)
-        {
-            return Ok(Some(
-                reply.error(-32603, "Native subscription identity capacity exceeded"),
-            ));
-        }
-        let tools = filter["toolsListChanged"] == true;
-        let honored = if tools {
-            json!({"toolsListChanged":true})
-        } else {
-            json!({})
-        };
-        let ack = reply.subscription_ack(honored);
-        let reserved = output.reserve_publication(&[Cycle {
-            values: std::slice::from_ref(&ack),
-            repetitions: 1,
-        }])?;
-        let subscriber = Subscriber { id, tools, bytes };
-        if let Some(index) = prior {
-            self.subscribers[index] = subscriber;
-        } else {
-            self.subscribers.push(subscriber);
-        }
-        self.subscriber_bytes = retained + bytes;
-        drop(reserved.commit());
-        Ok(None)
-    }
-    pub(crate) fn cancel_subscription(&mut self, id: &Value) -> bool {
-        if let Some(index) = self.subscribers.iter().position(|s| &s.id == id) {
-            let old = self.subscribers.remove(index);
-            self.subscriber_bytes -= old.bytes;
-            true
-        } else {
-            false
-        }
     }
 }
 
@@ -388,7 +317,7 @@ mod tests {
         let args = json!({"groups":["record"]});
         assert!(
             tools
-                .call("obs-enable-toolset", &args, &reply, &output)
+                .call("obs-enable-toolset", &args, &reply, &output, &[])
                 .is_err()
         );
         assert_eq!(tools.manifest(), &before);

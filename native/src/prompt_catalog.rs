@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//! Static prompts exported from the actual SDK registration. Invalid or
-//! unsupported arguments retain SDK interpretation before any native effect.
+//! Static prompts exported from the actual SDK registration, including its
+//! argument and callback errors. Prompt interpretation never opens OBS.
 use obs_mcp_native::config::trim;
 use serde_json::{Value, json};
 use std::sync::OnceLock;
@@ -62,7 +62,59 @@ fn expand(template: &str, replacements: &[(&str, String)]) -> String {
 fn message(text: String) -> Value {
     json!({"messages":[{"role":"user","content":{"type":"text","text":text}}]})
 }
-pub(crate) fn get(name: &str, args: &Value) -> Option<Value> {
+pub(crate) fn get(name: &str, args: &Value) -> Option<Result<Value, (i64, String)>> {
+    let arguments = args.as_object()?;
+    if arguments.values().any(|value| !value.is_string()) {
+        return None;
+    }
+    let definition = asset()["listing"]["prompts"]
+        .as_array()?
+        .iter()
+        .find(|prompt| prompt["name"].as_str() == Some(name));
+    let Some(definition) = definition else {
+        return Some(Err((-32602, format!("Prompt {name} not found"))));
+    };
+    let missing = definition["arguments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|argument| argument["required"] == true)
+        .filter_map(|argument| argument["name"].as_str())
+        .filter(|name| !arguments.contains_key(*name))
+        .map(|name| format!("{name}: Invalid input: expected string, received undefined"))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Some(Err((
+            -32602,
+            format!(
+                "Invalid arguments for prompt {name}: {}",
+                missing.join(", ")
+            ),
+        )));
+    }
+    if name == "software-demo" {
+        let maximum = asset()["recipe"]["maxDurationSeconds"].as_u64()?;
+        let fallback = asset()["recipe"]["defaultMaxDurationSeconds"]
+            .as_u64()?
+            .to_string();
+        let duration = arguments
+            .get("maxDurationSeconds")
+            .and_then(Value::as_str)
+            .unwrap_or(&fallback);
+        if integer(duration, maximum).is_none() {
+            // Source throws from the callback after schema validation; the SDK
+            // preserves this as InternalError, not InvalidParams.
+            return Some(Err((
+                -32603,
+                "maxDurationSeconds must be an integer from 1 to 3600".into(),
+            )));
+        }
+    }
+    Some(
+        render(name, args).ok_or_else(|| (-32000, "Native prompt output capacity exceeded".into())),
+    )
+}
+fn render(name: &str, args: &Value) -> Option<Value> {
     let arguments = args.as_object()?;
     if arguments.values().any(|value| !value.is_string()) {
         return None;
@@ -131,7 +183,6 @@ pub(crate) fn get(name: &str, args: &Value) -> Option<Value> {
         }
         _ => return None,
     };
-    // The read-only SDK lane retains oversized prompt interpretation. This cap
-    // is a native admission bound, not a claim about total process memory.
+    // This is a native admission bound, not a claim about total process memory.
     (serde_json::to_vec(&result).ok()?.len() <= 4 * 1024 * 1024).then_some(result)
 }

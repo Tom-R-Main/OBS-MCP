@@ -396,12 +396,22 @@ impl OperationView {
                 StoredReceipt::Generic(r) => r.to_value(),
                 StoredReceipt::Restore(r) => r.to_value(),
                 StoredReceipt::Apply(r) => r.to_value(),
+                StoredReceipt::Capture(r) => r.to_value(),
             })
             .ok_or(StoreError::Missing)
     }
     /// Admission always validates the entire bounded inventory, never a UI page.
     pub fn admission(&self) -> Result<Admission, StoreError> {
         self.admission_except(None)
+    }
+    /// This is a known compatibility fact, separate from transport uncertainty.
+    /// ACK/Rejected/Prepared history is conservatively retained. Only an exact
+    /// typed NotDispatched disposition proves that this attempt sent no effect.
+    /// The complete bounded endpoint inventory is validated; UI pagination and
+    /// a current inactive OBS status cannot erase historical effect permission.
+    pub fn guarded_reentry_allowed(&self) -> Result<bool, StoreError> {
+        Ok(!self.inventory()?.iter().any(|entry| matches!(entry,
+            StoredReceipt::Generic(receipt) if receipt.kind().incompatible_with_guarded_reentry() && receipt.phase()!=GenericPhase::NotDispatched)))
     }
     pub(crate) fn is_dispatching(&self, id: &str) -> Result<bool, StoreError> {
         Ok(self.inventory()?.iter().any(|receipt| {
@@ -411,6 +421,7 @@ impl OperationView {
                     StoredReceipt::Generic(r) => r.phase() == GenericPhase::Dispatching,
                     StoredReceipt::Restore(r) => r.phase() == RestorePhase::Dispatching,
                     StoredReceipt::Apply(r) => r.dispatching(),
+                    StoredReceipt::Capture(r) => r.dispatching(),
                 }
         }))
     }
@@ -423,7 +434,10 @@ impl OperationView {
             generic_v2_present: inventory.iter().any(|entry| {
                 matches!(
                     entry,
-                    StoredReceipt::Generic(_) | StoredReceipt::Restore(_) | StoredReceipt::Apply(_)
+                    StoredReceipt::Generic(_)
+                        | StoredReceipt::Restore(_)
+                        | StoredReceipt::Apply(_)
+                        | StoredReceipt::Capture(_)
                 )
             }),
             total: inventory.len(),
@@ -461,7 +475,10 @@ impl OperationView {
             generic_v2_present: inventory.iter().any(|entry| {
                 matches!(
                     entry,
-                    StoredReceipt::Generic(_) | StoredReceipt::Restore(_) | StoredReceipt::Apply(_)
+                    StoredReceipt::Generic(_)
+                        | StoredReceipt::Restore(_)
+                        | StoredReceipt::Apply(_)
+                        | StoredReceipt::Capture(_)
                 )
             }),
             total: inventory.len(),
@@ -826,6 +843,54 @@ impl BackendStore {
                 .join(format!("{}.json", receipt.operation_id())),
         )?;
         if !matches!(actual,StoredReceipt::Apply(ref actual) if actual==receipt) {
+            return Err(StoreError::Conflict);
+        }
+        let updated = receipt.updated(update, utc)?;
+        self.persist_value(updated.operation_id(), &updated.to_value(), true)?;
+        Ok(updated)
+    }
+    pub fn prepare_capture(
+        &mut self,
+        id: &str,
+        generation: u64,
+        plan: CapturePlan,
+        utc: &str,
+    ) -> Result<CaptureReceipt, StoreError> {
+        let counts = plan.counts();
+        let receipt = CaptureReceipt::checked(CaptureRecord {
+            version: 5,
+            operation_id: id.into(),
+            kind: "capture-window-workflow".into(),
+            endpoint_hash: self.endpoint_hash.clone(),
+            generation,
+            created_at: utc.into(),
+            updated_at: utc.into(),
+            phase: CapturePhase::Prepared,
+            plan,
+            active_step: None,
+            steps: CaptureStep::all()
+                .map(|step| CaptureStepRecord::new(step, counts[step.index()])),
+            postcondition_observed: false,
+            rendered_target: "unverified".into(),
+        })?;
+        self.persist_value(id, &receipt.to_value(), false)?;
+        Ok(receipt)
+    }
+    pub fn update_capture(
+        &mut self,
+        receipt: &CaptureReceipt,
+        update: CaptureUpdate,
+        utc: &str,
+    ) -> Result<CaptureReceipt, StoreError> {
+        if receipt.0.endpoint_hash != self.endpoint_hash {
+            return Err(StoreError::EndpointMismatch);
+        }
+        let actual = read_stored(
+            &self
+                .directory
+                .join(format!("{}.json", receipt.operation_id())),
+        )?;
+        if !matches!(actual,StoredReceipt::Capture(ref actual) if actual==receipt) {
             return Err(StoreError::Conflict);
         }
         let updated = receipt.updated(update, utc)?;
@@ -1234,6 +1299,26 @@ fn read_receipt(path: &Path) -> Result<OperationReceipt, StoreError> {
 /// Closed metadata identity; payloads and settings are never journaled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GenericKind {
+    #[serde(rename = "OpaqueRequest")]
+    OpaqueRequest,
+    #[serde(rename = "RequestBatch")]
+    OpaqueBatch,
+    #[serde(rename = "CallVendorRequest")]
+    VendorRequest,
+    #[serde(rename = "TriggerHotkeyByName")]
+    HotkeyName,
+    #[serde(rename = "TriggerHotkeyByKeySequence")]
+    HotkeySequence,
+    #[serde(rename = "StartRecord")]
+    ManualRecordStart,
+    #[serde(rename = "ToggleRecord")]
+    ManualRecordToggle,
+    #[serde(rename = "StartOutput")]
+    NamedOutputStart,
+    #[serde(rename = "StopOutput")]
+    NamedOutputStop,
+    #[serde(rename = "ToggleOutput")]
+    NamedOutputToggle,
     #[serde(rename = "StopRecord")]
     ManualRecordStop,
     #[serde(rename = "StartStream")]
@@ -1392,8 +1477,41 @@ pub enum GenericKind {
     SourceFilterEnabled,
 }
 impl GenericKind {
+    pub fn advanced_only(self) -> bool {
+        matches!(
+            self,
+            Self::OpaqueRequest
+                | Self::OpaqueBatch
+                | Self::VendorRequest
+                | Self::HotkeyName
+                | Self::HotkeySequence
+                | Self::InputPropertiesButton
+                | Self::ManualRecordStart
+                | Self::ManualRecordToggle
+                | Self::NamedOutputStart
+                | Self::NamedOutputStop
+                | Self::NamedOutputToggle
+        )
+    }
+    pub fn incompatible_with_guarded_reentry(self) -> bool {
+        self.advanced_only()
+            || matches!(
+                self,
+                Self::StreamStart | Self::StreamStop | Self::StreamToggle
+            )
+    }
     pub fn request_type(self) -> &'static str {
         match self {
+            Self::OpaqueRequest => "OpaqueRequest",
+            Self::OpaqueBatch => "RequestBatch",
+            Self::VendorRequest => "CallVendorRequest",
+            Self::HotkeyName => "TriggerHotkeyByName",
+            Self::HotkeySequence => "TriggerHotkeyByKeySequence",
+            Self::ManualRecordStart => "StartRecord",
+            Self::ManualRecordToggle => "ToggleRecord",
+            Self::NamedOutputStart => "StartOutput",
+            Self::NamedOutputStop => "StopOutput",
+            Self::NamedOutputToggle => "ToggleOutput",
             Self::ManualRecordStop => "StopRecord",
             Self::StreamStart => "StartStream",
             Self::VirtualCamStart => "StartVirtualCam",
@@ -2018,10 +2136,402 @@ impl ApplyReceipt {
     }
 }
 
+/// Closed Capture Window metadata; names, settings, window selections, portal
+/// tokens and snapshot payloads are deliberately absent. Never replay authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureInitial {
+    None,
+    Create,
+    Retarget,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CapturePlan {
+    pub initial: CaptureInitial,
+    pub audio: bool,
+    pub fit: bool,
+}
+impl CapturePlan {
+    fn counts(self) -> [u8; 3] {
+        [
+            u8::from(self.initial != CaptureInitial::None),
+            if self.audio { 2 } else { 0 },
+            u8::from(self.fit),
+        ]
+    }
+    pub fn has_effects(self) -> bool {
+        self.counts().iter().any(|n| *n > 0)
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CaptureStep {
+    Initial,
+    Audio,
+    Fit,
+}
+impl CaptureStep {
+    fn index(self) -> usize {
+        match self {
+            Self::Initial => 0,
+            Self::Audio => 1,
+            Self::Fit => 2,
+        }
+    }
+    fn all() -> [Self; 3] {
+        [Self::Initial, Self::Audio, Self::Fit]
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CapturePhase {
+    Prepared,
+    Dispatching,
+    Continuation,
+    Closed,
+    Aborted,
+    Unknown,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum CaptureStepPhase {
+    NotNeeded,
+    Prepared,
+    Dispatching,
+    Acknowledged,
+    NotDispatched,
+    Unknown,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CaptureCounts {
+    pub successful: u8,
+    pub failed: u8,
+    pub skipped: u8,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CaptureStepRecord {
+    step: CaptureStep,
+    request_count: u8,
+    phase: CaptureStepPhase,
+    request_dispatched: Option<bool>,
+    reply_acknowledged: Option<bool>,
+    counts: Option<CaptureCounts>,
+}
+impl CaptureStepRecord {
+    fn new(step: CaptureStep, count: u8) -> Self {
+        Self {
+            step,
+            request_count: count,
+            phase: if count == 0 {
+                CaptureStepPhase::NotNeeded
+            } else {
+                CaptureStepPhase::Prepared
+            },
+            request_dispatched: Some(false),
+            reply_acknowledged: None,
+            counts: None,
+        }
+    }
+    fn set(&mut self, phase: CaptureStepPhase, counts: Option<CaptureCounts>) {
+        self.phase = phase;
+        self.counts = counts;
+        (self.request_dispatched, self.reply_acknowledged) = match phase {
+            CaptureStepPhase::NotNeeded
+            | CaptureStepPhase::Prepared
+            | CaptureStepPhase::NotDispatched => (Some(false), None),
+            CaptureStepPhase::Dispatching | CaptureStepPhase::Unknown => (None, None),
+            CaptureStepPhase::Acknowledged => (Some(true), Some(true)),
+        };
+    }
+    fn success(&self) -> bool {
+        self.phase == CaptureStepPhase::NotNeeded
+            || self.phase == CaptureStepPhase::Acknowledged
+                && self.counts.is_some_and(|c| c.failed == 0 && c.skipped == 0)
+    }
+    fn valid(&self, step: CaptureStep, count: u8) -> bool {
+        if self.step != step
+            || self.request_count != count
+            || (count == 0) != (self.phase == CaptureStepPhase::NotNeeded)
+        {
+            return false;
+        }
+        match self.phase {
+            CaptureStepPhase::NotNeeded
+            | CaptureStepPhase::Prepared
+            | CaptureStepPhase::NotDispatched => {
+                self.request_dispatched == Some(false)
+                    && self.reply_acknowledged.is_none()
+                    && self.counts.is_none()
+            }
+            CaptureStepPhase::Dispatching | CaptureStepPhase::Unknown => {
+                self.request_dispatched.is_none()
+                    && self.reply_acknowledged.is_none()
+                    && self.counts.is_none()
+            }
+            CaptureStepPhase::Acknowledged => {
+                self.request_dispatched == Some(true)
+                    && self.reply_acknowledged == Some(true)
+                    && self.counts.is_some_and(|c| {
+                        u16::from(c.successful) + u16::from(c.failed) + u16::from(c.skipped)
+                            == u16::from(count)
+                            && c.failed <= 1
+                            && (c.failed != 0 || c.skipped == 0)
+                            && (step == CaptureStep::Audio || c.skipped == 0)
+                    })
+            }
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CaptureRecord {
+    version: u8,
+    operation_id: String,
+    kind: String,
+    endpoint_hash: String,
+    generation: u64,
+    created_at: String,
+    updated_at: String,
+    phase: CapturePhase,
+    plan: CapturePlan,
+    active_step: Option<CaptureStep>,
+    steps: [CaptureStepRecord; 3],
+    postcondition_observed: bool,
+    rendered_target: String,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CaptureReceipt(CaptureRecord);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureUpdate {
+    Dispatch(CaptureStep),
+    Acknowledged(CaptureCounts),
+    NotDispatched,
+    Unknown,
+    Close,
+    Abort,
+}
+impl CaptureReceipt {
+    pub fn operation_id(&self) -> &str {
+        &self.0.operation_id
+    }
+    pub fn phase(&self) -> CapturePhase {
+        self.0.phase
+    }
+    pub fn active_step(&self) -> Option<CaptureStep> {
+        self.0.active_step
+    }
+    pub fn plan(&self) -> CapturePlan {
+        self.0.plan
+    }
+    pub fn to_value(&self) -> Value {
+        serde_json::to_value(&self.0).expect("checked capture metadata")
+    }
+    pub fn next_step(&self) -> Option<CaptureStep> {
+        self.0
+            .steps
+            .iter()
+            .find(|s| s.phase == CaptureStepPhase::Prepared)
+            .map(|s| s.step)
+    }
+    pub fn acknowledged(&self) -> Vec<(CaptureStep, CaptureCounts)> {
+        self.0
+            .steps
+            .iter()
+            .filter_map(|s| s.counts.map(|c| (s.step, c)))
+            .collect()
+    }
+    fn dispatching(&self) -> bool {
+        self.phase() == CapturePhase::Dispatching
+    }
+    fn blocking(&self) -> bool {
+        !matches!(self.phase(), CapturePhase::Closed | CapturePhase::Aborted)
+    }
+    fn live(&self) -> bool {
+        matches!(
+            self.phase(),
+            CapturePhase::Prepared | CapturePhase::Dispatching | CapturePhase::Continuation
+        )
+    }
+    fn checked(record: CaptureRecord) -> Result<Self, StoreError> {
+        let r = Self(record);
+        let counts = r.0.plan.counts();
+        let steps =
+            r.0.steps
+                .iter()
+                .zip(CaptureStep::all())
+                .zip(counts)
+                .all(|((s, k), n)| s.valid(k, n));
+        let needed =
+            r.0.steps
+                .iter()
+                .filter(|s| s.request_count > 0)
+                .collect::<Vec<_>>();
+        let prefix = |middle: usize| needed[..middle].iter().all(|s| s.success());
+        let layout = match r.phase() {
+            CapturePhase::Prepared => {
+                r.0.active_step.is_none()
+                    && needed.iter().all(|s| s.phase == CaptureStepPhase::Prepared)
+            }
+            CapturePhase::Continuation => {
+                r.0.active_step.is_none() && needed.iter().any(|s| s.success()) && {
+                    let first = needed
+                        .iter()
+                        .position(|s| !s.success())
+                        .unwrap_or(needed.len());
+                    needed[first..]
+                        .iter()
+                        .all(|s| s.phase == CaptureStepPhase::Prepared)
+                }
+            }
+            CapturePhase::Dispatching => r.0.active_step.is_some_and(|active| {
+                needed
+                    .iter()
+                    .position(|s| s.step == active)
+                    .is_some_and(|i| {
+                        prefix(i)
+                            && needed[i].phase == CaptureStepPhase::Dispatching
+                            && needed[i + 1..]
+                                .iter()
+                                .all(|s| s.phase == CaptureStepPhase::Prepared)
+                    })
+            }),
+            CapturePhase::Closed => r.0.active_step.is_none() && needed.iter().all(|s| s.success()),
+            CapturePhase::Unknown => {
+                r.0.active_step.is_none()
+                    && needed
+                        .iter()
+                        .position(|s| s.phase == CaptureStepPhase::Unknown)
+                        .is_some_and(|i| {
+                            prefix(i)
+                                && needed[i + 1..]
+                                    .iter()
+                                    .all(|s| s.phase == CaptureStepPhase::NotDispatched)
+                        })
+            }
+            CapturePhase::Aborted => {
+                r.0.active_step.is_none() && {
+                    let first = needed
+                        .iter()
+                        .position(|s| !s.success())
+                        .unwrap_or(needed.len());
+                    prefix(first)
+                        && needed[first..].iter().enumerate().all(|(i, s)| {
+                            s.phase == CaptureStepPhase::NotDispatched
+                                || (i == 0
+                                    && s.phase == CaptureStepPhase::Acknowledged
+                                    && s.counts.is_some_and(|c| c.failed > 0))
+                        })
+                }
+            }
+        };
+        if r.0.version != 5
+            || r.0.kind != "capture-window-workflow"
+            || !valid_uuid(&r.0.operation_id)
+            || !valid_hash(&r.0.endpoint_hash)
+            || r.0.generation > MAX_SAFE_INTEGER
+            || !valid_timestamp(&r.0.created_at)
+            || !valid_timestamp(&r.0.updated_at)
+            || r.0.updated_at < r.0.created_at
+            || !r.0.plan.has_effects()
+            || r.0.postcondition_observed
+            || r.0.rendered_target != "unverified"
+            || !steps
+            || !layout
+        {
+            return Err(StoreError::InvalidReceipt);
+        }
+        Ok(r)
+    }
+    pub fn from_value(value: Value) -> Result<Self, StoreError> {
+        if value.get("activeStep").is_none() {
+            return Err(StoreError::InvalidReceipt);
+        }
+        let rows = value
+            .get("steps")
+            .and_then(Value::as_array)
+            .filter(|r| r.len() == 3)
+            .ok_or(StoreError::InvalidReceipt)?;
+        if rows.iter().any(|s| {
+            ["requestDispatched", "replyAcknowledged", "counts"]
+                .iter()
+                .any(|k| s.get(*k).is_none())
+        }) {
+            return Err(StoreError::InvalidReceipt);
+        }
+        Self::checked(serde_json::from_value(value).map_err(|_| StoreError::InvalidReceipt)?)
+    }
+    fn updated(&self, update: CaptureUpdate, utc: &str) -> Result<Self, StoreError> {
+        let mut r = self.0.clone();
+        r.updated_at = utc.into();
+        match (r.phase, update) {
+            (
+                CapturePhase::Prepared | CapturePhase::Continuation,
+                CaptureUpdate::Dispatch(step),
+            ) if self.next_step() == Some(step) => {
+                r.phase = CapturePhase::Dispatching;
+                r.active_step = Some(step);
+                r.steps[step.index()].set(CaptureStepPhase::Dispatching, None);
+            }
+            (CapturePhase::Dispatching, CaptureUpdate::Acknowledged(counts)) => {
+                let active = r.active_step.take().ok_or(StoreError::Conflict)?;
+                r.steps[active.index()].set(CaptureStepPhase::Acknowledged, Some(counts));
+                r.phase = if counts.failed == 0 && counts.skipped == 0 {
+                    CapturePhase::Continuation
+                } else {
+                    for s in &mut r.steps {
+                        if s.phase == CaptureStepPhase::Prepared {
+                            s.set(CaptureStepPhase::NotDispatched, None);
+                        }
+                    }
+                    CapturePhase::Aborted
+                };
+            }
+            (CapturePhase::Dispatching, CaptureUpdate::NotDispatched | CaptureUpdate::Unknown) => {
+                let active = r.active_step.take().ok_or(StoreError::Conflict)?;
+                let unknown = update == CaptureUpdate::Unknown;
+                r.steps[active.index()].set(
+                    if unknown {
+                        CaptureStepPhase::Unknown
+                    } else {
+                        CaptureStepPhase::NotDispatched
+                    },
+                    None,
+                );
+                for s in &mut r.steps {
+                    if s.phase == CaptureStepPhase::Prepared {
+                        s.set(CaptureStepPhase::NotDispatched, None);
+                    }
+                }
+                r.phase = if unknown {
+                    CapturePhase::Unknown
+                } else {
+                    CapturePhase::Aborted
+                };
+            }
+            (CapturePhase::Continuation, CaptureUpdate::Close) if self.next_step().is_none() => {
+                r.phase = CapturePhase::Closed;
+            }
+            (CapturePhase::Prepared | CapturePhase::Continuation, CaptureUpdate::Abort) => {
+                for s in &mut r.steps {
+                    if s.phase == CaptureStepPhase::Prepared {
+                        s.set(CaptureStepPhase::NotDispatched, None);
+                    }
+                }
+                r.phase = CapturePhase::Aborted;
+            }
+            _ => return Err(StoreError::Conflict),
+        }
+        Self::checked(r)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Admission {
     pub blocking: bool,
-    /// Compatibility handoff barrier: true for any non-V1 history, including V3/V4.
+    /// Compatibility handoff barrier: true for any non-V1 history, including V3/V4/V5.
     pub generic_v2_present: bool,
     pub total: usize,
 }
@@ -2030,6 +2540,7 @@ enum StoredReceipt {
     Generic(GenericReceipt),
     Restore(RestoreReceipt),
     Apply(ApplyReceipt),
+    Capture(CaptureReceipt),
 }
 impl StoredReceipt {
     fn dispatching(&self) -> bool {
@@ -2038,6 +2549,7 @@ impl StoredReceipt {
             Self::Generic(r) => r.phase() == GenericPhase::Dispatching,
             Self::Restore(r) => r.phase() == RestorePhase::Dispatching,
             Self::Apply(r) => r.dispatching(),
+            Self::Capture(r) => r.dispatching(),
         }
     }
     fn known_live_in_flight(&self) -> bool {
@@ -2046,6 +2558,7 @@ impl StoredReceipt {
             Self::Generic(r) => r.phase() == GenericPhase::Dispatching,
             Self::Restore(r) => r.phase() == RestorePhase::Dispatching,
             Self::Apply(r) => r.live(),
+            Self::Capture(r) => r.live(),
         }
     }
     fn id(&self) -> &str {
@@ -2054,6 +2567,7 @@ impl StoredReceipt {
             Self::Generic(r) => r.operation_id(),
             Self::Restore(r) => r.operation_id(),
             Self::Apply(r) => r.operation_id(),
+            Self::Capture(r) => r.operation_id(),
         }
     }
     fn endpoint(&self) -> &str {
@@ -2062,6 +2576,7 @@ impl StoredReceipt {
             Self::Generic(r) => &r.0.endpoint_hash,
             Self::Restore(r) => &r.0.endpoint_hash,
             Self::Apply(r) => &r.0.endpoint_hash,
+            Self::Capture(r) => &r.0.endpoint_hash,
         }
     }
     fn created(&self) -> &str {
@@ -2070,6 +2585,7 @@ impl StoredReceipt {
             Self::Generic(r) => &r.0.created_at,
             Self::Restore(r) => &r.0.created_at,
             Self::Apply(r) => &r.0.created_at,
+            Self::Capture(r) => &r.0.created_at,
         }
     }
     fn blocking(&self) -> bool {
@@ -2078,11 +2594,27 @@ impl StoredReceipt {
             Self::Generic(r) => r.blocking(),
             Self::Restore(r) => r.blocking(),
             Self::Apply(r) => r.blocking(),
+            Self::Capture(r) => r.blocking(),
         }
     }
     fn summary(&self) -> Value {
         match self {
             Self::V1(r) => summary_receipt(r),
+            Self::Capture(r) => {
+                let mut value = r.to_value();
+                value.as_object_mut().unwrap().remove("endpointHash");
+                value["status"] = json!(if r.blocking() {
+                    "unknown"
+                } else if r.phase() == CapturePhase::Closed {
+                    "closed"
+                } else {
+                    "aborted"
+                });
+                value["nextCheck"] = json!(
+                    "Capture acknowledgement is not a rendered target, rollback, continuation or replay authority. Inspect OBS independently; unfinished history refuses restart."
+                );
+                value
+            }
             Self::Apply(r) => {
                 let mut value = r.to_value();
                 value.as_object_mut().unwrap().remove("endpointHash");
@@ -2141,7 +2673,11 @@ impl StoredReceipt {
 fn read_stored(path: &Path) -> Result<StoredReceipt, StoreError> {
     let value: Value =
         serde_json::from_slice(&read_bytes(path)?).map_err(|_| StoreError::Corrupt)?;
-    if value["version"] == 4 {
+    if value["version"] == 5 {
+        CaptureReceipt::from_value(value)
+            .map(StoredReceipt::Capture)
+            .map_err(|_| StoreError::Corrupt)
+    } else if value["version"] == 4 {
         ApplyReceipt::from_value(value)
             .map(StoredReceipt::Apply)
             .map_err(|_| StoreError::Corrupt)
@@ -2300,6 +2836,29 @@ impl OperationStore {
         match &mut self.mode {
             StoreMode::Direct(s) => s.update_apply(receipt, update, utc),
             StoreMode::Scoped(p) => p.update_apply(receipt, update, utc),
+        }
+    }
+    pub fn prepare_capture(
+        &mut self,
+        id: &str,
+        generation: u64,
+        plan: CapturePlan,
+        utc: &str,
+    ) -> Result<CaptureReceipt, StoreError> {
+        match &mut self.mode {
+            StoreMode::Direct(s) => s.prepare_capture(id, generation, plan, utc),
+            StoreMode::Scoped(p) => p.prepare_capture(id, generation, plan, utc),
+        }
+    }
+    pub fn update_capture(
+        &mut self,
+        receipt: &CaptureReceipt,
+        update: CaptureUpdate,
+        utc: &str,
+    ) -> Result<CaptureReceipt, StoreError> {
+        match &mut self.mode {
+            StoreMode::Direct(s) => s.update_capture(receipt, update, utc),
+            StoreMode::Scoped(p) => p.update_capture(receipt, update, utc),
         }
     }
 }

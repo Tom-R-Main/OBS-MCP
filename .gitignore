@@ -33,3 +33,4 @@ Thumbs.db
 # Native migration build and project-scoped Cargo cache
 native/target/
 native/.cargo-home/
+native/crates/*/target/

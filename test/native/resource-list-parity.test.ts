@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture } from "../support/native-default-fixture.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +21,7 @@ async function start(native: boolean, legacy: boolean, response: Record<string, 
   const client = new Client({ name: "native-resource-list", version: "1" }, { versionNegotiation: { mode: legacy ? "legacy" : { pin: "2026-07-28" } } });
   const transport = new StdioClientTransport({ command: native ? binary : process.execPath, args: native ? [] : [compatibility], cwd: root, env: {
     ...getDefaultEnvironment(), OBS_WEBSOCKET_URL: fake.url, OBS_MCP_STATE_DIR: process.env.OBS_MCP_STATE_DIR!, OBS_MCP_COMPAT_ENTRY: compatibility, OBS_MCP_COMPAT_NODE: process.execPath,
-    OBS_MCP_READ_OBS_CONFIG: "false", OBS_MCP_TOOLSETS: restricted ? "general" : "all", OBS_MCP_READ_ONLY: restricted ? "true" : "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false",
+    OBS_MCP_READ_OBS_CONFIG: "false", OBS_MCP_TOOLSETS: restricted ? "general" : "all", OBS_MCP_READ_ONLY: restricted ? "true" : "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false", ...(native ? nativeDefaultFixture(root) : {}),
   }, stderr: "pipe" }); transport.stderr?.on("data", () => undefined);
   const session = { client, transport, fake }; sessions.push(session); await client.connect(transport); return session;
 }
@@ -50,25 +51,27 @@ describe.each([false, true])("native resources/list (legacy=%s)", legacy => {
     expect(await native.client.listResources()).toEqual(await oracle.client.listResources());
     expect(children(native.transport.pid!)).toEqual([]);
   });
-  it("preserves SDK refusal after native read cleanup", async () => {
+  it("preserves exact Source refusal on the retained native owner", async () => {
     const oracle = await start(false, legacy, {}, false, true); const native = await start(true, legacy, {}, false, true);
     const outcome = async (client: Client) => { try { return await client.listResources(); } catch (error) { return { error: (error as Error).message }; } };
     expect(await outcome(native.client)).toEqual(await outcome(oracle.client));
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
   });
-  it("hands oversized native admission to the SDK without truncating resources", async () => {
+  it("refuses oversized inventory without truncation or replacing its native owner", async () => {
     const response = { scenes: Array.from({ length: 4097 }, (_, index) => ({ sceneName: `Scene ${index}` })) };
-    const oracle = await start(false, legacy, response); const native = await start(true, legacy, response);
-    expect(await native.client.listResources()).toEqual(await oracle.client.listResources());
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    const native = await start(true, legacy, response);
+    await expect(native.client.listResources()).rejects.toMatchObject({ code: -32603, message: "Native resource inventory limit exceeded; live state retained" });
+    expect((await native.client.callTool({ name: "obs-get-version", arguments: {} })).isError).not.toBe(true);
+    expect(native.fake.connectionCount).toBe(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
   });
-  it("hands live resource state to one exclusive compatibility owner", async () => {
+  it("retains live resource state on one exclusive native owner", async () => {
     const native = await start(true, legacy, { scenes: [] });
     await native.client.listResources(); expect(children(native.transport.pid!)).toEqual([]);
     const take = await native.client.readResource({ uri: "obs://take/current" });
     expect(take.contents).toEqual([{ uri: "obs://take/current", mimeType: "application/json", text: JSON.stringify({ running: false }, null, 2) }]);
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
     expect((await native.client.callTool({ name: "obs-get-version", arguments: {} })).isError).not.toBe(true);
-    expect(children(native.transport.pid!)).toHaveLength(1);
+    expect(children(native.transport.pid!)).toHaveLength(0);
   });
 });

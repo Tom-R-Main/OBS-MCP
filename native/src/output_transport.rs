@@ -115,7 +115,10 @@ impl BoundIo {
         Ok(())
     }
     fn check(&self, kind: OutputKind, deadline: Instant) -> Result<(), String> {
-        if kind != self.kind || kind == OutputKind::Record {
+        if kind != self.kind
+            || (kind == OutputKind::Record
+                && self.call.kind() != crate::operation_store::GenericKind::ManualRecordStart)
+        {
             return Err("Native output kind binding is unavailable".into());
         }
         self.policy()?;
@@ -314,7 +317,10 @@ impl OutputIo for Arc<BoundIo> {
     ) -> OutputFuture<Result<Value, RpcFailure>> {
         let owner = self.clone();
         Box::pin(async move {
-            if kind != owner.kind || kind == OutputKind::Record {
+            if kind != owner.kind
+                || (kind == OutputKind::Record
+                    && owner.call.kind() != crate::operation_store::GenericKind::ManualRecordStart)
+            {
                 return Err(RpcFailure::new(
                     RpcFate::NotDispatched,
                     "Native output kind binding is unavailable",

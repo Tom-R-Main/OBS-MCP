@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
+import { nativeDefaultFixture } from "../support/native-default-fixture.js";
+import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +12,13 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = process.env.NATIVE_TEST_BINARY ?? join(root, "native/target/release/obs-mcp-native");
 const compatibility = process.env.NATIVE_TEST_COMPAT_ENTRY ?? join(root, "build/index.js");
 type PromptCall = { name: string; arguments?: Record<string, string> };
+async function outcome(client: Client, call: PromptCall) {
+ try { return { result: await client.getPrompt(call) }; }
+ catch (error) { const detail = error as Error & { code?: unknown; data?: unknown }; return { error: { message: detail.message, code: detail.code, data: detail.data } }; }
+}
+function evidence(legacy: boolean, call: PromptCall, source: unknown, native: unknown) {
+ if (process.env.NATIVE_PROMPT_ERROR_EVIDENCE) appendFileSync(process.env.NATIVE_PROMPT_ERROR_EVIDENCE, JSON.stringify({legacy,call,source,native})+"\n");
+}
 const sessions: { client: Client; transport: StdioClientTransport; fake: FakeOBSServer }[] = [];
 function children(pid: number) { return execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }).trim().split("\n").map(line => line.trim().split(/\s+/).map(Number)).filter(([, p]) => p === pid).map(([id]) => id); }
 async function start(native: boolean, legacy: boolean, brokenSdk = false) {
@@ -17,7 +26,7 @@ async function start(native: boolean, legacy: boolean, brokenSdk = false) {
  const client = new Client({ name: "native-prompt-parity", version: "1" }, { versionNegotiation: { mode: legacy ? "legacy" : { pin: "2026-07-28" } } });
  const transport = new StdioClientTransport({ command: native ? binary : process.execPath, args: native ? [] : [compatibility], cwd: root, env: {
   ...getDefaultEnvironment(), OBS_WEBSOCKET_URL: fake.url, OBS_MCP_STATE_DIR: process.env.OBS_MCP_STATE_DIR!, OBS_MCP_COMPAT_ENTRY: compatibility, OBS_MCP_COMPAT_NODE: brokenSdk ? join(root, "native/target/nonexistent-prompt-sdk") : process.execPath,
-  OBS_MCP_READ_OBS_CONFIG: "false", OBS_MCP_TOOLSETS: "all", OBS_MCP_READ_ONLY: "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false",
+  OBS_MCP_READ_OBS_CONFIG: "false", OBS_MCP_TOOLSETS: "all", OBS_MCP_READ_ONLY: "false", OBS_MCP_DYNAMIC_TOOLSETS: "false", OBS_MCP_CONFIRM_LIVE: "false", ...(native ? nativeDefaultFixture(root) : {}),
  }, stderr: "pipe" }); transport.stderr?.on("data", () => undefined);
  const session = { client, transport, fake }; sessions.push(session); await client.connect(transport); return session;
 }
@@ -51,18 +60,21 @@ describe.each([false, true])("offline native prompts (legacy=%s)", legacy => {
   expect(native.fake.connectionCount).toBe(0); expect(children(native.transport.pid!)).toEqual([]);
  });
  const invalidCases: PromptCall[] = [{ name: "software-demo", arguments: { sceneCollection: "C", sceneName: "S", inputName: "I", maxDurationSeconds: "0" } }, { name: "software-demo", arguments: {} }, { name: "unknown-prompt" }];
- it.each(invalidCases)("keeps invalid/unknown $name with SDK interpretation", async call => {
+ it.each(invalidCases)("keeps invalid/unknown $name with exact native interpretation", async call => {
   const oracle = await start(false, legacy); const native = await start(true, legacy);
-  const outcome = async (client: Client) => { try { return { result: await client.getPrompt(call) }; } catch (error) { return { error: (error as Error).message }; } };
-  expect(await outcome(native.client)).toEqual(await outcome(oracle.client)); expect(children(native.transport.pid!)).toHaveLength(1);
+  const source = await outcome(oracle.client, call), actual = await outcome(native.client, call); evidence(legacy, call, source, actual);
+  expect(actual).toEqual(source); expect(children(native.transport.pid!)).toHaveLength(0);
+  expect(native.fake.connectionCount).toBe(0);
  });
  it("refuses unsupported prompt arguments before any native OBS setup", async () => {
   const native = await start(true, legacy, true);
   await expect(native.client.getPrompt({ name: "software-demo", arguments: {} })).rejects.toThrow(); expect(native.fake.history()).toEqual([]);
  });
  it("keeps JavaScript signed-radix refusal instead of Rust integer acceptance", async () => {
-  const native = await start(true, legacy);
-  await expect(native.client.getPrompt({ name: "software-demo", arguments: { sceneCollection: "C", sceneName: "S", inputName: "I", maxDurationSeconds: "0x+10" } })).rejects.toThrow("maxDurationSeconds must be an integer from 1 to 3600");
-  expect(children(native.transport.pid!)).toHaveLength(1);
+  const oracle = await start(false, legacy), native = await start(true, legacy);
+  const call = { name: "software-demo", arguments: { sceneCollection: "C", sceneName: "S", inputName: "I", maxDurationSeconds: "0x+10" } };
+  const source = await outcome(oracle.client, call), actual = await outcome(native.client, call); evidence(legacy, call, source, actual);
+  expect(source).toHaveProperty("error.message", "maxDurationSeconds must be an integer from 1 to 3600");
+  expect(actual).toEqual(source); expect(children(native.transport.pid!)).toHaveLength(0); expect(native.fake.connectionCount).toBe(0);
  });
 });

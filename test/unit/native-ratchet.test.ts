@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,7 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 const checker = fileURLToPath(new URL("../../scripts/check-native-migration.mjs", import.meta.url));
 const roots: string[] = [];
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "obs-native-ratchet-")); roots.push(root);
+  const parent=fileURLToPath(new URL("../../native/target/",import.meta.url));mkdirSync(parent,{recursive:true});
+  const root = mkdtempSync(join(parent, "obs-native-ratchet-")); roots.push(root);
   for (const dir of ["src", "native/src", "native/assets", "docs"]) mkdirSync(join(root, dir), { recursive: true });
   writeFileSync(join(root, "src/tool.ts"), "export const value = 1;\n");
   writeFileSync(join(root, "src/tool.test.ts"), "// compatibility behavior test fixture\n");
@@ -22,7 +22,7 @@ function fixture() {
     { name: "obs-transition", annotations: { readOnlyHint: false } },
   ], requests: { "obs-get-version": { requestType: "GetVersion", inputSchema: { type: "object" } } } }));
   writeFileSync(join(root, "docs/native-migration-ledger.json"), JSON.stringify({ schemaVersion: 1,
-    sourceOwnership: { "src/tool.ts": { role: "production", owner: "compat" }, "src/tool.test.ts": { role: "test", owner: "compat" } },
+    sourceOwnership: { "src/tool.ts": { role: "production", owner: "dev-oracle" }, "src/tool.test.ts": { role: "test", owner: "dev-oracle" } },
     contractManifest: { path: "native/assets/tools.json" }, toolRoutes: {}, sealed: null }));
   return root;
 }
@@ -43,7 +43,7 @@ describe("native migration ratchet public CLI", () => {
     const before = readFileSync(join(root, "docs/native-migration-ledger.json"), "utf8");
     const checked = run(root);
     expect(checked.status, checked.stderr).toBe(0);
-    expect(JSON.parse(checked.stdout)).toMatchObject({ mode: "checked", sourceFiles: 2, productionSourceFiles: 1, nativeReadOnlyTools: 1, compatibilityTools: 1 });
+    expect(JSON.parse(checked.stdout)).toMatchObject({ mode: "checked", sourceFiles: 2, oracleSourceFiles: 1, nativeReadOnlyTools: 1, nativeServiceTools: 0, unimplementedTools: 1, compatibilityTools: 0 });
     expect(readFileSync(join(root, "docs/native-migration-ledger.json"), "utf8")).toBe(before);
   });
   it.each(["src/tool.ts", "src/tool.test.ts", "native/src/main.rs", "native/Cargo.lock", "native/rust-toolchain.toml", "native/assets/tools.json"])("rejects sealed artifact drift: %s", (path) => {
@@ -69,7 +69,7 @@ describe("native migration ratchet public CLI", () => {
     writeFileSync(path, JSON.stringify(manifest));
     expect(run(root, "--update").stderr).toContain("Tool routing changed");
     seal(root);
-    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 0, compatibilityTools: 2 });
+    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 0, nativeServiceTools: 0, unimplementedTools: 2, compatibilityTools: 0 });
   });
   it("refuses mutating manifest requests even under explicit route adoption", () => {
     const root = fixture();
@@ -89,6 +89,30 @@ describe("native migration ratchet public CLI", () => {
     }
     seal(root);
     expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeFiles: 1 });
+  });
+  it.each([
+    "native/crates/platform-tls/Cargo.toml",
+    "native/crates/platform-tls/build.rs",
+    "native/crates/platform-tls/src/lib.rs",
+    "native/crates/platform-tls/src/abi.h",
+    "native/platform/tls-policy.json",
+  ])("binds owned native dependency inputs to the seal: %s", (path) => {
+    const root = fixture();
+    const file = join(root, path);
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, path.endsWith(".rs") ? "pub fn policy() -> bool { true }\n" : "original\n");
+    seal(root);
+    writeFileSync(file, `${readFileSync(file, "utf8")}\n`);
+    const checked = run(root);
+    expect(checked.status).toBe(1);
+    expect(checked.stderr).toContain("Native source/build graph drifted");
+  });
+  it("rejects a placeholder in owned path-crate production Rust", () => {
+    const root = fixture();
+    const file = join(root, "native/crates/platform-tls/src/lib.rs");
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, "pub fn connect() { todo!(); }\n");
+    expect(run(root, "--update", "--adopt-manifest-routes").stderr).toContain("placeholder/stub");
   });
   it("keeps unsafe OBS property enumeration out of native routes despite a read-only Get declaration", () => {
     const root = fixture();
@@ -122,7 +146,7 @@ describe("native migration ratchet public CLI", () => {
       toolGroups: { "obs-get-version": "general", "obs-transition": "scenes" } };
     writeFileSync(path, JSON.stringify(manifest));
     seal(root);
-    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 1, compatibilityTools: 1 });
+    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 1, nativeServiceTools: 0, unimplementedTools: 1, compatibilityTools: 0 });
   });
   it.each(["unknown-handler", "unknown-tool", "mutating-annotation", "changed-schema"])("refuses unimplemented or inconsistent local handlers: %s", (fault) => {
     const root = fixture();
@@ -150,7 +174,7 @@ describe("native migration ratchet public CLI", () => {
     writeFileSync(path, JSON.stringify(manifest));
     expect(run(root, "--update").stderr).toContain("Tool routing changed");
     seal(root);
-    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 1, nativeLocalTools: 1, compatibilityTools: 1 });
+    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 1, nativeLocalTools: 1, nativeServiceTools: 0, unimplementedTools: 1, compatibilityTools: 0 });
   });
   it("binds the embedded OBS protocol data to the native build graph", () => {
     const root = fixture();
@@ -200,7 +224,7 @@ describe("native migration ratchet public CLI", () => {
     writeFileSync(path, JSON.stringify(manifest));
     expect(run(root, "--update").stderr).toContain("Tool routing changed");
     seal(root);
-    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 1, nativeLocalTools: 0, nativeWorkflowTools: 1, compatibilityTools: 1 });
+    expect(JSON.parse(run(root).stdout)).toMatchObject({ nativeReadOnlyTools: 1, nativeLocalTools: 0, nativeWorkflowTools: 1, nativeServiceTools: 0, unimplementedTools: 1, compatibilityTools: 0 });
   });
   });
   it.each(["fn main() {}", "fn main() { todo!(); }", "fn main() { todo!{} }", "fn main() { unimplemented![]; }", "fn main() { unimplemented!(); }", "fn stub_response() {} fn main() { stub_response(); }"])("refuses production placeholders", (rust) => {
