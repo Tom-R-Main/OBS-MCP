@@ -56,6 +56,7 @@ def serve():
                 if mode=='holdtls':stop.wait(3);continue
                 ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 ctx.minimum_version=ctx.maximum_version=ssl.TLSVersion.TLSv1_2 if mode=='valid12' else ssl.TLSVersion.TLSv1_3
+                if mode!='valid12':ctx.num_tickets=2
                 ctx.load_cert_chain(root/'leaf.pem',root/'leaf.fixture.key');ctx.set_alpn_protocols(['http/1.1'])
                 with ctx.wrap_socket(raw,server_side=True) as peer:
                     peer.settimeout(.05)

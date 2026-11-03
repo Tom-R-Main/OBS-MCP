@@ -486,7 +486,22 @@ impl Stream {
         } else if n > 0 {
             Ok(Step::Ready(self.receive[..n as usize].to_vec()))
         } else {
-            self.result(n)
+            let step = self.result(n)?;
+            if n == ffi::AGAIN && matches!(step, Step::Pending(Direction::Read)) {
+                // TLS 1.3 ticket processing can return AGAIN without exhausting
+                // the socket. Clearing edge-triggered readiness then loses the
+                // already-readable application record. Peek without consuming
+                // bytes; only an actual WouldBlock permits waiting for an edge.
+                match self.socket.peek(&mut [0; 1]) {
+                    Ok(_) => return Ok(Step::Progress),
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {
+                        return Ok(Step::Progress);
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(error) => return self.fail(error),
+                }
+            }
+            Ok(step)
         }
     }
     pub fn has_pending_send(&self) -> bool {

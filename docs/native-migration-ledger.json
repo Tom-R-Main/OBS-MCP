@@ -559,8 +559,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-03T02:43:29.440Z",
-    "sourceRevision": "407dc7be13e839bb5ef7be98f9d9a271270adf7b",
+    "at": "2026-11-03T03:03:04.699Z",
+    "sourceRevision": "54be10ed05f14321c672f635eacbd1a97efbe2e5",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -661,7 +661,7 @@
       "native/crates/platform-tls/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
       "native/crates/platform-tls/src/ffi.rs": "b62aaa6f1f9049ba39d73c1a96b838ade65ff8c5d1c2d70a4d3c812a60268dd6",
       "native/crates/platform-tls/src/gnutls.rs": "a2350c11da514c75928b75c538d9b50e14a4974105aeabe4bd10fc98cb178e6f",
-      "native/crates/platform-tls/src/gnutls_core.rs": "e8d565fd036daca51c79e3d8539ca7ca70a82f941614372724b0548dc6720e96",
+      "native/crates/platform-tls/src/gnutls_core.rs": "1379b335ec139d9eb832cceaee6e3c24c39a4e044bff6563761a315d8395ac85",
       "native/crates/platform-tls/src/gnutls_ffi.rs": "b435c1d9cb0ac9830748976c3bb8141690d626f7351b84bb8765b2936e38ccbc",
       "native/crates/platform-tls/src/lib.rs": "48a3a51fd5ba852550d9d0bbab24e18ba47da10421dce69c47a31dd073d148a2",
       "native/crates/platform-tls/src/macos.rs": "4ff49b83990f15d26f8398792d41b4617e7616050e04bf8e309c4ec7cb159d4e",
