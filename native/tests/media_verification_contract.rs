@@ -274,7 +274,9 @@ async fn whole_job_deadline_kills_and_reaps_while_frontend_finish_is_unpolled() 
 #[tokio::test]
 async fn stderr_flood_cannot_starve_the_absolute_deadline_or_grow_the_retained_tail() {
     let mut job = node(
-        "process.on('SIGTERM',()=>{});function flood(){process.stderr.write('x'.repeat(8192));setImmediate(flood)}flood();",
+        // Honor backpressure: an unbounded write queue makes Node itself fail
+        // with ENOBUFS on Linux before the deadline under test is reached.
+        "process.on('SIGTERM',()=>{});const chunk='x'.repeat(8192);function flood(){while(process.stderr.write(chunk)){}process.stderr.once('drain',flood)}flood();",
         Duration::from_millis(400),
     );
     let at = Instant::now();

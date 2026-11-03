@@ -109,6 +109,15 @@ describe("verified export boundary", () => {
     expect(() => validateTrimmedMetadata({ ...valid, frameRate: "30000/1001" }, expectedCadence)).not.toThrow();
   });
 
+  it("accepts OBS multitrack recordings, which mark every audio track default", () => {
+    const track = (title: string, isDefault: number) => ({ codec: "aac", sampleRate: 48000, channels: 2, channelLayout: "stereo", language: "und", title, dispositions: { default: isDefault }, startSeconds: 0 });
+    const allDefault = [track("Mix", 1), track("Mic", 1), track("Desktop", 1)];
+    const multitrack = { ...expected, audioStreams: 3, audioTracks: allDefault };
+    expect(() => validateTrimmedMetadata({ ...valid, ...multitrack }, multitrack)).not.toThrow();
+    const noDefault = { ...multitrack, audioTracks: allDefault.map((value) => ({ ...value, dispositions: { default: 0 } })) };
+    expect(() => validateTrimmedMetadata({ ...valid, ...noDefault }, noDefault)).toThrow("at least one default audio track");
+  });
+
   it("withholds publication after apparent encoder completion followed by a terminal trailer error", async () => {
     const dir = mkdtempSync(join(tmpdir(), "obs-export-trailer-"));
     const partial = join(dir, "partial"), output = join(dir, "final");

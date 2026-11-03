@@ -665,6 +665,14 @@ fn multitrack_metadata_bounds_and_diagnostic_overflow_refuse_instead_of_retainin
 {
     let qualified = track_info();
     assert_eq!(qualified_audio_tracks(&qualified).unwrap().len(), 2);
+    // OBS Hybrid MP4 recordings mark every track default.
+    let mut all_default = qualified.clone();
+    all_default.audio_tracks[1]
+        .dispositions
+        .as_mut()
+        .unwrap()
+        .insert("default".into(), 1);
+    assert_eq!(qualified_audio_tracks(&all_default).unwrap().len(), 2);
     for case in [
         "rate",
         "layout",
@@ -698,11 +706,11 @@ fn multitrack_metadata_bounds_and_diagnostic_overflow_refuse_instead_of_retainin
                     .insert("comment".into(), 1);
             }
             "default" => {
-                bad.audio_tracks[1]
+                bad.audio_tracks[0]
                     .dispositions
                     .as_mut()
                     .unwrap()
-                    .insert("default".into(), 1);
+                    .insert("default".into(), 0);
             }
             _ => {
                 bad.audio_streams = 7;

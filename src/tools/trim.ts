@@ -264,7 +264,8 @@ function qualifiedAudioTracks(info: Pick<MediaProbe, 'audioStreams' | 'audioTrac
     if (Object.entries(track.dispositions).some(([name,value]) => value !== 0 && (value !== 1 || name !== 'default'))) throw new Error('Multitrack trim supports only the default audio disposition');
     if (track.dispositions.default === 1) defaults++;
   }
-  if (defaults !== 1) throw new Error('Multitrack MP4 trim requires exactly one default audio track');
+  // OBS marks every recorded track default; the export copies each flag.
+  if (defaults === 0) throw new Error('Multitrack MP4 trim requires at least one default audio track');
   return tracks;
 }
 
