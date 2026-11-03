@@ -5962,7 +5962,7 @@
         "content": [
           {
             "type": "text",
-            "text": "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Configure a window capture in OBS, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed"
+            "text": "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Add a Window Capture (Xcomposite) in OBS and select a window there first, then rerun: listing windows on an unconfigured XComposite capture can crash OBS, so this tool never creates one. Use obs-prepare-demo for an existing bound capture. No capture changed"
           }
         ],
         "isError": true
@@ -6096,7 +6096,7 @@
         "content": [
           {
             "type": "text",
-            "text": "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Configure a window capture in OBS, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed"
+            "text": "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Create one with obs-create-input (inputKind screen_capture, inputSettings {\"type\":1} for window capture) in the target scene, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed"
           }
         ],
         "isError": true

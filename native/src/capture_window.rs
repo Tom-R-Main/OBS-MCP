@@ -12,7 +12,10 @@ pub const MAX_RECORDS: usize = 4096;
 pub const MAX_DEPTH: usize = 64;
 pub const MAX_REPORT_BYTES: usize = 1024 * 1024;
 const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
-const NO_INVENTORY: &str = "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Configure a window capture in OBS, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed";
+// Only the macOS path was exercised creating its own inventory; XComposite and
+// PipeWire inventories stay manual (crash risk and portal authorization).
+const NO_INVENTORY_MAC: &str = "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Create one with obs-create-input (inputKind screen_capture, inputSettings {\"type\":1} for window capture) in the target scene, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed";
+const NO_INVENTORY_X11: &str = "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Add a Window Capture (Xcomposite) in OBS and select a window there first, then rerun: listing windows on an unconfigured XComposite capture can crash OBS, so this tool never creates one. Use obs-prepare-demo for an existing bound capture. No capture changed";
 const PORTAL: &str = "capability_unavailable: create and authorize a PipeWire window capture using OBS's desktop portal picker, then call with backend:portal and that inputName. No capture changed";
 const SOURCE_CHANGED: &str = "Capture source or selection changed during discovery; rerun with a stable window. No capture changed";
 const UUID: &str = "Capture discovery requires an observable nonempty input UUID; configure a capture in a UUID-capable OBS instance. No capture changed";
@@ -789,7 +792,13 @@ pub fn discover(
         }
     }
     let (inventory, settings, properties) =
-        inventory.ok_or_else(|| Failure::direct(NO_INVENTORY))?;
+        inventory.ok_or_else(|| {
+            Failure::direct(if kind == Kind::ScreenCapture {
+                NO_INVENTORY_MAC
+            } else {
+                NO_INVENTORY_X11
+            })
+        })?;
     let selected = properties
         .map(|properties| select(&request, kind, properties))
         .transpose()?;

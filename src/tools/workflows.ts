@@ -179,7 +179,12 @@ async function captureWindow(
     }
   }
   if (!inventory || !inventorySettings) {
-    return errorResult("capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Configure a window capture in OBS, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed");
+    // Only the macOS path was exercised creating its own inventory. Listing
+    // windows on an unconfigured XComposite capture can crash OBS, and a
+    // PipeWire capture needs the desktop portal, so those stay manual.
+    return errorResult(kind === "screen_capture"
+      ? "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Create one with obs-create-input (inputKind screen_capture, inputSettings {\"type\":1} for window capture) in the target scene, then rerun; use obs-prepare-demo for an existing bound capture. No capture changed"
+      : "capability_unavailable: no safe existing capture inventory with an observable input UUID is available. Add a Window Capture (Xcomposite) in OBS and select a window there first, then rerun: listing windows on an unconfigured XComposite capture can crash OBS, so this tool never creates one. Use obs-prepare-demo for an existing bound capture. No capture changed");
   }
   const inventoryName = String(inventory.inputName);
   const inventorySelector = selectorFor(inventory);

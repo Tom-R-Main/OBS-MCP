@@ -307,7 +307,19 @@ describe("obs-capture-window", () => {
     inputs = [];
     const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "New capture", window: "chatgpt", apply });
     expect(result.isError).toBe(true);
-    expect(resultText(result)).toMatch(/configure.*OBS|inventory/i);
+    expect(resultText(result)).toMatch(/inventory/i);
+    expect(resultText(result)).toContain('obs-create-input (inputKind screen_capture, inputSettings {"type":1}');
+    await expectNoCaptureWrites();
+  });
+
+  it("tells X11 callers to select a window in OBS instead of creating an XComposite inventory", async () => {
+    await startCaptureHarness("linux");
+    inputs = [];
+    harness.fakeObs.respondWith("GetInputKindList", () => ({ inputKinds: ["xcomposite_input"] }));
+    const result = await harness.call("obs-capture-window", { sceneName: "Demo", inputName: "New capture", window: "chatgpt", backend: "x11" });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toMatch(/select a window there first.*can crash OBS/);
+    expect(resultText(result)).not.toContain("obs-create-input");
     await expectNoCaptureWrites();
   });
 
