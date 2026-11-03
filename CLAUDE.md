@@ -1,11 +1,15 @@
 # OBS-MCP Development Guidelines
 
 ## Build and Development Commands
-- Build: `npm run build` - Compiles TypeScript and sets executable permissions
-- Native build: `npm run native:build` - Builds the Rust entry and TypeScript compatibility payload offline
-- Start: `npm run start` - Runs the built Rust MCP entry
-- Compatibility start: `npm run start:compat` - Runs the existing TypeScript MCP server
-- Native verification: `npm run native:check` - Checks Rust, the frozen contract, and cross-runtime parity
+- Source oracle build: `npm run build` - Compiles the development TypeScript oracle
+- Native build: `npm run native:build` - Builds the Rust service offline
+- Start: `npm run start` - Runs the built Rust MCP service
+- Source oracle start: `npm run oracle:start` - Runs the independent development oracle
+- Native verification: `npm run native:check` - Checks Rust, the frozen contract, TLS and resolver fixtures, and public parity
+- Native package: `npm run pack:native` - Builds the native-only MCPB with corresponding source; Node is a packaging tool
+
+The installed runtime is Rust. TypeScript and the SDK remain development and
+qualification tools; no Node compatibility payload is included in the product.
 
 ## Code Style Guidelines
 ### TypeScript
