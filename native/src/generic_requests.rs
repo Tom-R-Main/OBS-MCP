@@ -665,7 +665,9 @@ impl Call {
             ),
             K::InputVolume => format!("Successfully set volume for input: {}", s("inputName")),
             K::StreamCaption => "Successfully sent stream caption".into(),
-            K::SaveReplayBuffer => "Replay buffer saved".into(),
+            K::SaveReplayBuffer => {
+                "Replay buffer save requested; file completion has not been observed".into()
+            }
             K::InputMute => format!(
                 "Successfully {} input: {}",
                 if self.arguments["inputMuted"] == true {

@@ -68,6 +68,8 @@ This proves the bounded Mac custom-CA proxy-backed authentication/read journey. 
 
 ## Remaining work
 
+The [workflow qualification matrix](workflow-qualification.md) expands checks across live shows, meetings, multitrack media, overlays, teaching and recovery, and separates fixture coverage from device/destination gaps.
+
 1. Qualify real Linux exact-window and applicable user-authorized Wayland capture; keep the tester VM's missing oracle/package scope separate from CI.
 2. Complete the remaining TLS platform, trust and lifetime qualification before general production admission. The Mac evaluation does not establish Linux TLS acceptance.
 3. Bind each repacked archive and published head to its own source, artifact and CI evidence. Installed-client activation remains a separate step; prior archive hashes do not certify a changed package.

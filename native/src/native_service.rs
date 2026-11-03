@@ -495,7 +495,7 @@ impl Runtime {
             ),
         })
     }
-    fn service_source(&mut self) -> ServiceSource {
+    fn service_source(&mut self, guarded: bool) -> ServiceSource {
         if let Some(attempt) = &self.initialization {
             return ServiceSource::Waiting(attempt.receiver());
         }
@@ -520,9 +520,15 @@ impl Runtime {
         if self.profile == NativeProfile::Production {
             match store.read_view().guarded_reentry_allowed() {
                 Ok(true) => {}
-                Ok(false) => {
-                    return ServiceSource::Ready(Err(service_error(ServiceError::Profile)));
-                }
+                Ok(false) => match store.read_view().production_connection_allowed() {
+                    Ok(true) if !guarded => {}
+                    Ok(_) => {
+                        return ServiceSource::Ready(Err(service_error(ServiceError::Profile)));
+                    }
+                    Err(_) => {
+                        return ServiceSource::Ready(Err(service_error(ServiceError::Uncertain)));
+                    }
+                },
                 Err(_) => {
                     return ServiceSource::Ready(Err(error(
                         "Native operation receipt history is unavailable; inspect retained evidence before another change",
@@ -625,7 +631,7 @@ impl Runtime {
     }
     #[cfg(test)]
     async fn connect(&mut self) -> Result<obs_mcp_native::service::ServiceHandle, Value> {
-        let source = self.service_source();
+        let source = self.service_source(false);
         while self.initializing() {
             self.progress_initialization()
                 .await

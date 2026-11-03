@@ -328,7 +328,8 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       title: "Record Clip",
       description: `Record a clip of up to ${MAX_CLIP_SECONDS}s in one call: runs obs-preflight, starts recording `
         + "and waits for OBS to confirm, adds chapter markers, stops, then checks the file's length and audio "
-        + "with ffprobe/ffmpeg when available. For longer takes use obs-start-record and obs-stop-record",
+        + "with ffprobe/ffmpeg when available. For longer takes use obs-take-start, obs-take-mark, "
+        + "obs-take-status and obs-take-stop with the guarded Production workflow",
       inputSchema: z.object({
         durationSeconds: z.number().positive().max(MAX_CLIP_SECONDS).describe("Clip length in seconds"),
         chapters: z.array(z.object({

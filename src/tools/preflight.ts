@@ -230,7 +230,7 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean, req
       unreadable.push(inputName);
       // Legacy checks conservatively assumed an unreadable route was recorded.
       // Strict admission needs an observed route instead of that assumption.
-      if (!requireVerified) audible.push(`${inputName} (audio routing unavailable; assumed recorded)`);
+      if (!requireVerified) audible.push(`${inputName} (audio routing unavailable; conservatively assumed configured)`);
       return;
     }
     const enabled = isObject(inputAudioTracks)
@@ -241,13 +241,13 @@ async function checkAudio(client: OBSWebSocketClient, expectSilent: boolean, req
 
   if (audible.length === 0) {
     if (unreadable.length > 0) return { id: "audio", status: "unknown", message: `Could not read audio state for: ${unreadable.join(", ")}` };
-    return { id: "audio", status: "pass", message: "No unmuted input feeds a recorded audio track" };
+    return { id: "audio", status: "pass", message: "No configured unmuted input routes to a selected recording track. Signal levels and monitoring/loopback paths were not measured." };
   }
   return {
     id: "audio",
     status: expectSilent ? "fail" : "warn",
-    message: `Recorded audio comes from: ${audible.join("; ")}. macOS screen_capture inputs carry `
-      + "application audio; mute them or clear their tracks for a silent recording",
+    message: `Configured unmuted audio routes (or conservative routing assumptions) on selected recording tracks: ${audible.join("; ")}. `
+      + "Signal levels and monitoring/loopback paths were not measured. Mute these inputs or clear their recorded-track routing to meet the conservative silence policy",
   };
 }
 
@@ -346,12 +346,12 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
       title: "Recording Preflight",
       description: "Check for the conditions that make OBS silently refuse or botch a recording: an active "
         + "recording, an invalid output path, low disk space, an unusable encoder, unapplied output settings, "
-        + "audible inputs, and blank (0×0) sources. Read-only; run it before obs-start-record",
+        + "configured unmuted audio routes, and blank (0×0) sources. Signal levels and monitoring/loopback paths are not measured. Read-only; run before guarded obs-take-start or obs-record-clip",
       inputSchema: z.object({
         minFreeDiskMb: z.number().int().nonnegative().default(1024)
           .describe("Minimum free disk space in MB (default 1024)"),
         expectSilent: z.boolean().default(false)
-          .describe("Treat any audible input as a failure instead of a warning"),
+          .describe("Treat configured or conservatively assumed unmuted routes to recorded audio tracks as a failure instead of a warning; signal and monitoring/loopback paths are not measured"),
       }),
       annotations: READ_ONLY_TOOL,
     },

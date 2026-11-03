@@ -4903,7 +4903,7 @@
         },
         "expectSilent": {
           "default": false,
-          "description": "Treat any audible input as a failure instead of a warning",
+          "description": "Treat configured or conservatively assumed unmuted routes to recorded audio tracks as a failure instead of a warning; signal and monitoring/loopback paths are not measured",
           "type": "boolean"
         }
       },

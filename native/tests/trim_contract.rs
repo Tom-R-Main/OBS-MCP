@@ -288,9 +288,9 @@ fn source_ffmetadata_and_common_audio_video_command_cuts_are_exact() {
     let root = Scratch::new();
     for (audio, frame_rate) in [
         (0, None),
-        (3, None),
+        (1, None),
         (0, Some("30000/1001")),
-        (3, Some("30000/1001")),
+        (1, Some("30000/1001")),
     ] {
         let keep = vec![
             Span {
@@ -482,7 +482,7 @@ fn source_silence_parsing_and_audio_intersection_are_conservative() {
     }];
     let mut probe = info();
     probe.duration = 10.0;
-    probe.audio_streams = 2;
+    probe.audio_streams = 1;
     let idle = detect_idle(&still, stderr, &probe);
     assert_eq!(
         idle.idle,
@@ -504,6 +504,110 @@ fn source_silence_parsing_and_audio_intersection_are_conservative() {
     );
     assert!(!detect_idle(&still, "silence_start: 0\nsilence_end: 10", &probe).audible);
     assert!(detect_idle(&still, "", &probe).idle.is_empty());
+}
+
+#[test]
+fn multitrack_sampling_and_imported_encode_plans_are_refused_before_media_work() {
+    let refusal = "Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow";
+    let root = Scratch::new();
+    for audio in [2, 6] {
+        let mut source = info();
+        source.audio_streams = audio;
+        assert_eq!(
+            sampling_command(&root.path("input.mkv"), &source, 1.0, 1024 * 1024)
+                .unwrap_err()
+                .message(),
+            refusal
+        );
+        let keep = [Span {
+            start: 0.0,
+            end: 1.0,
+        }];
+        let encoded = encode_command(
+            &root.path("input.mkv"),
+            &root.path("partial.mp4"),
+            &root.path("chapters.txt"),
+            EncodePlan {
+                keep: &keep,
+                audio_streams: audio,
+                chapters: &[],
+                duration: 1.0,
+                frame_rate: None,
+            },
+            "libx264",
+        );
+        assert_eq!(encoded.unwrap_err().message(), refusal);
+        let oracle = node(
+            &json!({"action":"encode","path":root.path("input.mkv"),"output":root.path("partial.mp4"),"keep":keep,"audio":audio,"chapters":[],"duration":1.0,"encoders":"libx264"}),
+        );
+        assert_eq!(oracle["error"], refusal);
+        assert_eq!(oracle["calls"], json!([]));
+        let mut expected = expected();
+        expected.audio_streams = audio;
+        assert_eq!(
+            validate_trimmed_metadata(&info(), &expected)
+                .unwrap_err()
+                .message(),
+            refusal
+        );
+        assert_eq!(
+            node(&json!({"action":"validate","actual":info(),"expected":expected}))["error"],
+            refusal
+        );
+    }
+    assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
+}
+
+#[test]
+fn export_owner_rejects_multitrack_source_or_forged_expectation_before_backend_admission() {
+    let refusal = "Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow";
+    for (source_audio, expected_audio) in [(2, 1), (1, 2)] {
+        let root = Scratch::new();
+        let stage = ExportStage::new(&root.0, "partial.mp4", "final.mp4").unwrap();
+        let request = encode_command(
+            &root.path("source.mkv"),
+            stage.partial_path(),
+            &root.path("chapters.txt"),
+            EncodePlan {
+                keep: &[Span {
+                    start: 0.0,
+                    end: 1.0,
+                }],
+                audio_streams: 1,
+                chapters: &[],
+                duration: 1.0,
+                frame_rate: None,
+            },
+            "libx264",
+        )
+        .unwrap();
+        let events = Arc::new(Mutex::new(vec![]));
+        let backend = Backend {
+            mode: "success".into(),
+            output: stage.output_path().to_owned(),
+            events: events.clone(),
+            probe: info(),
+        };
+        let mut source = info();
+        source.audio_streams = source_audio;
+        let mut expected = expected();
+        expected.audio_streams = expected_audio;
+        let result = ExportOwner::new(
+            backend,
+            stage,
+            request,
+            &source,
+            expected,
+            None,
+            Cancellation::default(),
+        );
+        match result {
+            Ok(_) => panic!("multitrack export owner was admitted"),
+            Err(error) => assert_eq!(error.message(), refusal),
+        }
+        assert!(events.lock().unwrap().is_empty());
+        assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
+    }
 }
 #[test]
 fn source_gray_stream_uses_shared_medians_arbitrary_chunks_and_bounded_history() {

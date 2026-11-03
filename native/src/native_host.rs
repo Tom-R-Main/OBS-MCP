@@ -933,7 +933,24 @@ impl Host {
         } else if local {
             ServiceSource::Ready(Ok(None))
         } else {
-            self.runtime.service_source()
+            self.runtime.service_source(matches!(
+                name.as_str(),
+                "obs-snapshot"
+                    | "obs-restore"
+                    | "obs-apply-scene"
+                    | "obs-capture-window"
+                    | "obs-stage-scene"
+                    | "obs-take-scene"
+                    | "obs-record-clip"
+                    | "obs-take-start"
+                    | "obs-take-stop"
+                    | "obs-take-mark"
+                    | "obs-take-status"
+                    | "obs-prepare-demo"
+                    | "obs-recover-demo"
+                    | "obs-contact-sheet"
+                    | "obs-trim-take"
+            ))
         };
         let native_profile = self.runtime.profile;
         let descriptor = ConnectionDescriptor {

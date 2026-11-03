@@ -413,6 +413,13 @@ impl OperationView {
         Ok(!self.inventory()?.iter().any(|entry| matches!(entry,
             StoredReceipt::Generic(receipt) if receipt.kind().incompatible_with_guarded_reentry() && receipt.phase()!=GenericPhase::NotDispatched)))
     }
+    /// Stream history blocks guarded owners, but must not prevent reconnecting
+    /// for diagnostics or explicit Stream controls. Advanced/plugin effects
+    /// retain the stronger existing Production connection barrier.
+    pub fn production_connection_allowed(&self) -> Result<bool, StoreError> {
+        Ok(!self.inventory()?.iter().any(|entry| matches!(entry,
+            StoredReceipt::Generic(receipt) if receipt.kind().advanced_only() && receipt.phase()!=GenericPhase::NotDispatched)))
+    }
     pub(crate) fn is_dispatching(&self, id: &str) -> Result<bool, StoreError> {
         Ok(self.inventory()?.iter().any(|receipt| {
             receipt.id() == id

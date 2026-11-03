@@ -535,10 +535,29 @@ impl Service {
     }
     pub fn spawn_bootstrapped(
         bootstrap: BootstrappedResources,
-        options: Options,
+        mut options: Options,
         profile: crate::native_profile::NativeProfile,
     ) -> Result<Self, (ServiceError, Box<Resources>)> {
         let BootstrappedResources { resources, version } = bootstrap;
+        // A Production Stream session may reconnect for diagnosis/explicit
+        // controls without constructing any guarded adapter. The per-command
+        // receipt guard still refuses Stage, Take, recovery and media work.
+        // Advanced/plugin history retains its stronger connection barrier.
+        if profile == crate::native_profile::NativeProfile::Production
+            && matches!(
+                resources.store.read_view().guarded_reentry_allowed(),
+                Ok(false)
+            )
+            && matches!(
+                resources.store.read_view().production_connection_allowed(),
+                Ok(true)
+            )
+        {
+            options.take = None;
+            options.preparation = None;
+            options.media = None;
+            options.read_tools_host = None;
+        }
         Self::spawn_cached(resources, options, profile, Some(version))
     }
     fn spawn_cached(

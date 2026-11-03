@@ -230,7 +230,12 @@ export function requireSdrInput(info: MediaProbe): void {
 
 const chapterTitle = (name: string) => name.replace(/[\u0000-\u001f\u007f]/g, " ");
 
+function requireSingleAudioTrack(audioStreams: number): void {
+  if (audioStreams > 1) throw new Error("Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow");
+}
+
 export function validateTrimmedMetadata(actual: MediaProbe, expected: { duration: number; width?: number; height?: number; audioStreams: number; chapters: Chapter[]; frameRate?: string }): void {
+  requireSingleAudioTrack(expected.audioStreams);
   if (!Number.isFinite(actual.duration) || Math.abs(actual.duration - expected.duration) > 0.25) throw new Error("Staged export duration differs from the cut plan");
   if (actual.videoStreams !== 1 || actual.codec !== "h264" || actual.pixelFormat !== "yuv420p") throw new Error("Staged export must contain one H.264 yuv420p video stream");
   if (actual.width !== expected.width || actual.height !== expected.height) throw new Error("Staged export dimensions differ from the source");
@@ -354,6 +359,7 @@ function stillSpans(path: string, info: Probe, minIdleSeconds: number, silenceAr
 }
 
 async function detectIdle(path: string, info: Probe, minIdleSeconds: number, signal?: AbortSignal): Promise<{ idle: Span[]; audible: boolean }> {
+  requireSingleAudioTrack(info.audioStreams);
   // Silence spans only matter if the recording has sound; they keep narration from being cut.
   const withAudio = info.audioStreams > 0;
   const silenceArgs = withAudio
@@ -406,6 +412,7 @@ async function exportTrimmed(
   signal?: AbortSignal,
   frameRate?: string,
 ): Promise<void> {
+  requireSingleAudioTrack(audioStreams);
   const rate = rationalFrameRate(frameRate);
   if (frameRate !== undefined && !rate) throw new Error("Invalid export frame rate");
   const work = mkdtempSync(join(tmpdir(), "obs-mcp-trim-"));
@@ -489,7 +496,8 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
         + "as unchanged; text appearing does not. Keeps a little of each stretch, holds each step's result before "
         + "the next chapter and the end, and moves chapters to match. Without apply it only returns the "
         + "plan. Export requires 8-bit SDR input and a qualified H.264 encoder; validates metadata and full "
-        + "decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory",
+        + "decode before publishing a new copy. Needs ffmpeg; works on files in the OBS recording directory. "
+        + "Supports video-only or one audio track; multitrack input is refused",
       inputSchema: z.object({
         path: z.string().describe("Recording to trim; absolute, or relative to the OBS recording directory"),
         apply: z.boolean().default(false).describe("Export the trimmed copy; otherwise only plan"),

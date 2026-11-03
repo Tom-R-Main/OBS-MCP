@@ -124,6 +124,11 @@ fn every_advanced_phase_preserves_endpoint_barrier_except_exact_not_dispatched()
                 Ok(allows),
                 "{kind:?}/{phase:?}"
             );
+            assert_eq!(
+                store.read_view().production_connection_allowed(),
+                Ok(allows || !kind.advanced_only()),
+                "{kind:?}/{phase:?}"
+            );
             // Accepted compatibility history is not transport uncertainty.
             if phase == GenericPhase::Accepted {
                 assert!(!store.read_view().admission().unwrap().blocking);
@@ -132,6 +137,10 @@ fn every_advanced_phase_preserves_endpoint_barrier_except_exact_not_dispatched()
             drop(store);
             let fresh = OperationStore::new(&dir.0, ENDPOINT).unwrap();
             assert_eq!(fresh.read_view().guarded_reentry_allowed(), Ok(allows));
+            assert_eq!(
+                fresh.read_view().production_connection_allowed(),
+                Ok(allows || !kind.advanced_only())
+            );
             let other = OperationStore::new(&dir.0, "ws://other-fixture:4455").unwrap();
             assert!(other.read_view().guarded_reentry_allowed().unwrap());
         }
@@ -151,4 +160,5 @@ fn payloads_are_absent_and_corrupt_barrier_evidence_never_becomes_compatible() {
     assert!(body.get("requestData").is_none());
     std::fs::write(dir.path(1), b"{broken").unwrap();
     assert!(store.read_view().guarded_reentry_allowed().is_err());
+    assert!(store.read_view().production_connection_allowed().is_err());
 }

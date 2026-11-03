@@ -107,18 +107,12 @@ async fn generate(root: &Scratch) -> PathBuf {
         "lavfi",
         "-i",
         "sine=frequency=1000:sample_rate=48000:duration=4",
-        "-f",
-        "lavfi",
-        "-i",
-        "sine=frequency=2000:sample_rate=48000:duration=4",
         "-filter_complex",
         "[0:v:0][1:v:0]concat=n=2:v=1:a=0[v]",
         "-map",
         "[v]",
         "-map",
         "2:a:0",
-        "-map",
-        "3:a:0",
         "-c:v",
         "libx264",
         "-preset",
@@ -314,14 +308,14 @@ async fn fractional_cadence_survives_audio_concat_seams_in_every_packet() {
     }
 }
 #[tokio::test]
-async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publishes_after_strict_decode()
+async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_single_audio_and_publishes_after_strict_decode()
  {
     let root = Scratch::new();
     let work = root.work();
     let source = generate(&root).await;
     let mut media = backend(&work);
     let input = probe(&mut media, &source).await;
-    assert_eq!(input.audio_streams, 2);
+    assert_eq!(input.audio_streams, 1);
     assert_eq!(input.video_streams, 1);
     trim::require_sdr_input(&input).unwrap();
     let encoders = encoder_list(&media).await;
@@ -479,7 +473,7 @@ async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publi
                 start: 0.0,
                 end: 4.0,
             }],
-            audio_streams: 2,
+            audio_streams: input.audio_streams,
             chapters: &[],
             duration: 4.0,
         },
@@ -496,7 +490,7 @@ async fn installed_ffmpeg_encodes_sdr_common_cuts_chapters_first_audio_and_publi
             duration: 4.0,
             width: input.width,
             height: input.height,
-            audio_streams: 2,
+            audio_streams: input.audio_streams,
             chapters: vec![],
         },
         None,
@@ -630,7 +624,7 @@ async fn actual_ffmpeg_cancel_after_spawn_joins_before_metadata_cleanup() {
                 start: 0.0,
                 end: 4.0,
             }],
-            audio_streams: 2,
+            audio_streams: 1,
             chapters: &[],
             duration: 4.0,
         },

@@ -79,6 +79,7 @@
     "native/rust-toolchain.toml",
     "docs/native-architecture.md",
     "docs/full-rust-cutover.md",
+    "docs/workflow-qualification.md",
     "docs/native-dependencies.md",
     "docs/native-migration-ledger.json"
   ],

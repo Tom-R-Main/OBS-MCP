@@ -54,6 +54,7 @@ export function nativeManifest(root,platform=process.platform,arch=process.arch,
 }
 export function nativeBundleFiles(root){
  const files=['LICENSE','NOTICE.md','README.md','icon.png','native/Cargo.toml','native/Cargo.lock','native/rust-toolchain.toml','docs/protocol.json','docs/native-distribution.md','docs/native-profiles.md','docs/native-dependencies.md','docs/native-architecture.md','docs/full-rust-cutover.md','docs/native-migration-ledger.json','docs/production-assistant.md','.agents/skills/obs-demo/SKILL.md'];
+ files.push('docs/workflow-qualification.md');
  if(existsSync(join(root,'native/build.rs')))files.push('native/build.rs');
  for(const directory of['native/src','native/assets','native/tests','native/platform','native/crates','licenses','docs/recipes','assets/identity']){
   if(!existsSync(join(root,directory)))continue;

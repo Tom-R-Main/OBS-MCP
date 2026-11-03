@@ -552,6 +552,14 @@ pub fn parse_probe(data: &Value) -> MediaProbe {
         frame_rate,
     }
 }
+fn require_single_audio_track(audio_streams: usize) -> Result<(), TrimError> {
+    if audio_streams > 1 {
+        return Err(evidence(
+            "Trim supports at most one audio track; multitrack input requires an explicit track-preserving workflow",
+        ));
+    }
+    Ok(())
+}
 pub fn require_sdr_input(info: &MediaProbe) -> Result<(), TrimError> {
     if matches!(
         info.color_transfer.as_deref(),
@@ -591,6 +599,7 @@ pub fn validate_trimmed_metadata(
     actual: &MediaProbe,
     expected: &ExpectedMetadata,
 ) -> Result<(), TrimError> {
+    require_single_audio_track(expected.audio_streams)?;
     if !actual.duration.is_finite() || (actual.duration - expected.duration).abs() > 0.25 {
         return Err(evidence("Staged export duration differs from the cut plan"));
     }
@@ -712,6 +721,7 @@ pub fn encode_command(
         duration,
         frame_rate,
     } = plan;
+    require_single_audio_track(audio_streams)?;
     let rate = frame_rate
         .map(|value| {
             rational_frame_rate(value).ok_or_else(|| evidence("Invalid export frame rate"))
@@ -930,6 +940,7 @@ pub fn sampling_command(
     min_idle_seconds: f64,
     max_frame_bytes: usize,
 ) -> Result<SamplingRequest, TrimError> {
+    require_single_audio_track(info.audio_streams)?;
     let aspect = match (info.width, info.height) {
         (Some(w), Some(h)) if w != 0.0 && h != 0.0 && !w.is_nan() && !h.is_nan() => h / w,
         _ => 9.0 / 16.0,
@@ -1549,6 +1560,8 @@ impl<B: Encode + Probe + Decode + Preview> ExportOwner<B> {
         preview_request: Option<SheetRequest>,
         cancellation: Cancellation,
     ) -> Result<Self, TrimError> {
+        require_single_audio_track(source.audio_streams)?;
+        require_single_audio_track(expected.audio_streams)?;
         require_sdr_input(source)?;
         if encode_request.output != stage.partial
             || encode_request.input == stage.partial
