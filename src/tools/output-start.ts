@@ -138,3 +138,71 @@ export async function startOutputAndConfirm(
     client.off(stateEvent, onEvent);
   }
 }
+
+export type OutputStopDefinition = {
+  requestType: string;
+  statusRequest: string;
+  statusTool: string;
+  /** How the confirmation message names the output. */
+  noun: string;
+  /** Stream delay keeps a stream live for the configured delay after a stop. */
+  delayNote: boolean;
+};
+
+export const STREAM_STOP: OutputStopDefinition = {
+  requestType: "StopStream", statusRequest: "GetStreamStatus", statusTool: "obs-get-stream-status", noun: "streaming", delayNote: true,
+};
+export const VIRTUAL_CAM_STOP: OutputStopDefinition = {
+  requestType: "StopVirtualCam", statusRequest: "GetVirtualCamStatus", statusTool: "obs-get-virtual-cam-status", noun: "the virtual camera", delayNote: false,
+};
+export const REPLAY_BUFFER_STOP: OutputStopDefinition = {
+  requestType: "StopReplayBuffer", statusRequest: "GetReplayBufferStatus", statusTool: "obs-get-replay-buffer-status", noun: "the replay buffer", delayNote: false,
+};
+
+/** Matches the native safety-stop budget: the whole call, from admission. */
+export const STOP_CONFIRMATION_MS = 10_000;
+const STOP_POLL_MS = 100;
+/** Matches native: a request that outlives its deadline after dispatch costs the connection there, so no status read starts with less than this left. */
+const STATUS_READ_MIN_MS = 500;
+
+/**
+ * OBS acknowledges Stop* before the output stops: about 1.1 s for a stream,
+ * plus any stream delay, and 0.25 s for the replay buffer on OBS 32.2.2.
+ * A stop counts as complete only when a status read sent after the stop, on
+ * the same connection, reports the output inactive. State events are not
+ * used, so an event from an earlier stop can never confirm this one.
+ * Returns undefined when confirmed, otherwise the error text.
+ */
+export async function confirmOutputStopped(
+  client: OBSWebSocketClient,
+  definition: OutputStopDefinition,
+  startedAt: number,
+  budgetMs = STOP_CONFIRMATION_MS,
+): Promise<string | undefined> {
+  const generation = client.getConnectionStatus().generation;
+  const deadline = startedAt + budgetMs;
+  for (;;) {
+    const remaining = deadline - Date.now();
+    if (remaining < Math.min(STATUS_READ_MIN_MS, budgetMs / 2)) return stopUnconfirmed(definition, budgetMs);
+    let status: unknown;
+    try {
+      status = await client.sendRequestForGeneration(generation, definition.statusRequest, undefined, remaining);
+    } catch {
+      return Date.now() >= deadline ? stopUnconfirmed(definition, budgetMs) : stopUnknown(definition);
+    }
+    if (isObject(status) && status.outputActive === false) return undefined;
+    const wait = Math.min(STOP_POLL_MS, deadline - Date.now());
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+}
+
+function stopUnconfirmed({ requestType, statusTool, noun, delayNote }: OutputStopDefinition, budgetMs: number): string {
+  return `OBS accepted ${requestType}, but the service did not observe ${noun} stop within ${budgetMs / 1000}s.`
+    + (delayNote ? " A stream delay keeps the stream live for the configured delay after a stop." : "")
+    + ` This is not evidence that it is still running. Check ${statusTool} before changing related settings; do not resend the stop automatically.`;
+}
+
+function stopUnknown({ requestType, statusTool, noun }: OutputStopDefinition): string {
+  return `OBS accepted ${requestType}, but the output status could not be read afterwards on the same connection, so whether ${noun} stopped is unknown.`
+    + ` Check ${statusTool}: after a reconnect it shows current state, not this request's outcome. Do not resend the stop automatically.`;
+}

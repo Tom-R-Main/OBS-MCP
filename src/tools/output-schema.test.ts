@@ -63,6 +63,12 @@ beforeAll(async () => {
     );
     harness.fakeObs.respondWith(request.requestType, () => response);
   }
+  // Stop tools wait for a status read reporting the output inactive.
+  for (const request of OBS_PROTOCOL_REQUESTS) {
+    if (!["GetStreamStatus", "GetVirtualCamStatus", "GetReplayBufferStatus"].includes(request.requestType)) continue;
+    const response = { ...Object.fromEntries(request.responseFields.map((field) => [field.valueName, sampleValue(field)])), outputActive: false };
+    harness.fakeObs.respondWith(request.requestType, () => response);
+  }
   harness.fakeObs.respondWith("GetSourceScreenshot", () => ({
     imageData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
   }));

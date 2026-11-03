@@ -18,6 +18,7 @@ async function start(options: HarnessOptions): Promise<McpHarness> {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   harness = await startMcpHarness(options);
   harness.fakeObs.respondWith("StopStream", () => ({}));
+  harness.fakeObs.respondWith("GetStreamStatus", () => ({ outputActive: false }));
   harness.fakeObs.respondWith("StopRecord", () => ({ outputPath: "/tmp/take.mp4" }));
   return harness;
 }
@@ -213,6 +214,7 @@ describe("live action confirmation", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fakeObs = await FakeOBSServer.start();
     fakeObs.respondWith("StopStream", () => ({}));
+    fakeObs.respondWith("GetStreamStatus", () => ({ outputActive: false }));
     const obsClient = new OBSWebSocketClient(fakeObs.url);
     const handler = createMcpHandler(() => {
       const server = new McpServer({ name: "obs-mcp-test", version: "0.0.0" });

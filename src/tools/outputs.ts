@@ -8,9 +8,12 @@ import { OBSWebSocketClient } from "../client.js";
 import { z } from "zod";
 import { registerObsRequestTool } from "./request-tool.js";
 import {
+  confirmOutputStopped,
   REPLAY_BUFFER_OUTPUT,
+  REPLAY_BUFFER_STOP,
   startOutputAndConfirm,
   VIRTUAL_CAM_OUTPUT,
+  VIRTUAL_CAM_STOP,
 } from "./output-start.js";
 
 export function initialize(server: McpServer, client: OBSWebSocketClient): void {
@@ -71,8 +74,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   registerObsRequestTool(server, client, {
     name: "obs-stop-virtual-cam",
     title: "Stop Virtual Camera",
-    description: "Stops the virtualcam output",
+    description: "Stops the virtualcam output and waits until OBS reports it inactive",
     requestType: "StopVirtualCam",
+    confirm: (client, startedAt) => confirmOutputStopped(client, VIRTUAL_CAM_STOP, startedAt),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     successMessage: () => "Virtual camera stopped",
   });
@@ -134,8 +138,9 @@ export function initialize(server: McpServer, client: OBSWebSocketClient): void 
   registerObsRequestTool(server, client, {
     name: "obs-stop-replay-buffer",
     title: "Stop Replay Buffer",
-    description: "Stops the replay buffer output",
+    description: "Stops the replay buffer output and waits until OBS reports it inactive",
     requestType: "StopReplayBuffer",
+    confirm: (client, startedAt) => confirmOutputStopped(client, REPLAY_BUFFER_STOP, startedAt),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     successMessage: () => "Replay buffer stopped",
   });

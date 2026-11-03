@@ -16,10 +16,12 @@ const cases=[
  ['obs-stop-virtual-cam','StopVirtualCam',{},'Virtual camera stopped'],
  ['obs-stop-replay-buffer','StopReplayBuffer',{},'Replay buffer stopped'],
 ] as const;
+// Each Stop is confirmed by a status read sent after it on the same connection.
+const statusOf={StopStream:'GetStreamStatus',StopVirtualCam:'GetVirtualCamStatus',StopReplayBuffer:'GetReplayBufferStatus'} as const;
 type Session={client:Client;transport:StdioClientTransport;fake:FakeOBSServer;directory:string;recordingRoot:string;state:ReturnType<typeof serveProduction>;recording:()=>boolean;externalRecording:(active:boolean,path:string)=>void};const sessions:Session[]=[];
 async function start(native:boolean,legacy:boolean,recording=false,unadvertised=false,extra:Record<string,string>={},configure?:(fake:FakeOBSServer)=>void):Promise<Session>{
  const fake=await FakeOBSServer.start({platform:'macos',supportedImageFormats:['png'],autoGetVersion:!unadvertised});const state=serveProduction(fake);state.preview='Main';const directory=join(root,'native/target',`stop3-public-${process.pid}-${seq++}`);mkdirSync(directory,{mode:0o700});const recordingRoot=join(directory,'recordings');mkdirSync(recordingRoot,{mode:0o700});let active=false;
- for(const[,request]of cases)fake.respondWith(request,()=>({ignored:'PRIVATE ACK BODY',outputActive:true}));fake.respondWith('SetInputMute',()=>({}));
+ for(const[,request]of cases){fake.respondWith(request,()=>({ignored:'PRIVATE ACK BODY',outputActive:true}));fake.respondWith(statusOf[request],()=>({outputActive:false}));}fake.respondWith('SetInputMute',()=>({}));
  const path=join(recordingRoot,'clip.mkv');fake.respondWith('GetProfileParameter',data=>({parameterValue:({'Output/Mode':'Simple','SimpleOutput/RecQuality':'Small','SimpleOutput/RecEncoder':'apple_h264','SimpleOutput/RecTracks':'1','SimpleOutput/RecFormat2':'mkv'} as Record<string,string>)[`${data.parameterCategory}/${data.parameterName}`]??null}));let recordDirectory=recording?recordingRoot:undefined;fake.respondWith('SetRecordDirectory',data=>{recordDirectory=String(data.recordDirectory);return {};});fake.respondWith('GetRecordDirectory',()=>{if(recordDirectory)return {recordDirectory};throw new FakeOBSRequestError(604,'fixture directory unavailable');});fake.respondWith('GetStats',()=>({availableDiskSpace:50000,renderSkippedFrames:0,renderTotalFrames:0}));fake.respondWith('GetRecordStatus',()=>({outputActive:active,outputPaused:false,outputBytes:1048576}));fake.respondWith('StartRecord',()=>{active=true;fake.sendEvent('RecordStateChanged',{outputActive:true,outputState:'OBS_WEBSOCKET_OUTPUT_STARTED',outputPath:path});return {};});fake.respondWith('StopRecord',()=>{active=false;fake.sendEvent('RecordStateChanged',{outputActive:false,outputState:'OBS_WEBSOCKET_OUTPUT_STOPPED',outputPath:path});return {outputPath:path};});fake.respondWith('CreateRecordChapter',()=>({}));
  if(unadvertised)fake.respondWith('GetVersion',()=>({obsVersion:'32.2.2',obsWebSocketVersion:'5.7.0',rpcVersion:1,platform:'macos',availableRequests:['GetVersion'],supportedImageFormats:['png']}));
  configure?.(fake);
@@ -47,15 +49,15 @@ async function acknowledgedBody(session:Session,name:string,request:string,respo
  session.fake.queueSuccess(request,{},60_000);const after=session.fake.cursor();const result=session.client.callTool({name,arguments:{}}).then(value=>({value}),error=>({error:String(error)}));const held=await session.fake.waitForRequest(request,{after,timeoutMs:10_000});const d:Record<string,unknown>={requestType:request,requestId:held.frame.d.requestId,requestStatus:{result:true,code:100}};if(responseData!==undefined)d.responseData=responseData;session.fake.sendRaw({op:7,d},held.connectionId);return result;
 }
 for(const legacy of[false,true])describe(`three ACK-only Stops Source/native legacy=${legacy}`,()=>{
- it('retains complete Source contracts, fixed messages and omitted requestData without status or event confirmation',async()=>{
+ it('retains complete Source contracts, fixed messages and omitted requestData, confirmed by a status read after each Stop',async()=>{
   const source=await start(false,legacy),native=await start(true,legacy);const expected=(await source.client.listTools()).tools,actual=(await native.client.listTools()).tools;
   for(const[name,request,,message]of cases){expect(actual.find(tool=>tool.name===name)).toEqual(expected.find(tool=>tool.name===name));const result=await same(source,native,name,{discarded:{requestType:'StopRecord'},outputName:'arbitrary'});expect(result).toMatchObject({content:[{type:'text',text:message}],structuredContent:{message}});expect(trace(native,request)).toEqual([undefined]);}
-  for(const session of[source,native])expect(requests(session).map(item=>item.frame.d.requestType)).toEqual(cases.map(([,request])=>request));for(const item of requests(native))expect(Object.hasOwn(item.frame.d,'requestData')).toBe(false);
+  for(const session of[source,native])expect(requests(session).map(item=>item.frame.d.requestType)).toEqual(cases.flatMap(([,request])=>[request,statusOf[request]]));for(const item of requests(native))expect(Object.hasOwn(item.frame.d,'requestData')).toBe(false);
   expect(receipts(native)).toHaveLength(3);for(const receipt of receipts(native))expect(receipt).toMatchObject({version:2,kind:'request',phase:'accepted',requestAccepted:true,postconditionObserved:false});expect(native.fake.connectionCount).toBe(1);expect(children(native)).toEqual([]);
  });
- it('ignores missing/null/scalar/array/contradictory ACK bodies without inventing confirmed inactive state',async()=>{
+ it('ignores missing/null/scalar/array/contradictory ACK bodies; only the status read confirms inactive state',async()=>{
   const source=await start(false,legacy),native=await start(true,legacy);for(const[name,request,,message]of cases)for(const body of[undefined,null,false,0,'ignored',[],{outputActive:true},{private:'ignored'}]){const expected=await acknowledgedBody(source,name,request,body),actual=await acknowledgedBody(native,name,request,body);expect(actual).toEqual(expected);expect(actual).toMatchObject({value:{content:[{type:'text',text:message}],structuredContent:{message}}});}
-  expect(receipts(native)).toHaveLength(24);expect(receipts(native).every(r=>r.phase==='accepted'&&r.postconditionObserved===false)).toBe(true);expect(requests(native)).toHaveLength(24);
+  expect(receipts(native)).toHaveLength(24);expect(receipts(native).every(r=>r.phase==='accepted'&&r.postconditionObserved===false)).toBe(true);expect(requests(native)).toHaveLength(48);
  });
  it('preserves exact Source errors and rejection comments without a success or observed receipt',async()=>{
   const source=await start(false,legacy),native=await start(true,legacy);for(const[name,request]of cases){for(const session of[source,native])session.fake.respondWith(request,()=>{throw new FakeOBSRequestError(500,'PRIVATE Stop detail');});expect((await same(source,native,name)).isError).toBe(true);}
@@ -152,4 +154,28 @@ it('retains an ACK-only Stop through frontend EOF until its same ACK and joins w
  const fake=await FakeOBSServer.start({platform:'macos',availableRequests:['StopReplayBuffer']});fake.respondWith('StopReplayBuffer',()=>({}));fake.queueSuccess('StopReplayBuffer',{},60_000);const directory=join(root,'native/target',`stop3-eof-${process.pid}-${seq++}`);mkdirSync(directory,{mode:0o700});const child=spawn(binary,[],{cwd:root,stdio:['pipe','pipe','pipe'],env:{...getDefaultEnvironment(),OBS_WEBSOCKET_URL:fake.url,OBS_MCP_STATE_DIR:directory,OBS_MCP_NATIVE_STATEFUL:'1',OBS_MCP_NATIVE_RECORDING_ROOT:'',OBS_MCP_COMPAT_NODE:join(directory,'missing-node'),OBS_MCP_COMPAT_ENTRY:join(directory,'missing-sdk.js'),OBS_MCP_TOOLSETS:'all',OBS_MCP_READ_ONLY:'false',OBS_MCP_DYNAMIC_TOOLSETS:'false',OBS_MCP_CONFIRM_LIVE:'false',OBS_MCP_READ_OBS_CONFIG:'false'}});child.stdout.on('data',()=>undefined);child.stderr.on('data',()=>undefined);child.stdin.on('error',()=>undefined);const closed=once(child,'close');void closed.catch(()=>undefined);let request:Awaited<ReturnType<FakeOBSServer['waitForRequest']>>|undefined;let released=false;const release=()=>{if(released||!request||!fake.openConnectionCount)return;fake.sendRaw({op:7,d:{requestType:'StopReplayBuffer',requestId:request.frame.d.requestId,requestStatus:{result:true,code:100},responseData:{}}},request.connectionId);released=true;};
  try{child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:8100,method:'tools/call',params:{name:'obs-stop-replay-buffer',arguments:{},_meta:meta('stop3-eof')}})+'\n');request=await fake.waitForRequest('StopReplayBuffer',{timeoutMs:10_000});expect(receipts({directory})[0]).toMatchObject({phase:'dispatching',requestAccepted:null});expect(children({transport:{pid:child.pid}})).toEqual([]);child.stdin.end();await new Promise(resolve=>setTimeout(resolve,50));expect(child.exitCode).toBeNull();expect(fake.openConnectionCount).toBe(1);release();await vi.waitFor(()=>expect(child.exitCode!==null||child.signalCode!==null).toBe(true),{timeout:5000});expect(await closed).toEqual([0,null]);expect(fake.openConnectionCount).toBe(0);expect(trace({fake},'StopReplayBuffer')).toHaveLength(1);expect(receipts({directory})[0]).toMatchObject({phase:'accepted',requestAccepted:true,postconditionObserved:false});
  }finally{release();child.stdin.end();if(child.exitCode===null&&child.signalCode===null)await vi.waitFor(()=>expect(child.exitCode!==null||child.signalCode!==null).toBe(true),{timeout:5000});await closed;await fake.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+describe('Stop confirmation outcomes match on Source and native',()=>{
+ it('reports an unreadable status after an accepted Stop as unknown, without reconnecting',async()=>{
+  const configure=(fake:FakeOBSServer)=>{fake.respondWith('GetStreamStatus',()=>{throw new FakeOBSRequestError(500,'PRIVATE status diagnostic');});};
+  const source=await start(false,false,false,false,{},configure),native=await start(true,false,false,false,{},configure);
+  const result=await same(source,native,'obs-stop-stream');
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result)).toContain('so whether streaming stopped is unknown');
+  expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  expect(native.fake.connectionCount).toBe(1);
+ });
+ it('reports a Stop OBS never confirms inactive within the admitted 10 s as unconfirmed, not as still running',async()=>{
+  const configure=(fake:FakeOBSServer)=>{fake.respondWith('StopReplayBuffer',()=>{fake.sendEvent('ReplayBufferStateChanged',{outputActive:false,outputState:'OBS_WEBSOCKET_OUTPUT_STOPPED'});return {};});fake.respondWith('GetReplayBufferStatus',()=>({outputActive:true}));};
+  const source=await start(false,false,false,false,{},configure),native=await start(true,false,false,false,{},configure);
+  const started=Date.now();
+  const [expected,actual]=await Promise.all([source.client.callTool({name:'obs-stop-replay-buffer',arguments:{}}),native.client.callTool({name:'obs-stop-replay-buffer',arguments:{}})]);
+  expect(actual).toEqual(expected);
+  expect(actual.isError).toBe(true);
+  expect(JSON.stringify(actual)).toContain('did not observe the replay buffer stop within 10s');
+  expect(JSON.stringify(actual)).toContain('This is not evidence that it is still running');
+  expect(Date.now()-started).toBeLessThan(13_000);
+  expect(trace(native,'StopReplayBuffer')).toHaveLength(1);
+ },30_000);
 });

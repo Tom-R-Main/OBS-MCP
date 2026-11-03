@@ -1553,7 +1553,7 @@
     {
       "name": "obs-stop-stream",
       "title": "Stop Stream",
-      "description": "Stop streaming in OBS",
+      "description": "Stop streaming in OBS and wait until OBS reports the stream inactive",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -4438,7 +4438,7 @@
     {
       "name": "obs-stop-virtual-cam",
       "title": "Stop Virtual Camera",
-      "description": "Stops the virtualcam output",
+      "description": "Stops the virtualcam output and waits until OBS reports it inactive",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -4526,7 +4526,7 @@
     {
       "name": "obs-stop-replay-buffer",
       "title": "Stop Replay Buffer",
-      "description": "Stops the replay buffer output",
+      "description": "Stops the replay buffer output and waits until OBS reports it inactive",
       "inputSchema": {
         "type": "object",
         "properties": {}
