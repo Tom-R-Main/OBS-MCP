@@ -521,7 +521,8 @@ it('blocks a queued setter on fresh unrelated uncertainty while continuous owned
 });
 
 describe('silence preflight leaves out inputs OBS reports inactive, identically on both servers',()=>{
- const activityFixture=(active:boolean|'unreadable',special:Record<string,string|null>={desktop1:null,mic1:null})=>(session:Session)=>{
+ const noGlobals={desktop1:null,desktop2:null,mic1:null,mic2:null,mic3:null,mic4:null};
+ const activityFixture=(active:boolean|'unreadable',special:Record<string,unknown>=noGlobals)=>(session:Session)=>{
   session.fake.respondWith('GetInputMute',()=>({inputMuted:false}));
   session.fake.respondWith('GetInputAudioTracks',()=>({inputAudioTracks:{1:true,2:false,3:false,4:false,5:false,6:false}}));
   session.fake.respondWith('GetSourceActive',()=>{if(active==='unreadable')throw new FakeOBSRequestError(600,'activity unavailable');return {videoActive:active,videoShowing:active};});
@@ -531,7 +532,9 @@ describe('silence preflight leaves out inputs OBS reports inactive, identically 
   ['inactive input',false,undefined,'pass'],
   ['active input',true,undefined,'fail'],
   ['unreadable activity','unreadable',undefined,'fail'],
-  ['inactive global input',false,{desktop1:'Application',mic1:null},'fail'],
+  ['inactive global input',false,{...noGlobals,desktop1:'Application'},'fail'],
+  ['malformed global-audio list',false,{...noGlobals,desktop1:17},'fail'],
+  ['incomplete global-audio list',false,{desktop1:null,mic1:null},'fail'],
  ] as const)it(label,async()=>{
   const oracle=await start(false,false,true,{},activityFixture(active,special));const native=await start(true,false,true,{},activityFixture(active,special));
   const result=await same(oracle,native,'obs-preflight',{expectSilent:true,minFreeDiskMb:0});

@@ -152,7 +152,8 @@ describe("obs-preflight", () => {
     // Live OBS 32.2.2: inputs reported inactive (hidden, in a scene that is not
     // on program, or only in the Studio Mode preview) were absent from the
     // recording; active ones, including nested scenes, were recorded.
-    function serveActivity(active: Record<string, boolean | Error>, special: Record<string, string | null> | Error = { desktop1: null, mic1: null }): void {
+    const NO_GLOBALS = { desktop1: null, desktop2: null, mic1: null, mic2: null, mic3: null, mic4: null };
+    function serveActivity(active: Record<string, boolean | Error>, special: Record<string, unknown> | Error = NO_GLOBALS): void {
       harness.fakeObs.respondWith("GetSourceActive", (data) => {
         const value = active[String(data.sourceName)];
         if (value instanceof Error || value === undefined) throw new FakeOBSRequestError(600, "activity unavailable");
@@ -187,7 +188,7 @@ describe("obs-preflight", () => {
     });
 
     it("keeps counting global audio inputs even when OBS reports them inactive", async () => {
-      serveActivity({ "Live Tone": false, "Other Scene Tone": false }, { desktop1: "Live Tone", mic1: null });
+      serveActivity({ "Live Tone": false, "Other Scene Tone": false }, { ...NO_GLOBALS, desktop1: "Live Tone" });
       const { byId } = await preflight({ expectSilent: true });
       expect(byId("audio")).toMatchObject({ status: "fail", message: expect.stringContaining("Live Tone (track 1)") });
     });
@@ -196,6 +197,17 @@ describe("obs-preflight", () => {
       serveActivity({ "Live Tone": false, "Other Scene Tone": new Error("gone") });
       const { byId } = await preflight({ expectSilent: true });
       expect(byId("audio")).toMatchObject({ status: "fail", message: expect.stringContaining("Other Scene Tone (track 1)") });
+    });
+
+    it.each([
+      ["a wrong-typed slot", { ...NO_GLOBALS, desktop1: 17 }],
+      ["a missing slot", { desktop1: null, desktop2: null, mic1: null, mic2: null, mic3: null }],
+      ["a non-object reply", ["Live Tone"]],
+    ])("counts every input when the global-audio list has %s", async (_label, special) => {
+      serveActivity({ "Live Tone": false, "Other Scene Tone": false }, special as Record<string, unknown>);
+      const { byId } = await preflight({ expectSilent: true });
+      expect(byId("audio")?.status).toBe("fail");
+      expect(byId("audio")?.message).toContain("Live Tone (track 1); Other Scene Tone (track 1)");
     });
 
     it("counts every input when OBS cannot say which inputs are global", async () => {

@@ -652,18 +652,25 @@ async fn audio(
 /// global audio channels (libobs/obs-audio.c). An input OBS reports inactive is
 /// left out of the silence policy; any unreadable activity keeps it counted.
 const OFF_PROGRAM_NOTE: &str = "Not counted because OBS reports them inactive (not on program, hidden, or only in preview), so it does not mix them now; switching scenes during the take can make them audible: ";
-/// Global audio inputs are always counted. None when OBS cannot say which they are.
+/// The six global audio slots GetSpecialInputs reports, each a name or null.
+const SPECIAL_INPUT_FIELDS: [&str; 6] = ["desktop1", "desktop2", "mic1", "mic2", "mic3", "mic4"];
+/// Global audio inputs are always counted. None when OBS cannot say which they
+/// are, including any missing or malformed slot, so nothing is left out.
 async fn global_audio_inputs(adapter: &impl Adapter) -> Option<std::collections::HashSet<String>> {
     let special = adapter.read(ReadRequest::SpecialInputs, None).await.ok()?;
     let special = special.as_object()?;
-    Some(
-        special
-            .values()
-            .filter_map(Value::as_str)
-            .filter(|name| !name.is_empty())
-            .map(str::to_owned)
-            .collect(),
-    )
+    let mut names = std::collections::HashSet::new();
+    for field in SPECIAL_INPUT_FIELDS {
+        match special.get(field)? {
+            Value::Null => {}
+            Value::String(name) if name.is_empty() => {}
+            Value::String(name) => {
+                names.insert(name.clone());
+            }
+            _ => return None,
+        }
+    }
+    Some(names)
 }
 async fn scene_items(adapter: &impl Adapter) -> Result<Vec<Check>, ReadError> {
     let program = object_read(adapter, ReadRequest::CurrentProgramScene, None).await?;

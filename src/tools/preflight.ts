@@ -278,12 +278,25 @@ function inactive(result: { ok: boolean; responseData?: unknown } | undefined): 
   return result?.ok === true && isObject(result.responseData) && result.responseData.videoActive === false;
 }
 
-/** Global audio inputs are always counted. Undefined when OBS cannot say which they are. */
+/** The six global audio slots GetSpecialInputs reports, each a name or null. */
+const SPECIAL_INPUT_FIELDS = ["desktop1", "desktop2", "mic1", "mic2", "mic3", "mic4"] as const;
+
+/**
+ * Global audio inputs are always counted. Undefined when OBS cannot say which
+ * they are, including any missing or malformed slot, so nothing is left out.
+ */
 async function globalAudioInputs(client: OBSWebSocketClient): Promise<Set<string> | undefined> {
   try {
     const special: unknown = await client.sendRequest("GetSpecialInputs");
     if (!isObject(special)) return undefined;
-    return new Set(Object.values(special).filter((name): name is string => typeof name === "string" && name.length > 0));
+    const names = new Set<string>();
+    for (const field of SPECIAL_INPUT_FIELDS) {
+      const value = special[field];
+      if (value === null) continue;
+      if (typeof value !== "string") return undefined;
+      if (value.length > 0) names.add(value);
+    }
+    return names;
   } catch {
     return undefined;
   }
