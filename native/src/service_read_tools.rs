@@ -295,7 +295,10 @@ impl Scope {
         }
         let uri: tokio_tungstenite::tungstenite::http::Uri =
             context.connection.url.parse().map_err(|_| invalid())?;
-        if uri.scheme_str() != Some("ws")
+        // The physical-session hash/token checks above bind this context to the
+        // already established connector. WSS is available only in the native
+        // TLS build; unsupported schemes never gain read-tool admission.
+        if !crate::network_transport::admitted_scheme(uri.scheme_str())
             || uri.authority().is_none_or(|a| a.as_str().contains('@'))
         {
             return Err(invalid());

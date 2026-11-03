@@ -136,6 +136,7 @@ pub struct Stream {
     monitor: Monitor,
     _single_owner: PhantomData<Rc<()>>,
     _global: Global,
+    additional_roots: Option<crate::AdditionalRoots>,
 }
 
 impl Stream {
@@ -231,6 +232,7 @@ impl Stream {
             monitor,
             _single_owner: PhantomData,
             _global: global,
+            additional_roots: None,
         };
         // SAFETY: exclusive out-pointer, initialized to null and owned by this RAII object.
         checked(unsafe { ffi::gnutls_certificate_allocate_credentials(&mut this.credentials) })?;
@@ -315,6 +317,26 @@ impl Stream {
         Ok(this)
     }
 
+    pub fn with_additional_roots(mut self, roots: &crate::AdditionalRoots) -> io::Result<Self> {
+        for der in roots.certificates() {
+            let datum = ffi::Datum {
+                data: der.as_ptr().cast_mut(),
+                size: der.len() as u32,
+            };
+            // SAFETY: exclusively owned credentials before handshake; native DER
+            // parser copies certificates. Adds to already loaded system anchors.
+            let loaded =
+                unsafe { ffi::gnutls_certificate_set_x509_trust_mem(self.credentials, &datum, 0) };
+            if loaded <= 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "invalid additional TLS certificate anchors",
+                ));
+            }
+        }
+        self.additional_roots = Some(roots.clone());
+        Ok(self)
+    }
     pub fn fd(&self) -> RawFd {
         self.socket.as_raw_fd()
     }

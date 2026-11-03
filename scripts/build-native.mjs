@@ -2,9 +2,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Optional development driver. Direct Cargo builds require no Node installation.
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {resolve,join,isAbsolute} from 'node:path';
+import {nativeBuildFeatures,nativeBuildSource} from './native-bundle.mjs';
 import {existsSync,lstatSync,readFileSync,readdirSync,utimesSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../native/',import.meta.url));
+const project=resolve(root,'..'),features=nativeBuildFeatures(process.env.OBS_MCP_NATIVE_BUILD_FEATURES);
+if(process.argv.length>2)throw new Error('Native build options are selected only through OBS_MCP_NATIVE_BUILD_FEATURES');
+if(features.length&&!['darwin','linux'].includes(process.platform))throw new Error('Native TLS evaluation builds require a macOS/Linux host');
 // Checked-in native assets are production inputs. Source exporters are only
 // explicit development oracles, never a dependency of compiling this binary.
 for(const file of['assets/tools.json','assets/prompts.json'])JSON.parse(readFileSync(new URL('../native/'+file,import.meta.url),'utf8'));
@@ -16,5 +22,19 @@ for(const directory of['src','assets','platform','crates'])if(existsSync(root+di
 for(const file of['Cargo.toml','Cargo.lock','rust-toolchain.toml'])refresh(root+file);
 refresh(fileURLToPath(new URL('../docs/protocol.json',import.meta.url)));
 const cache=root+'.cargo-home';const env={...process.env,RUSTUP_AUTO_INSTALL:'0',...(existsSync(cache)?{CARGO_HOME:cache}:{})};
-const result=spawnSync('cargo',['build','--locked','--offline','--release','--bin','obs-mcp-native'],{cwd:root,env,stdio:'inherit'});
+const before=features.length?nativeBuildSource(project):undefined;
+const args=['build','--locked','--offline','--release','--bin','obs-mcp-native',...(features.length?['--features',features[0],'--message-format=json']:[])];
+const result=spawnSync('cargo',args,{cwd:root,env,...(features.length?{encoding:'utf8',stdio:['ignore','pipe','inherit'],maxBuffer:64*1024*1024}:{stdio:'inherit'})});
 if(result.error)throw result.error;if(result.status!==0)process.exit(result.status??1);
+if(features.length){
+ let messages;try{messages=result.stdout.split(/\r?\n/).filter(line=>line.trim()).map(line=>JSON.parse(line));}catch{throw new Error('Cargo did not return valid feature-build artifact JSON');}
+ const artifacts=messages.filter(row=>row.reason==='compiler-artifact'&&row.manifest_path===join(project,'native/Cargo.toml')&&row.target?.name==='obs-mcp-native'&&JSON.stringify(row.target.kind)===JSON.stringify(['bin'])&&row.target.src_path===join(project,'native/src/main.rs')&&row.profile?.test===false&&typeof row.executable==='string');
+ if(artifacts.length!==1||JSON.stringify(artifacts[0].features)!==JSON.stringify(features))throw new Error('Expected exactly one matching reviewed feature-build executable artifact');
+ const artifact=artifacts[0],expected=resolve(root,process.env.CARGO_TARGET_DIR||'target','release/obs-mcp-native');
+ if(artifact.executable!==expected)throw new Error('Feature-build artifact must use the selected host release output; cross-target configuration is unavailable');
+ const info=lstatSync(artifact.executable);
+ if(!isAbsolute(artifact.executable)||!info.isFile()||info.isSymbolicLink()||(info.mode&0o111)===0)throw new Error('Feature-build executable must be a regular executable file');
+ if(nativeBuildSource(project).sha256!==before.sha256)throw new Error('Native sources changed during feature build');
+ const bytes=readFileSync(artifact.executable);
+ console.log(JSON.stringify({schemaVersion:1,host:{platform:process.platform,arch:process.arch},features,source:before,artifact:{manifest:artifact.manifest_path,source:artifact.target.src_path,executable:artifact.executable,sha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length}}));
+}

@@ -250,8 +250,17 @@ fn deferred<T>(result: Poll<io::Result<T>>, cx: &mut Context<'_>) -> Poll<io::Re
 pub struct Supervisor {
     entries: Vec<Arc<Entry>>,
     stopped: bool,
+    additional_roots: Option<crate::AdditionalRoots>,
 }
 impl Supervisor {
+    pub fn with_additional_roots(roots: crate::AdditionalRoots) -> io::Result<Self> {
+        Ok(Self {
+            entries: Vec::new(),
+            stopped: false,
+            additional_roots: Some(roots),
+        })
+    }
+
     /// DNS/TCP ownership remains with the parent connector. This method consumes
     /// its already connected socket, expected identity and unchanged deadline.
     pub fn connect_socket(
@@ -325,6 +334,7 @@ impl Supervisor {
         let cancel = Arc::new(AtomicBool::new(false));
         let job_monitor = monitor.clone();
         let job_cancel = cancel.clone();
+        let additional_roots = self.additional_roots.clone();
         let setup = runtime.spawn_blocking(move || {
             let native = if let Some(anchor) = anchor {
                 #[cfg(feature = "gnutls-synthetic-probe")]
@@ -353,6 +363,11 @@ impl Supervisor {
                     job_cancel,
                     job_monitor,
                 )?
+            };
+            let native = if let Some(roots) = additional_roots {
+                native.with_additional_roots(&roots)?
+            } else {
+                native
             };
             Ok(SendCore(native))
         });
@@ -727,6 +742,7 @@ mod tests {
         let mut owner = Supervisor {
             entries: vec![entry],
             stopped: false,
+            additional_roots: None,
         };
         let mut shutdown = Box::pin(owner.shutdown());
         assert!(

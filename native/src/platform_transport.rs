@@ -118,6 +118,17 @@ impl Default for Owner {
     }
 }
 impl Owner {
+    pub fn with_additional_roots(certificates: Vec<Vec<u8>>) -> io::Result<Self> {
+        let roots = obs_mcp_platform_tls::AdditionalRoots::from_der(certificates)?;
+        let supervisor = obs_mcp_platform_tls::Supervisor::with_additional_roots(roots)?;
+        Ok(Self {
+            custody: Custody {
+                supervisor: Arc::new(Mutex::new(supervisor)),
+                #[cfg(test)]
+                fixture: None,
+            },
+        })
+    }
     pub fn new() -> Self {
         Self {
             custody: Custody {

@@ -14,9 +14,13 @@ The executable runs the retained Rust service directly over stdio or loopback HT
 
 Production is the default immutable profile and exposes up to 164 ordinary tools with approved host/media adapters. Advanced exposes 163 and excludes guarded Take, media, Stage and recovery owners. Their union contains 178 ordinary names; stdio dynamic mode can add three group controllers. Filters, read-only mode and available adapters narrow discovery. See [native profiles](docs/native-profiles.md).
 
-On 2 November 2026, the optimized native candidate passed the normal native gate: 1,045 default-feature Rust cases, 213 all-feature bin/library cases, four resolver process contracts, and 1,003 public cases with no skips. The public suite includes 17 actual HTTP-entry and 48 TCP cases. The development unit suite passed 735 cases. These suites overlap; their counts are not a unique-test total.
+Core checkpoint `d3bb516` (PRs #26 and #27) passed ten CI jobs. Its physical-Mac qualification passed 736 Source unit cases, 21 Source transport cases, 1,050 default-feature Rust cases, 214 all-feature bin/library cases, four resolver process contracts, seven component checks and 1,016 public cases with no skips. The public suite includes 17 actual HTTP-entry and 58 TCP cases. These suites overlap; their counts are not a unique-test total.
 
-The matching macOS MCPB passed three extracted-package checks, including localhost resolution with a Node trap, then a bounded live OBS journey on that extracted executable. Its 2.837-second silent A/B fixture clip passed strict decoding and sampled-content checks; the screenshots/contact sheet were reviewed, recovery preserved a conflict, and the original state snapshots matched after restoration and cleanup. Linux qualification is in progress without a platform/runtime acceptance claim; production TLS, final-head CI and client activation remain pending. Native runtime cutover does not yet provide full Source transport parity: encrypted `wss:` endpoints that previously used the SDK route now refuse in default builds. [Cutover status](docs/full-rust-cutover.md) binds these observations to exact artifact hashes; [native distribution](docs/native-distribution.md) gives setup and rebuild commands.
+The matching extracted Mac MCPB passed three package checks and the bounded OBS 32.2.2 fixture journey. Its 2.837-second silent A/B clip passed strict decoding, sampled content and exact presented-frame cadence checks. Conflict-preserving recovery, manual Restore and an offline snapshot restart passed; the original, restored and final state snapshots were byte-identical and all owned helpers closed. The fractional-FPS export correction is merged.
+
+A separate tester ran focused cadence, HTTP, raw stdio and method-header checks on the exact Linux main executable. That VM had no Source oracle or package qualification; Linux CI has separate results. Real XComposite capture remains unqualified because the software display lacks `EGL_KHR_image_pixmap`; an XShm whole-display control does not establish exact-window capture.
+
+Default TLS remains off. The opt-in TLS evaluation passed seven optimized/extracted Mac read-only WSS cases against actual OBS through an owned proxy, including DNS/IP custom-CA TLS1.2/1.3 and early trust refusals. Its qualification is separate from the core checkpoint and does not establish general production TLS admission. [Cutover status](docs/full-rust-cutover.md) binds both compositions to exact artifacts and limits; [native distribution](docs/native-distribution.md) gives normal setup and the explicit evaluation pack command. Each delivered archive needs its own source and artifact binding; installed-client activation remains separate.
 
 ## How it works
 
@@ -111,6 +115,7 @@ support. See [native distribution](docs/native-distribution.md).
 | `OBS_MCP_NATIVE_PROFILE` | No | `production` | Immutable `production` or `advanced` capability profile |
 | `OBS_MCP_NATIVE_RECORDING_ROOT` | For Production recording/file workflows | None | Existing approved recording directory; does not grant recording or file authority |
 | `OBS_MCP_NATIVE_FFMPEG` / `OBS_MCP_NATIVE_FFPROBE` | For media workflows | Trusted executable on PATH | Explicit existing media-tool bindings; the package installs neither |
+| `OBS_MCP_TLS_CA_FILE` | TLS evaluation build | None | Optional absolute safe certificate-only PEM file adding process-local trust anchors; requires the feature-on evaluation build |
 
 Passwords and HTTP tokens are not printed. Stdio reserves stdout for MCP; HTTP keeps it empty and announces its loopback endpoint on stderr. Default builds refuse encrypted `wss:` OBS endpoints before connection. Conditional macOS Network.framework and Linux GnuTLS backends remain behind `platform-tls-evaluation`; see [transport status](docs/native-distribution.md#dns-and-encrypted-obs-endpoints).
 
@@ -397,7 +402,7 @@ The development oracle builds with TypeScript 7.0.2 and does not import the Type
 
 ## Historical protocol baseline
 
-On October 14, 2026, this revision was compared with the `modelcontextprotocol`, `mcp-typescript-sdk`, and `obs-studio` checkouts under `/Volumes/External SSD/referencerepos`. Those checkouts were read without modification. The exact reference sources are:
+On October 14, 2026, this revision was compared with local `modelcontextprotocol`, `mcp-typescript-sdk`, and `obs-studio` reference checkouts. Those checkouts were read without modification. The exact reference sources are:
 
 - MCP specification: [`5ea99602`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/5ea996028df322ce97d1c906731cf8c05a6e268e)
 - MCP TypeScript server and client SDKs: `2.3.1`; reference checkout [`9bc40e90`](https://github.com/modelcontextprotocol/typescript-sdk/commit/9bc40e903fde15534ec06ff4c1347d47000dbe16)

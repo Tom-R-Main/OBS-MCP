@@ -2,7 +2,7 @@
 
 OBS MCP runs as a Rust executable. Its main entry supports stdio and loopback HTTP; the native MCPB layout contains no Node runtime, JavaScript SDK or TypeScript server payload. The TypeScript implementation remains an explicit development oracle.
 
-Use a build qualified for your host and CPU. On 2 November 2026, the optimized candidate passed the normal native gate and 1,003 public cases with no skips. Its matching macOS MCPB passed three extraction checks and a bounded real-OBS fixture journey. Linux qualification is in progress without a platform/runtime acceptance claim; production TLS, final-head CI and client activation remain pending. See [cutover status](full-rust-cutover.md) for exact artifact hashes and evidence limits.
+Use a build qualified for your host and CPU. Core checkpoint `d3bb516` passed ten CI jobs. The physical-Mac gate passed 1,016 public cases and 3/3 package checks, then the exact extracted executable completed the bounded real-OBS journey. A separate exact-main Linux executable passed focused cadence/HTTP/raw-stdio checks; its VM had no Source oracle or package qualification. Exact-window capture remains unqualified. The opt-in TLS variant has separate bounded Mac evaluation evidence; general production admission remains open. [Cutover status](full-rust-cutover.md) records the exact identities and limits.
 
 ## Build and configure
 
@@ -69,7 +69,22 @@ Get explicit permission before capturing a window, recording, streaming, saving 
 
 Plain `ws:` connections use owned DNS resolution when needed. Resolver helpers have bounded lifetimes and are joined during shutdown; one client leaving does not discard another client's service or Take.
 
-Native TLS is off in the default build. A `wss:` endpoint refuses before connection rather than downgrading or launching a compatibility runtime. This narrows supported OBS transports from the former SDK route; native runtime cutover does not yet provide full Source transport parity. The `platform-tls-evaluation` feature selects the macOS Network.framework backend or, on Linux, the GnuTLS backend. These conditional backends have separate component evidence and prerequisites; enabling the feature is not a platform or production TLS acceptance claim. Linux evaluation needs GnuTLS and pkg-config. See [architecture](native-architecture.md) and [cutover gates](full-rust-cutover.md).
+Native TLS is off in the default core build. A `wss:` endpoint refuses before connection without downgrade or compatibility handoff. The opt-in TLS variant adds an opt-in macOS Network.framework or Linux GnuTLS evaluation backend; its Mac custom-CA read-only evidence does not establish full Source transport parity or Linux TLS admission.
+
+### Opt-in TLS evaluation
+
+Pass the feature selection on the pack invocation so the release build and staged build receipt preserve it:
+
+```sh
+OBS_MCP_NATIVE_BUILD_FEATURES=platform-tls-evaluation \
+node scripts/pack.mjs --offline
+```
+
+This creates `dist/obs-studio-native-tls-evaluation.mcpb`; the default output remains `dist/obs-studio-native.mcpb`. The pinned toolchain, dependencies and archive tools must already be available. Linux evaluation also requires GnuTLS and pkg-config. The evaluation pack driver checks host, selected feature, source and executable identity before staging. Node is a packaging tool, not an installed runtime requirement. The core and TLS qualification artifacts have separate source and executable bindings.
+
+The evaluation runtime optionally accepts `OBS_MCP_TLS_CA_FILE`, an absolute safe regular file containing at most 256 KiB and 32 certificate-only PEM anchors. Trust additions are process-local. Do not include private keys or rely on a symlink/changed file; certificate and peer-name validation remain enabled. No global trust store or keychain is changed. Setting the CA path does not enable a feature-off build.
+
+The exact optimized/extracted Mac evaluation passed DNS/IP custom-CA TLS1.2/1.3 authentication/GetVersion and three early peer-trust refusals through an owned proxy. Default TLS remains off; system-root-positive, Linux TLS, general production and activation acceptance remain separate. See [cutover evidence](full-rust-cutover.md#tls-evaluation-qualification).
 
 ## Package and corresponding source
 
@@ -83,6 +98,6 @@ The packer builds `dist/obs-studio-native.mcpb` for its host. Node and the MCPB 
 
 The bundle layout retains corresponding Rust source, checked native assets, protocol metadata, manifests, lockfiles, pinned toolchain files and required local path-crate source at their relative Cargo paths. Target directories and Cargo caches are excluded. Build inputs, executable and extracted artifact must refer to the same checked candidate.
 
-GPL-2.0-only, authorship and dependency notices remain intact. Extraction must exercise the executable with Node unavailable, both MCP eras, applicable profiles/transports and joined cleanup. The observed macOS candidate passed three package checks, including a real localhost self-helper connection with a Node trap. Its 7.8 MB executable and 4.9 MB archive are identified in [cutover status](full-rust-cutover.md).
+GPL-2.0-only, authorship and dependency notices remain intact. Extraction must exercise the executable with Node unavailable, both MCP eras, applicable profiles/transports and joined cleanup. The observed macOS candidate passed three package checks, including a real localhost self-helper connection with a Node trap. Its exact executable and pre-document-refresh archive are identified separately from the TLS evaluation in [cutover status](full-rust-cutover.md).
 
-That extracted executable also completed the authorized Mac Capture/Clip/recovery and manual-Restore journey. A 2.837-second silent two-state fixture clip passed strict decoding and sampled-content checks; screenshots/contact sheet were reviewed. Original, restored and post-cleanup state snapshots matched exactly, and owned helpers stopped. A fresh snapshot-list process made zero OBS TCP connections. These observations belong to that artifact and one Mac setup; they do not qualify Linux, production TLS, color fidelity or client activation. Repeat the relevant checks when changing an artifact or target.
+The extracted core executable completed the authorized Mac Capture/Clip/recovery and manual-Restore journey. Its 2.837-second silent clip passed strict decoding, sampled content and exact presented-frame cadence checks; screenshots/contact sheet were reviewed. Original, restored and final snapshots were byte-identical, all owned helpers stopped, and a fresh snapshot-list process made zero OBS TCP connections. These observations belong to that core artifact and Mac setup. Linux exact-window capture, general production TLS, color fidelity and installed-client activation retain the limits in [cutover status](full-rust-cutover.md).

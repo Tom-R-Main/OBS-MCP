@@ -8,6 +8,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const nativeRoot = fileURLToPath(new URL('../native/', import.meta.url));
 const cache = fileURLToPath(new URL('../native/.cargo-home', import.meta.url));
 const env = {...process.env, RUSTUP_AUTO_INSTALL:'0', ...(existsSync(cache)?{CARGO_HOME:cache}:{})};
+// This gate intentionally qualifies default artifacts; feature-on qualification
+// must pin its own application/probe pair instead of silently mixing profiles.
+if(process.env.OBS_MCP_NATIVE_BUILD_FEATURES)throw new Error('native:check qualifies default builds only; feature-on builds require separate qualification');
 const commands = [
   ['node',['scripts/check-native-licenses.mjs']],
   // Development Source oracle preparation is separate from native compilation.
@@ -18,6 +21,7 @@ const commands = [
   ['cargo',['test','--locked','--offline']],
   ['cargo',['clippy','--locked','--offline','--all-targets','--all-features','--','-D','warnings']],
   ['cargo',['test','--locked','--offline','--all-features','--lib','--bins']],
+  ['cargo',['test','--locked','--offline','--features','platform-tls-evaluation','--test','tls_ca_contract']],
   ['cargo',['test','--locked','--offline','--features','resolver-fixture','--test','resolver_owner_contract']],
   // Path dependencies are not workspace members: root tests do not execute
   // their unit controls. Select only the applicable platform TLS backend.
