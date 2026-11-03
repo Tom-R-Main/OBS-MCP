@@ -91,15 +91,26 @@ for(const lines of[
 ])it(`raw framing conflict refuses before Bridge/OBS: ${lines.join(';')}`,async()=>{const n=await native();const response=await raw(n.port,['POST /mcp HTTP/1.1','Host: localhost',...lines,'Connection: close','','0\r\n\r\n'].join('\r\n'));expect(response).toMatch(/^HTTP\/1.1 400/);expect((await n.stats()).bridgeOpens).toBe(0);expect(n.fake.connectionCount).toBe(0);});
 it('partial headers consume the original accept-time deadline and join without effect',async()=>{const n=await native(false,100);const response=await raw(n.port,'POST /mcp HTTP/1.1\r\nHost:');expect(response).toBe('');expect((await n.stats()).bridgeOpens).toBe(0);expect(n.fake.connectionCount).toBe(0);await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(0));});
 
-it('actual SDK abort closes HTTP observation but retains the same Stop ACK and durable receipt',async()=>{
+for(const idleHeader of[false,true])it(`actual SDK abort closes HTTP observation but retains the same Stop ACK and durable receipt (idle header: ${idleHeader})`,async()=>{
  const n=await native();n.fake.queueSuccess('StopRecord',{outputPath:'/fixture/clip.mkv'},60000);const c=await client(n.url,false);const abort=new AbortController();
+ const idle=idleHeader?net.connect({host:'127.0.0.1',port:n.port}):undefined;
+ const idleClosed=idle?new Promise<void>(resolve=>idle.once('close',()=>resolve())):Promise.resolve();
+ let idleDriver:DriverState|undefined;
+ if(idle){idle.on('error',()=>{});await once(idle,'connect');await vi.waitFor(async()=>{idleDriver=driverStates(await n.stats()).find(row=>row.peerPort===idle.localPort);expect(idleDriver?.phase).toBe('headers');});}
+ try{
  const work=c.callTool({name:'obs-stop-record',arguments:{}},{signal:abort.signal}).then(value=>({value}),error=>({error:String(error)}));
- const held=await n.fake.waitForRequest('StopRecord');abort.abort();expect(await work).toHaveProperty('error');await vi.waitFor(async()=>expect(Number((await n.stats()).drivers)).toBe(0));
+ const held=await n.fake.waitForRequest('StopRecord');const requestDriver=await singleHttpDriver(n);abort.abort();expect(await work).toHaveProperty('error');
+ // A fetch pool may retain independent pre-head readers. Check the exact
+ // cancelled request owner rather than treating every TCP socket as that owner.
+ await vi.waitFor(async()=>expect(driverStates(await n.stats()).some(row=>row.id===requestDriver.id)).toBe(false));
+ if(idle){expect(driverStates(await n.stats())).toContainEqual(idleDriver);expect(idle.destroyed).toBe(false);}
  const receipts=()=>readdirSync(join(n.state,'operation-receipts')).map(name=>JSON.parse(readFileSync(join(n.state,'operation-receipts',name),'utf8'))as Row);
  expect(receipts()[0]).toMatchObject({phase:'dispatching'});
  n.fake.sendRaw({op:7,d:{requestId:held.frame.d.requestId,requestType:'StopRecord',requestStatus:{result:true,code:100},responseData:{outputPath:'/fixture/clip.mkv'}}},held.connectionId);
  await vi.waitFor(()=>expect(receipts()[0]).toMatchObject({phase:'accepted',requestAccepted:true,postconditionObserved:false}));
  expect(n.fake.history().filter(row=>row.frame.op===6&&row.frame.d.requestType==='StopRecord')).toHaveLength(1);
+ }finally{idle?.destroy();await idleClosed;}
+ if(idleDriver)await vi.waitFor(async()=>expect(driverStates(await n.stats()).some(row=>row.id===idleDriver!.id)).toBe(false));
 });
 it('actual TCP32 ordinary timers cannot consume either typed global Stop lane',async()=>{
  const n=await native(false,5000,true),c=await client(n.url,false);expect((await c.callTool({name:'obs-take-start',arguments:{expectSilent:false,maxDurationSeconds:30}})).isError).not.toBe(true);expect(n.recording()).toBe(true);
