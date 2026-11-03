@@ -691,9 +691,10 @@ pub fn qualified_audio_tracks(info: &MediaProbe) -> Result<&[AudioTrack], TrimEr
         }
         defaults += usize::from(dispositions.get("default") == Some(&1));
     }
-    if defaults != 1 {
+    // OBS marks every recorded track default; the export copies each flag.
+    if defaults == 0 {
         return Err(evidence(
-            "Multitrack MP4 trim requires exactly one default audio track",
+            "Multitrack MP4 trim requires at least one default audio track",
         ));
     }
     Ok(&info.audio_tracks)
