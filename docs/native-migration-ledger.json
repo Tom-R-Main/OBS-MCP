@@ -564,8 +564,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-03T10:44:32.877Z",
-    "sourceRevision": "c4133082a9aedd8a5474616293735ce6485213f4",
+    "at": "2026-11-03T17:22:40.905Z",
+    "sourceRevision": "ca6e8b1b632c0ecfed61092df56f1eb52654b689",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -806,7 +806,7 @@
       "native/tests/media_backend_contract.rs": "3d86b021018f5828832548a9f3808a9c288e830c1b0861af5ad315f6fdc2677d",
       "native/tests/media_capture_contract.rs": "ceb4f8343d49e5fdd599a4efe72c96ce3aa5330d637d5c92d8bf2a2a4afef6f2",
       "native/tests/media_tools_contract.rs": "547cbb7107c192388f47b91b78b908ac1dd5ad2428b5189e3b4b25a86b38025e",
-      "native/tests/media_verification_contract.rs": "409b0b4549c5876582e7bf594bd507b105a3f0331bfd064e59aa4c7a2705cba1",
+      "native/tests/media_verification_contract.rs": "7a7f885969f8e0f776000048d931b485e63ad06918552ad9e31cd6a23e595659",
       "native/tests/operation_store_contract.rs": "feb74857385ec4b796ad60a4800bc29891832249748cc6de05728bcce8b64cf5",
       "native/tests/operation_view_contract.rs": "8d46543eb70096aaa6df2b185b23654b1d2fecbf9becbd9b50dc27d5ca46a176",
       "native/tests/ordered_transform_contract.rs": "9bb8b212cca09772cf46b093cca64c07dc895a855213fb86291bc12c9c804c52",
