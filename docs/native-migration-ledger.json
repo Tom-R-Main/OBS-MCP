@@ -559,8 +559,8 @@
     "obs-trim-take": "native-service"
   },
   "sealed": {
-    "at": "2026-11-03T03:03:04.699Z",
-    "sourceRevision": "54be10ed05f14321c672f635eacbd1a97efbe2e5",
+    "at": "2026-11-03T03:15:51.203Z",
+    "sourceRevision": "aa3b525cbfb5bf7dfda3cd2af9c8284e25f21dd2",
     "sourceHashes": {
       "src/client.test.ts": "dce846d11d46edcf1d754de3dd64a7d06e051142649786f3abbff08c46bfbce8",
       "src/client.ts": "43fa25b9e9bbae89cc7058c4189a7a0eb2bd783b929de6e1bf619f7b65d76494",
@@ -660,8 +660,8 @@
       "native/crates/platform-tls/build.rs": "bc4adfe0ef8bdf1bb3c2b9069e70f586a9709fcf92b0b605e77a02eec929a362",
       "native/crates/platform-tls/rust-toolchain.toml": "28ba63ba51f7635afd6b0663f2613a1037ab602a039a889e991b1164b84d4714",
       "native/crates/platform-tls/src/ffi.rs": "b62aaa6f1f9049ba39d73c1a96b838ade65ff8c5d1c2d70a4d3c812a60268dd6",
-      "native/crates/platform-tls/src/gnutls.rs": "a2350c11da514c75928b75c538d9b50e14a4974105aeabe4bd10fc98cb178e6f",
-      "native/crates/platform-tls/src/gnutls_core.rs": "1379b335ec139d9eb832cceaee6e3c24c39a4e044bff6563761a315d8395ac85",
+      "native/crates/platform-tls/src/gnutls.rs": "b3db03147e3f9ac43b67d796424b7e91c8fb6219480d739fa47f757e7cf61cc0",
+      "native/crates/platform-tls/src/gnutls_core.rs": "e55532313f49ff81e6eed39c950c661a9aafd710d633cb49f1e96d2e5ade7dfd",
       "native/crates/platform-tls/src/gnutls_ffi.rs": "b435c1d9cb0ac9830748976c3bb8141690d626f7351b84bb8765b2936e38ccbc",
       "native/crates/platform-tls/src/lib.rs": "48a3a51fd5ba852550d9d0bbab24e18ba47da10421dce69c47a31dd073d148a2",
       "native/crates/platform-tls/src/macos.rs": "4ff49b83990f15d26f8398792d41b4617e7616050e04bf8e309c4ec7cb159d4e",
@@ -844,7 +844,7 @@
       "native/tests/take_transport_contract.rs": "b2ea3a4c65484b6db1df08bcde33e5058331676737c5d648a3fc0b3cde2fa516",
       "native/tests/takes_contract.rs": "b6246862905b3190b1fe9e15ff6c54f312f5c2dfa42581fc78b33cbeacdcf73a",
       "native/tests/timeline5_contract.rs": "3d512f09ffc6dec6a1499c369c010c5203ad693d56d9f23f2adcb37127e0f5fc",
-      "native/tests/tls_ca_contract.rs": "b5e7bcd9b4769987a66e8e86a9ab1e47fe701656d7f0188d4a198e2f0d8cc178",
+      "native/tests/tls_ca_contract.rs": "850fb43565362ebf0202c118b9f938b11bf40ef0f3ced30e6efaaff399b98e7b",
       "native/tests/tool_validation_contract.rs": "1067a6f7b162e3feff493aa89aa480dfda8f9900e4d364803135fb51fd11fd88",
       "native/tests/transform_receipt_contract.rs": "ded09b7806ce29c841986527d9897154aae3cdb71da30d6311bcc0f331ac7002",
       "native/tests/trim_contract.rs": "3eee236b60fa42b319dcd01df536b0d0188817215fdf159e7c6e6f72facae27a",

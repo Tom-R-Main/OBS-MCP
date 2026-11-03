@@ -104,6 +104,11 @@ struct SendBuffer {
     offset: usize,
     retry: Option<(usize, usize)>,
 }
+enum Trust<'a> {
+    System(Option<&'a crate::AdditionalRoots>),
+    #[cfg(feature = "gnutls-synthetic-probe")]
+    Fixture(&'a [u8]),
+}
 impl SendBuffer {
     fn remaining(&self) -> &[u8] {
         &self.bytes[self.offset..]
@@ -147,8 +152,17 @@ impl Stream {
         deadline: Instant,
         cancel: Arc<AtomicBool>,
         monitor: Monitor,
+        additional_roots: Option<&crate::AdditionalRoots>,
     ) -> io::Result<Self> {
-        Self::new_inner(socket, expected, version, deadline, cancel, monitor, None)
+        Self::new_inner(
+            socket,
+            expected,
+            version,
+            deadline,
+            cancel,
+            monitor,
+            Trust::System(additional_roots),
+        )
     }
 
     #[cfg(feature = "gnutls-synthetic-probe")]
@@ -168,7 +182,7 @@ impl Stream {
             deadline,
             cancel,
             monitor,
-            Some(anchor),
+            Trust::Fixture(anchor),
         )
     }
 
@@ -179,7 +193,7 @@ impl Stream {
         deadline: Instant,
         cancel: Arc<AtomicBool>,
         monitor: Monitor,
-        anchor: Option<&[u8]>,
+        trust: Trust<'_>,
     ) -> io::Result<Self> {
         if expected.is_empty() || expected.len() > 253 || !expected.is_ascii() {
             return Err(io::Error::new(
@@ -237,9 +251,16 @@ impl Stream {
         // SAFETY: exclusive out-pointer, initialized to null and owned by this RAII object.
         checked(unsafe { ffi::gnutls_certificate_allocate_credentials(&mut this.credentials) })?;
         this.monitor.0.credentials.fetch_add(1, Ordering::SeqCst);
-        let loaded = if let Some(anchor) = anchor {
+        let (loaded, additional_roots) = match trust {
+            Trust::System(roots) => {
+                // SAFETY: valid exclusively owned credentials; no global trust mutation.
+                (
+                    unsafe { ffi::gnutls_certificate_set_x509_system_trust(this.credentials) },
+                    roots,
+                )
+            }
             #[cfg(feature = "gnutls-synthetic-probe")]
-            {
+            Trust::Fixture(anchor) => {
                 let size = u32::try_from(anchor.len())
                     .map_err(|_| io::Error::other("anchor too large"))?;
                 let datum = ffi::Datum {
@@ -247,21 +268,21 @@ impl Stream {
                     size,
                 };
                 // SAFETY: GnuTLS parses/copies the PEM datum before returning; credentials own parsed CAs.
-                unsafe { ffi::gnutls_certificate_set_x509_trust_mem(this.credentials, &datum, 1) }
+                (
+                    unsafe {
+                        ffi::gnutls_certificate_set_x509_trust_mem(this.credentials, &datum, 1)
+                    },
+                    None,
+                )
             }
-            #[cfg(not(feature = "gnutls-synthetic-probe"))]
-            {
-                let _ = anchor;
-                return Err(io::Error::other("synthetic anchors excluded"));
-            }
-        } else {
-            // SAFETY: valid exclusively owned credentials; no global trust mutation.
-            unsafe { ffi::gnutls_certificate_set_x509_system_trust(this.credentials) }
         };
         if loaded < 0 {
             return Err(native_error(loaded, 0));
         }
-        if loaded == 0 {
+        if let Some(roots) = additional_roots {
+            this = this.with_additional_roots(roots)?;
+        }
+        if loaded == 0 && this.additional_roots.is_none() {
             return Err(io::Error::other("no trust anchors loaded"));
         }
         // SAFETY: exclusive out-pointer, nonblocking client; no early data, auto-reauth or resumption API.
@@ -681,6 +702,7 @@ mod tests {
             Instant::now() + std::time::Duration::from_secs(3),
             cancel.clone(),
             monitor.clone(),
+            None,
         )
         .unwrap();
         assert_eq!(&monitor.snapshot()[..3], &[1, 1, 1]);

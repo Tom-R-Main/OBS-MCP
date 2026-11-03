@@ -339,7 +339,7 @@ impl Supervisor {
             let native = if let Some(anchor) = anchor {
                 #[cfg(feature = "gnutls-synthetic-probe")]
                 {
-                    core::Stream::synthetic(
+                    let native = core::Stream::synthetic(
                         socket,
                         &expected,
                         version,
@@ -347,7 +347,12 @@ impl Supervisor {
                         job_cancel,
                         job_monitor,
                         &anchor,
-                    )?
+                    )?;
+                    if let Some(roots) = additional_roots.as_ref() {
+                        native.with_additional_roots(roots)?
+                    } else {
+                        native
+                    }
                 }
                 #[cfg(not(feature = "gnutls-synthetic-probe"))]
                 {
@@ -362,12 +367,8 @@ impl Supervisor {
                     deadline,
                     job_cancel,
                     job_monitor,
+                    additional_roots.as_ref(),
                 )?
-            };
-            let native = if let Some(roots) = additional_roots {
-                native.with_additional_roots(&roots)?
-            } else {
-                native
             };
             Ok(SendCore(native))
         });

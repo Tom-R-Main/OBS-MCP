@@ -278,11 +278,10 @@ async fn one_original_deadline_covers_tls_upgrade_identify_and_join() {
     }
 }
 
-#[tokio::test]
-async fn configured_ca_reaches_real_native_mcp_service_and_invalid_setting_refuses() {
+async fn configured_ca_mcp_read(empty_system_store: bool, additional_ca: bool) {
     let fixture = Fixture::start("valid13").await;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_obs-mcp-native"))
-        .env("OBS_MCP_TLS_CA_FILE", &fixture.ca)
+    let mut command = Command::new(env!("CARGO_BIN_EXE_obs-mcp-native"));
+    command
         .env("OBS_WEBSOCKET_URL", fixture.url(false))
         .env("OBS_WEBSOCKET_PASSWORD", "non-user-fixture-password")
         .env("OBS_MCP_READ_OBS_CONFIG", "0")
@@ -294,12 +293,42 @@ async fn configured_ca_reaches_real_native_mcp_service_and_invalid_setting_refus
         .env("OBS_MCP_READ_ONLY", "1")
         .env_remove("OBS_MCP_NATIVE_RECORDING_ROOT")
         .env_remove("OBS_MCP_FORCE_COMPAT")
+        .env_remove("OBS_MCP_TLS_CA_FILE")
+        .env_remove("LD_PRELOAD")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
+        .kill_on_drop(true);
+    if additional_ca {
+        command.env("OBS_MCP_TLS_CA_FILE", &fixture.ca);
+    }
+    #[cfg(target_os = "linux")]
+    if empty_system_store {
+        let shim = fixture.ca.parent().unwrap().join("empty-system-trust.so");
+        let compiled = timeout(
+            WAIT,
+            Command::new("cc")
+                .args(["-shared", "-fPIC", "-Wall", "-Wextra", "-Werror", "-o"])
+                .arg(&shim)
+                .arg(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("tests/support/empty_system_trust.c"),
+                )
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .unwrap()
         .unwrap();
+        if !compiled.status.success() {
+            fixture.finish().await;
+            panic!("could not compile the child-local empty-store fixture");
+        }
+        command.env("LD_PRELOAD", shim);
+    }
+    #[cfg(not(target_os = "linux"))]
+    assert!(!empty_system_store);
+    let mut child = command.spawn().unwrap();
     let mut input = child.stdin.take().unwrap();
     let mut output = BufReader::new(child.stdout.take().unwrap()).lines();
     for message in [
@@ -329,10 +358,29 @@ async fn configured_ca_reaches_real_native_mcp_service_and_invalid_setting_refus
     assert!(status.unwrap().unwrap().success());
     let response = response.unwrap();
     assert!(response.get("error").is_none(), "{response}");
-    assert_ne!(response["result"]["isError"], true, "{response}");
     assert_eq!(facts["accepted"], 1);
-    assert_eq!(facts["authenticated"], 1);
-    assert!(facts["reads"].as_u64().unwrap() >= 1);
+    if additional_ca {
+        assert_ne!(response["result"]["isError"], true, "{response}");
+        assert_eq!(facts["authenticated"], 1);
+        assert!(facts["reads"].as_u64().unwrap() >= 1);
+    } else {
+        assert_eq!(response["result"]["isError"], true, "{response}");
+        for field in ["upgrades", "identifies", "authenticated", "reads"] {
+            assert_eq!(facts[field], 0, "{facts}");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn empty_system_store_admits_only_an_explicit_valid_additional_ca() {
+    configured_ca_mcp_read(true, true).await;
+    configured_ca_mcp_read(true, false).await;
+}
+
+#[tokio::test]
+async fn configured_ca_reaches_real_native_mcp_service_and_invalid_setting_refuses() {
+    configured_ca_mcp_read(false, true).await;
     let output = Command::new(env!("CARGO_BIN_EXE_obs-mcp-native"))
         .env("OBS_MCP_TLS_CA_FILE", "/invalid-additional-ca-do-not-read")
         .stdin(Stdio::null())
