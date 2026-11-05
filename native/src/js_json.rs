@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Finite numeric projection and bounded Source-number JSON encoding.
 //! This does not recover raw decimal parsing, property insertion order, lone
 //! surrogates or overflow already refused by the surrounding JSON parser.

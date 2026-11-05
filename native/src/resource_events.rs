@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded session notification lifetime. Publishers retain no OBS frame,
 //! socket, Service, Take, journal, or stdout ownership.
 use serde_json::{Value, json};

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded first-terminal projections from the existing sole event observer.
 //! No socket, event consumer, task, RPC or mutation authority is created here.
 //! The byte pool charges owned UTF-8 path copies, including consumed events.

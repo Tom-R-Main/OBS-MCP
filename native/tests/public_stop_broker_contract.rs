@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed public Stop live-loan exclusions never remove durable uncertainty.
 use obs_mcp_native::{
     operation_store::{

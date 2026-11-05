@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Approved-root replay snapshots. Decoders inspect only an exclusive private
 //! copy; the named source and its bytes are checked again before publication.
 use crate::media_verification::{self, LocalMediaInput, ProcessOptions, local_media_input_options};

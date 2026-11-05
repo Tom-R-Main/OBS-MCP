@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Same-physical-session transport for restricted demo preparation/recovery.
 //! The service owns this adapter and its admitted future until settled. It
 //! creates no socket, observer task, filesystem writer, or retry authority.

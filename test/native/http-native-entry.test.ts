@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 // Actual default executable + mature HTTP stack. This is separate from the
 // retained in-memory SDK probe and lower-level TCP framing/lifetime controls.
 import { afterEach, expect, it, vi } from 'vitest';

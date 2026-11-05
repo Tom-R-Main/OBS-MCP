@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Transport selection without exposing configured values in diagnostics.
 use std::{ffi::OsString, io};
 

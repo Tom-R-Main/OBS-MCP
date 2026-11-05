@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Socket-scoped identities. Exhaustion retires the allocator rather than wrapping.
 use std::{fmt, num::NonZeroU64};
 

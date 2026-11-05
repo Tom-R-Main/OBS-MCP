@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Library metadata against actual frozen Source controllers. No public mode.
 #[path = "support/output_start_three.rs"]
 mod support;

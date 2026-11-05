@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real native TLS and OBS-protocol authentication with generated certificate-only
 //! configuration. This is a fixture, not a live OBS/platform release admission.
 #![cfg(feature = "platform-tls-evaluation")]

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed input mutations with Source-compatible, read-only follow-up evidence.
 //! The enclosing retained job owns dispatch and durable receipt settlement.
 //! This module cannot send a mutation or publish or promote a receipt.

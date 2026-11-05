@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 #[path = "support/output_start_three.rs"]
 mod support;
 use obs_mcp_native::{

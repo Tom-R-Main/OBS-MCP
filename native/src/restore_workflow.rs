@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Source-shaped manual Restore workflow. Its legacy name/item-ID plan is not
 //! guarded recovery, recording ownership, a rendered result or replay authority.
 use crate::{

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Injected-observation port of `src/tools/take-monitor.ts`.
 //!
 //! This owner neither starts nor stops recording. Its caller owns the take's

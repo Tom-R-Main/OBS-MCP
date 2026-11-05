@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Exchange owner shared by the mature TCP driver and in-memory controls.
 //! TCP parsing, framing, bounded I/O and joins belong to the transport.
 #[path = "http_resources.rs"]

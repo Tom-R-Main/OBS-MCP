@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual Service ownership; fake OBS and host/media, no public MCP admission.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

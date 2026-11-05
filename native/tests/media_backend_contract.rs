@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::{
     media_backend::{Bounds, SystemMedia},
     media_verification::{self, Cancellation, ProcessOptions},

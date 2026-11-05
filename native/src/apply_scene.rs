@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pure Source-shaped Apply Scene planning and formatting. These owned values
 //! hold no socket, writer, receipt, replay, recovery or recording authority.
 use crate::{

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One retained writer. Admission, enqueue and local flush are distinct facts.
 //! Cancellation of a completion waiter cannot cancel or replay owned pipe I/O.
 use serde_json::Value;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use std::{collections::HashMap, sync::OnceLock};
 
 use serde_json::{Value, json};

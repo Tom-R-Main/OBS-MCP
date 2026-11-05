@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Service-private retained Capture composition. Closed domain descriptions are
 //! not authority: every send rechecks the original policy, deadline, Session,
 //! observation revision and sole receipt scope. Admitted I/O is always joined.

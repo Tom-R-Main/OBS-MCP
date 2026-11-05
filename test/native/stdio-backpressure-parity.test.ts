@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 // Root-authorized bounded raw-stdio regression; fake OBS only.
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

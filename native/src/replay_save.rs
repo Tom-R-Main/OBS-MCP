@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One retained save attempt. Transport fate and file evidence remain separate.
 //! OBS save events carry no request ID; even a verified file is not attributed
 //! exclusively to this request, and no failure authorizes replay.

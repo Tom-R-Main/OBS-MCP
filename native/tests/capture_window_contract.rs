@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual approved compiled Source MCP/fake-OBS fixtures, not a second model.
 //! These pure values neither connect OBS nor establish execution authority.
 use obs_mcp_native::{

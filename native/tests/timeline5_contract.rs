@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Consumer declarations for the closed timeline tranche; run after admission.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

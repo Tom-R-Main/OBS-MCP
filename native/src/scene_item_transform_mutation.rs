@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed transform projection and read-only follow-up. The enclosing owner
 //! alone dispatches the mutation and durably records its fate before finish.
 //! Transport text permits do not cover callback or frontend output copies.

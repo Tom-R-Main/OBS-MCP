@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Isolated take supervisor, not an MCP registration or a second OBS service.
 //!
 //! The service arbiter lends its sole journal writer and an exact connection.

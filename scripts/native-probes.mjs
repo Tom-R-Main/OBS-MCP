@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Development-only executable custody for native public tests. Never a runtime dependency.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

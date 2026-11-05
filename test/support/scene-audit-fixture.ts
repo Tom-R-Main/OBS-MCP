@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { FakeOBSRequestError, type FakeOBSServer } from "./fake-obs-server.js";
 
 /** A fully observed flat scene. It is deliberately independent of demo preparation. */

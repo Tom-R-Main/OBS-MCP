@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Take I/O bound to one externally owned physical OBS session. This adapter
 //! owns no socket, event consumer, journal writer or spawned worker. Retain its
 //! returned futures in the take supervisor through cancellation and cleanup.

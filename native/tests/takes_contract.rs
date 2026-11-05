@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Injected-owner qualification. The binding socket is real; effect/file seams
 //! are explicit fakes. This does not qualify native/live OBS recording.
 use futures_util::{SinkExt, StreamExt};

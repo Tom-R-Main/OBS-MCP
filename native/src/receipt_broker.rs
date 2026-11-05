@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One synchronous receipt writer, shared only through bounded typed scopes.
 //! Guards never cross an OBS await. Dropping a port ends publication rights;
 //! callers retain each port until its effect and cleanup have actually settled.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Retained library execution for the deferred manual StopRecord callback.
 //!
 //! No tool, Service queue, frontend or observer is created. The eventual owner

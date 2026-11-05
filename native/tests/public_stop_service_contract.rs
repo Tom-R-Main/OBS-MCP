@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real one-socket Service ownership, live custody, bounded queues and joins.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Independent consumer tests of receipt custody. These do not dispatch OBS RPCs
 //! or prove that a receipt grants authority to replay a setter or stop recording.
 use obs_mcp_native::{

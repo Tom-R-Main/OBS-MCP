@@ -1,7 +1,7 @@
 /*
  * Modified for the independent OBS MCP project in August 2026.
  * See NOTICE.md and Git history for authorship and change dates.
- * SPDX-License-Identifier: GPL-2.0-only
+ * SPDX-License-Identifier: MIT
  */
 import { EventEmitter } from "node:events";
 import { writeFile } from "node:fs/promises";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Opt-in OBS authentication configuration. Secrets have no serialization or
 //! value-bearing Debug implementation. Unsupported reads select compatibility.
 use serde_json::Value;

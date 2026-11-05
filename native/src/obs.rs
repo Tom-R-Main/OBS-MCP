@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Exclusive, bounded read-only OBS v5 session. No events, mutation or replay.
 use crate::identity::{Generation, IdentityClock, RequestIdentity};
 use base64::{Engine as _, engine::general_purpose::STANDARD};

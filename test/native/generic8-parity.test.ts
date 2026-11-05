@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { expectNativeInventory } from '../support/native-inventory.js';
 import { NATIVE_STATEFUL_DEFERRED_TOOL_NAMES } from '../support/tool-count.js';
 import { execFileSync } from 'node:child_process';

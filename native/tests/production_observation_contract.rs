@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Full actual SDK tool/resource reports and ordered traces, frozen dates only.
 use obs_mcp_native::{
     clock,

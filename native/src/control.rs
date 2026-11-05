@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Control policy for one OBS domain. Decisions are observations, never reusable dispatch permits.
 
 use serde::Serialize;

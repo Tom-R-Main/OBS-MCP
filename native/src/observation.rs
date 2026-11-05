@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded, read-only evidence ownership. The provider must advance revision
 //! for invalidating events and publish disconnect/cancellation before reuse.
 use serde::{Deserialize, Serialize};

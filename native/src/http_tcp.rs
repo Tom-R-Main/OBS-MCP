@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Mature HTTP/1 transport around the retained Bridge and Ingress owners.
 //! One exchange per connection; response departure never owns OBS lifetime.
 #[path = "http_tcp_head.rs"]

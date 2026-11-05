@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // A reviewed-inventory gate, not a general SPDX parser or a legal opinion.
 import { spawnSync } from "node:child_process";
 import { existsSync, statSync, lstatSync, realpathSync } from "node:fs";
@@ -43,9 +43,9 @@ export const reviewedNativePackages = new Map([
   ["mio@1.2.4", "MIT"],
   ["objc2@0.6.5", "MIT"],
   ["objc2-encode@4.1.0", "MIT"],
-  ["obs-mcp-native@1.1.1", "GPL-2.0-only"],
-  ["obs-mcp-platform-tls-qualification@0.0.0", "GPL-2.0-only"],
-  ["obs-mcp-resolver-qualification@0.0.0", "GPL-2.0-only"],
+  ["obs-mcp-native@1.1.1", "MIT"],
+  ["obs-mcp-platform-tls-qualification@0.0.0", "MIT"],
+  ["obs-mcp-resolver-qualification@0.0.0", "MIT"],
   ["pin-project-lite@0.2.17", "Apache-2.0 OR MIT"],
   ["ppv-lite86@0.2.21", "MIT OR Apache-2.0"],
   ["proc-macro2@1.0.107", "MIT OR Apache-2.0"],
@@ -175,9 +175,9 @@ export function auditNativeLicenses({ metadata, activeMetadata, target, reviewed
     }
     else if (isRoot) reason = "unreviewed root package identity";
     else if (pkg.source !== CRATES_IO) reason = "unreviewed package source";
-    else if (expression === "GPL-2.0-only") reason = "project license is admitted only for the exact root and two canonical private path crates";
+    else if (/\bA?GPL\b/.test(expression) && !choices.has(expression)) reason = "copyleft terms are not admitted in the MIT distribution";
     else if (choices.has(expression)) choice = choices.get(expression);
-    else reason = "no reviewed GPL-2.0-only-compatible choice; Apache-only/conjunctive/unknown terms fail closed";
+    else reason = "no reviewed MIT-distribution choice; Apache-only/conjunctive/unknown terms fail closed";
     const entry = { package: key, expression: expression ?? null, choice, active: activeIds.has(pkg.id),
       scope: activeIds.has(pkg.id) ? "default-active-host-projection" : "outside-default-host-projection", ...(reason ? { reason } : {}) };
     packages.push(entry);

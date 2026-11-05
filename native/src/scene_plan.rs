@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Portable flat layout resolution. This owner can only read; it has no
 //! mutation, snapshot or persistence interface.
 use crate::observation::{

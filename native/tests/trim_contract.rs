@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::{
     media_backend::{qualified_encode_args, qualified_probe_args},
     media_verification::{LocalMediaInput, local_media_input_options},

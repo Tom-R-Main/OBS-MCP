@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {mkdirSync,mkdtempSync,realpathSync,rmSync,readFileSync,readdirSync,writeFileSync,appendFileSync} from 'node:fs';

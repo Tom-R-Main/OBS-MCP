@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real socket/sole-bridge prototype controls, not exposed output tool parity.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

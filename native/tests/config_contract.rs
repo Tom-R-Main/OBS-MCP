@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::config::{self, Platform, Unsupported};
 use serde_json::{Value, json};
 use std::{

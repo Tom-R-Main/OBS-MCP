@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed retained manual-Restore batch custody. No public route, socket,
 //! observer task, recording-impact ticket, file authority or Stop right exists
 //! here. The composing Service must retain this owner and finish its one pending

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 // One-shot immutable predecessor counterexample. Product integration coverage is
 // owned elsewhere; run explicitly with RECEIPT_POLICY_ARCHIVED_BINARY.
 import { createHash } from "node:crypto";

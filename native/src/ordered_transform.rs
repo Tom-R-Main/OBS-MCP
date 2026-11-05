@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! A fixed transform-read projection. Pools charge owned raw/canonical strings,
 //! not Value allocations, caller copies, tool bodies, frontend output or RSS.
 use crate::{observation::js_string, session::RequestError};

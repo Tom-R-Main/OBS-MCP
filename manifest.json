@@ -17,7 +17,7 @@
   "homepage": "https://github.com/Tom-R-Main/OBS-MCP",
   "documentation": "https://github.com/Tom-R-Main/OBS-MCP#readme",
   "support": "https://github.com/Tom-R-Main/OBS-MCP/issues",
-  "license": "GPL-2.0-only",
+  "license": "MIT",
   "tools_generated": true,
   "keywords": [
     "obs",

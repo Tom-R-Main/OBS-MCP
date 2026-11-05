@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed literal setters. Validation and callback formatting follow the actual
 //! Source registrations; receipt acceptance never establishes a postcondition.
 use crate::{

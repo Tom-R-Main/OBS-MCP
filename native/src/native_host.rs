@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One server lifetime, independent of any transport or client wire id.
 //! This owner adds no command queue and never restamps Service admission.
 use super::*;

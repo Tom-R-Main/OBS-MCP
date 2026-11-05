@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Additive helper composition controls; no Service or public Start admission.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

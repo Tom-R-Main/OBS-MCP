@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Owned recording-media operations, without MCP routing or an OBS socket.
 //! The service retains Operation through finish and cleanup. Dropping a frontend
 //! finish await preserves every admitted provider/media future in this owner.

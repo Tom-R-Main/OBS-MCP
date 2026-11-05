@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Persistent composition of the physical transport, observation owner and sole
 //! receipt writer. Frontend futures own replies, never production jobs. No MCP
 //! routes are registered here. Dropping Service is emergency invalidation, not

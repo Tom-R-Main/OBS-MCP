@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Admission and response context for the qualified native wire surface.
 //! Unsupported semantics transfer the whole session to the SDK, never an
 //! individual stateful call. A session cannot change eras while native-owned.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::tool_validation::{ProjectionUnavailable, tool_error};
 use serde_json::{Value, json};
 use std::{

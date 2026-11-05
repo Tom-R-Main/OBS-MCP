@@ -1,7 +1,7 @@
 /*
  * Modified for the independent OBS MCP project in August 2026.
  * See NOTICE.md and Git history for authorship and change dates.
- * SPDX-License-Identifier: GPL-2.0-only
+ * SPDX-License-Identifier: MIT
  */
 import { execFileSync } from "node:child_process";
 import { createReadStream, existsSync, mkdtempSync, readFileSync, readdirSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";

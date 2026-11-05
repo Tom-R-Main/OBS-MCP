@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Fixed read projection: actual Source OBS client and physical loopback frames.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

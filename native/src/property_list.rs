@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed, source-aware property enumeration on an existing physical session.
 //! The service retains this future until settlement; no task or socket is made.
 use crate::{

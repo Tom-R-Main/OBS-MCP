@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import type { McpServer, CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OBSWebSocketClient } from "../client.js";

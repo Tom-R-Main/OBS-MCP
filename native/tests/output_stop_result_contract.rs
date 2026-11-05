@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pure formatter evidence. No route, transport or receipt fate is admitted here.
 use obs_mcp_native::output_stop_result::{
     RECORD_TEXT_BYTES, named_ack, named_error, record_ack, record_error,

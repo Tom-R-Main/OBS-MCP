@@ -74,7 +74,7 @@ The [workflow qualification matrix](workflow-qualification.md) expands checks ac
 2. Complete the remaining TLS platform, trust and lifetime qualification before general production admission. The Mac evaluation does not establish Linux TLS acceptance.
 3. Bind each repacked archive and published head to its own source, artifact and CI evidence. Installed-client activation remains a separate step; prior archive hashes do not certify a changed package.
 
-GPL-2.0-only and attribution remain unchanged. These results establish no capture or encoding speed comparison.
+Attribution remains unchanged. (The project license later changed from GPL-2.0-only to MIT; see `../NOTICE.md`.) These results establish no capture or encoding speed comparison.
 
 ## Archived checkpoints
 

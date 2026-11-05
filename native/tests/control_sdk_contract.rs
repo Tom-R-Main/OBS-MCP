@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! The pinned SDK is a development oracle, never part of the native control owner.
 use obs_mcp_native::control::{ConfirmationAnswer, Disposition};
 use serde_json::Value;

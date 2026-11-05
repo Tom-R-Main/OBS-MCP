@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded response/event ownership, independent of TCP/HTTP framing.
 use super::Class;
 use futures_util::task::AtomicWaker;

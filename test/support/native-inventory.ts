@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { expect } from 'vitest';
 import { TOOL_COUNT, NATIVE_STATEFUL_TOOL_COUNT, NATIVE_STATEFUL_DEFERRED_TOOL_NAMES } from './tool-count.js';
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: MIT
 """Owned loopback peer. Generates only disposable fixture keys; never uses user credentials."""
 import base64, hashlib, json, os, pathlib, socket, ssl, struct, subprocess, sys, tempfile, threading, time
 mode=sys.argv[1]

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Restricted preparation/recovery. Only attempted mute/track/FIT fields are
 //! owned. Snapshot history and the private version1 recovery journal are distinct.
 //! `applied` on a partial report retains source attempt semantics, not acceptance.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Legacy manual snapshots. This is not demo's field-owned recovery protocol:
 //! a manual restore deliberately overwrites differing settings and matches
 //! items by scene name/item ID, without UUID or replacement proof. Never use

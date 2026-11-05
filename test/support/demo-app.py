@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: MIT
 """A stand-in product for the product-demo persona: a window that signs in,
 loads, shows a dashboard, sits idle, then exports a report.
 

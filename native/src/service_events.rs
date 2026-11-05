@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One bounded, non-copying take feed attached to the physical observation owner.
 //! A frame keeps the socket's existing byte/item permits until take application.
 //! Only the take actor may apply it; dropping an unapplied frame revokes the feed.

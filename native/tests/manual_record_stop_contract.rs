@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real socket/store library tests; no Service/frontend/manual tool admission.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

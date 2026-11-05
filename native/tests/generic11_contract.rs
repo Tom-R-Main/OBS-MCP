@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual pinned SDK callbacks versus one real Rust socket and scoped V2 owner.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

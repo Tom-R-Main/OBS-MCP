@@ -6,9 +6,9 @@ The project began with Roy Shilkrot's `royshil/obs-mcp` in March 2025 and includ
 
 Thomas Main began the independent modernization in August 2026. Modified source files carry a notice pointing here and to the Git history for authorship and change dates.
 
-The complete project is distributed under GPL-2.0-only. See `LICENSE` for the license terms. Previous Node packages include the corresponding TypeScript source and build scripts. Native packages carry corresponding Rust source and build inputs; the TypeScript development oracle remains in the repository.
+The project is distributed under the MIT License (see `LICENSE`) as of November 2026. Earlier releases were distributed under GPL-2.0-only. Roy Shilkrot, whose `royshil/obs-mcp` is the project's origin, agreed to license his contributions under MIT; his copyright notice is retained in `LICENSE`. Native packages carry the Rust source and build inputs; the TypeScript development oracle remains in the repository.
 
-The generated OBS protocol data is based on `obsproject/obs-websocket` commit `e28f84975984340e84fc4879cfc05741cc0afde1`, the revision pinned by the OBS Studio baseline documented in the README.
+The generated OBS protocol data is based on `obsproject/obs-websocket` commit `e28f84975984340e84fc4879cfc05741cc0afde1`, the revision pinned by the OBS Studio baseline documented in the README. That generated data (`docs/protocol.json`, `docs/protocol.md` and `docs/protocol_split/`) is kept separate from the MIT-licensed code and remains under obs-websocket's GPL-2.0 terms; the license text is at `licenses/obs-websocket/GPL-2.0.txt`. The native build embeds `docs/protocol.json`.
 
 Upstream references:
 
@@ -20,7 +20,7 @@ Upstream references:
 ## Native source and dependency notices
 
 The private `native/crates/resolver` and `native/crates/platform-tls` source is
-part of OBS MCP under GPL-2.0-only. The root license and all preceding project
+part of OBS MCP under the MIT License. The root license and all preceding project
 attribution remain in force. Native-only packaging must retain its Rust source,
 Cargo/build inputs, and the notice files corresponding to the final artifact.
 

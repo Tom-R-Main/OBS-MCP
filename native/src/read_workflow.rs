@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Ephemeral owner for qualified read-only planning and structural audit. The
 //! caller keeps this owner outside its cancellable work future and always joins
 //! actor + observer before replying or starting the compatibility runtime.

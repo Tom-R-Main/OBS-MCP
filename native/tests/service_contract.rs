@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual single-socket composition and receipt files. Host media/ACL probes
 //! are injected; these controls do not qualify live OBS or MCP take routing.
 use futures_util::{SinkExt, StreamExt, poll};

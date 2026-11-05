@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Existing Service API; durable same-endpoint uncertainty is not cleared by
 //! an inactive recording-status read. Fake media executable, no live OBS.
 #[path = "support/output_start_three.rs"]

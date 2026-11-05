@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Transport-neutral admission and retained connection/body ownership.
 //! No sockets, HTTP framing, URL normalization, Host or effect capability lives
 //! here. A mature HTTP driver supplies validated heads and decoded body data.

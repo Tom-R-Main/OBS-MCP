@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Trusted internal single-RPC custody. This is not a raw MCP mutation API.
 //!
 //! The workflow owner must first validate schemas, preflight/stage state, tool

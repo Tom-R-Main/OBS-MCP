@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded direct-child media verification, ported from media-verification.ts.
 //!
 //! Keep MediaProcess outside any cancellable frontend future. Its owned actor

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Retained-future output confirmation. This helper spawns no tasks and owns
 //! no connection: its supervisor must keep the future through dispatch and
 //! cleanup. A subscription is established before the start request.

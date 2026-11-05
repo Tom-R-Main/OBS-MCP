@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Retained read-only jobs for the service's existing physical OBS session.
 //! The caller owns the complete future. No socket, observer, relay task or
 //! mutator is created, and no native-only failure launches a compatibility lane.

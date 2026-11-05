@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { nativeDefaultFixture, productionSourceTools, recordDefaultOracle } from "../support/native-default-fixture.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";

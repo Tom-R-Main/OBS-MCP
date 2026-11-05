@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Wall-clock metadata is separate from monotonic operation deadlines.
 use crate::custody::ClockSnapshot;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Stage/take workflow ownership. This module never sends raw OBS mutations.
 //! The service lends its single receipt writer and retains the workflow future;
 //! dropping a future after dispatch leaves durable uncertainty, not permission

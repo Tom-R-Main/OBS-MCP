@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Native-only product entry. Source/SDK remains independent development oracle;
 // no compatibility runtime is compiled. The fixed Rust resolver helper entry
 // runs before runtime/configuration; it cannot select another executable.

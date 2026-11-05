@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 /*
  * Six users and their goals, each run end to end against a real OBS through
  * the shipped native service in its default Production profile. Every check

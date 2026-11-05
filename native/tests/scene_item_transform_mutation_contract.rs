@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual Source callbacks versus the pure module over the existing typed socket.
 //! This does not admit a Generic mutation route or claim receipt integration.
 use futures_util::{SinkExt, StreamExt};

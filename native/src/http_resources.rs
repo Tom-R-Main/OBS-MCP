@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! HTTP stream namespaces around the one notification router/publisher.
 use super::{
     http_sink::{self, Sender},

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pure, bounded HTTP exchange admission. HTTP parsing and connection ownership
 //! belong to a mature transport; this module never reads a socket or calls OBS.
 use base64::{Engine, engine::general_purpose::STANDARD};

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startMcpHarness, resultText, type McpHarness } from "../../test/support/mcp-harness.js";
 import { serveProduction } from "../../test/support/production-fixture.js";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed ACK-only public Stop callbacks; not the owned recording Stop lane.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed Record Clip arguments. Admission does not create a recording or
 //! grant authority over whichever Take happens to be current later.
 use crate::{observation, takes::StartOptions};

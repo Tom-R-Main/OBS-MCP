@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual pinned Source stdio parses raw JSON bytes before its tool callback.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::js_json::{
