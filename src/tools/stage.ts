@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { normalizeSceneItem } from "./scene-identity.js";
 import crypto from "node:crypto";
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Retained resolution/transport owner shared by plaintext and encrypted OBS.
 use obs_mcp_resolver::{ExpectedPeer, Resolved};
 #[cfg(test)]

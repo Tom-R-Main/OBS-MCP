@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Exact prefix replay and one absolute deadline for each pending write/flush.
 use std::{
     io,

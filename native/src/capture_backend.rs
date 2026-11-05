@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Classify the OBS-advertised source, never the MCP host's display variables.
 use serde_json::{Map, Value};
 pub const VIDEO_ONLY_CAPTURE_KINDS: &[&str] = &[

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed audio/media admission and actual Source exhaustive-record diagnostics.
 use obs_mcp_native::{
     generic_requests::Call,

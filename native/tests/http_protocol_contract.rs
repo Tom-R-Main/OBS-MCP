@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::http_protocol::{
     self as http, Admission, Era, ErrorOrigin, Policy, RequestHead, ResponseMode, Unqualified,
 };

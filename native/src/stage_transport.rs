@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Concrete stage adapters borrow one existing physical session's observer.
 //! They own no socket, event consumer, reconnect loop or receipt writer. The
 //! request-local relay is joined separately from the externally owned bridge

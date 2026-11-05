@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::stage_transport::Cancellation;
 use std::time::Duration;
 use tokio::time::timeout;

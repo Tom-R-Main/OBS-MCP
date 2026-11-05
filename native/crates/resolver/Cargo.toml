@@ -3,7 +3,7 @@ name = "obs-mcp-resolver-qualification"
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.95"
-license = "GPL-2.0-only"
+license = "MIT"
 publish = false
 
 [features]

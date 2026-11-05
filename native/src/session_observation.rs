@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One event observer per physical session, with cloneable typed read adapters.
 //! The RPC/event cursor barrier prevents queued, unprocessed events from being
 //! mistaken for unchanged evidence. This observer does not own OBS effects.

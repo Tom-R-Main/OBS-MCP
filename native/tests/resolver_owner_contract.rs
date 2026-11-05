@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Durable owner/process controls. Fixed self-helper only; no external DNS or OBS.
 #![cfg(feature = "resolver-fixture")]
 use obs_mcp_resolver::{Error, ExpectedPeer, Fixture, MAX_JOBS, Owner, Receipt};

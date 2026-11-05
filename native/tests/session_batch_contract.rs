@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real loopback consumers; no live OBS and no promoted MCP routes.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::session::{

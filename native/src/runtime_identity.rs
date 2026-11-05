@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Fresh opaque public identifiers; entropy failure never falls back to time,
 //! PID, a counter, or a reusable identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

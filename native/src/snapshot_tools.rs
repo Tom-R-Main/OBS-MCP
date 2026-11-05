@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Manual snapshot reads on the service's existing physical connection. This
 //! module neither owns a socket nor publishes files or OBS mutations. Legacy
 //! snapshots are ordered observations, not an atomic or field-owned receipt.

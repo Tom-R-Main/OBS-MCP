@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Retained invocation owner for three explicit, open-ended output starts.
 //! The caller owns this complete future. No future Stop promise, task, socket,
 //! broker or journal writer is created; the supplied scoped port stays owned

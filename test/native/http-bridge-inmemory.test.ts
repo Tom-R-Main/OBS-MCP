@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 // The actual SDK's fetch entry is wired to an owned Rust fixture process.
 // This exercises exchange semantics, never TCP HTTP parsing or socket flush.
 import {spawn} from 'node:child_process';

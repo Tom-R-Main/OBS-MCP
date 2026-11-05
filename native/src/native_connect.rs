@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One retained initialization attempt. No frontend owns its task or physical
 //! resources, and no preparation/snapshot writer crosses the network await.
 use super::*;

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import type { FakeOBSServer } from "./fake-obs-server.js";
 import { serveSceneAuditFixture } from "./scene-audit-fixture.js";
 export function serveProduction(fake: FakeOBSServer) {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Inert, one-shot request continuations. T must contain only a prepared call,
 //! never a dispatched future, receipt loan, socket, or effect owner.
 use obs_mcp_native::control::Disposition;

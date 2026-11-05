@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Explicit executable/work-directory adapters for checked trim commands.
 //! Keep each job (or ExportOwner) outside cancellable frontend awaits. A job's
 //! metadata remains private until its child wait/pipe cleanup is confirmed.

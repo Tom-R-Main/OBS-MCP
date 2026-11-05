@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Retained Apply Scene composition. It borrows no new socket, raw read,
 //! supervisor, recording/file authority or automatic recovery/replay capability.
 use crate::{

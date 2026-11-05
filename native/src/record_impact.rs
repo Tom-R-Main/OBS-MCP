@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! An external recording-impact veto, not recording identity or OBS state.
 //!
 //! One owner must span the composing Service lifetime. Views, manual ports,

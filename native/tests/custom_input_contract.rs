@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Readback oracle: invoke actual Source callbacks through the pinned SDK.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::session::{ObsSession, SessionOptions};

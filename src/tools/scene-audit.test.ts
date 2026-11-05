@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeOBSRequestError } from "../../test/support/fake-obs-server.js";
 import { SCENE_AUDIT_READS, serveSceneAuditFixture } from "../../test/support/scene-audit-fixture.js";

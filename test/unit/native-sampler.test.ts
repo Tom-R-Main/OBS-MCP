@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { describe, expect, it } from "vitest";
 // JavaScript orchestration is exercised through its public injected boundary.
 // @ts-expect-error The benchmark helper intentionally has no product TypeScript API.

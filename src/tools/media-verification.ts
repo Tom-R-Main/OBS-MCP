@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { spawn } from "node:child_process";
 
 type ProcessOptions = { signal?: AbortSignal; timeoutMs?: number };

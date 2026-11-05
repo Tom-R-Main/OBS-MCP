@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Isolated composition controls: actual native owners and one websocket.
 //! Host preflight/media are explicit fakes; trusted raw manual RPC is not a
 //! currently admitted public tool or a durable public-stop owner.

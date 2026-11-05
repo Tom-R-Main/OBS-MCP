@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Injected, read-only port of src/tools/preflight.ts and its audio-only helper.
 //! No connection, batch transport, filesystem probe, or recording custody is
 //! implemented here. The adapter owns deadlines and cancellation of every read.

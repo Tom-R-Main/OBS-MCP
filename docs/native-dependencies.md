@@ -7,11 +7,11 @@ adopted and qualified. References below to selecting the TypeScript TLS runtime
 are historical, not fallback behavior in the native-only proposal. See
 [native distribution](native-distribution.md) for current proposal boundaries.
 
-OBS MCP remains `GPL-2.0-only`. This tranche does not relicense the project or
-copy code from the official Rust MCP SDK. The local SDK declares `Apache-2.0`;
-it is not admitted as a linked dependency. GNU's
-[compatibility explanation](https://www.gnu.org/licenses/license-compatibility.en.html)
-identifies Apache-2.0 as incompatible with GPLv2.
+When this tranche was written OBS MCP was `GPL-2.0-only`; it is MIT-licensed
+as of November 2026 (see [NOTICE](../NOTICE.md)). This tranche does not copy code
+from the official Rust MCP SDK. The local SDK declares `Apache-2.0`; it is not
+admitted as a linked dependency. Apache-2.0 was incompatible with the earlier
+GPLv2 license; admitting it now would still need its own inventory review.
 
 The same check found a problem in the predecessor native candidate, beyond the
 proposed SDK: its `rustls-tls-webpki-roots` feature enabled `ring@0.17.14`, whose
@@ -103,8 +103,8 @@ refuse instead of downgrading or starting another runtime. Enabling an evaluatio
 feature is not release admission.
 
 The reviewed source adds two private project crates, both version `0.0.0` and
-`GPL-2.0-only`: `native/crates/resolver` and `native/crates/platform-tls`. They
-retain the root [GPLv2 text](../LICENSE) and [project authorship notices](../NOTICE.md).
+`MIT`: `native/crates/resolver` and `native/crates/platform-tls`. They
+retain the root [license](../LICENSE) and [project authorship notices](../NOTICE.md).
 Only their exact canonical manifests and source identities are admitted; a local
 path or `source=null` alone grants no license-policy exception. Resolver source
 uses the existing Tokio dependency. The TLS crate gates Objective-C dependencies

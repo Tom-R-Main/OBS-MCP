@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real socket and durable receipt controls for the transform mutation owner.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

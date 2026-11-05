@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Explicit qualification lane. There is no SDK/compatibility entry point in
 //! this module: unsupported features retain the persistent owner's state.
 #[path = "confirmation.rs"]

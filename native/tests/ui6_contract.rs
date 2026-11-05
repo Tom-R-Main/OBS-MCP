@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Staged UI consumers; restore only after immutable148 capture.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

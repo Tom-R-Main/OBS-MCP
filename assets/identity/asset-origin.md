@@ -10,4 +10,4 @@ The root `icon.png` is the 512×512 raster export used by the package manifest. 
 rsvg-convert -w 512 -h 512 assets/identity/frame-and-cue.svg -o icon.png
 ```
 
-The master and this note ship with the package source. The project retains its current GPL-2.0-only declaration; see `../../LICENSE` and `../../NOTICE.md`. This asset change does not alter contributor attribution, project provenance or license terms.
+The master and this note ship with the package source. The project is MIT-licensed; see `../../LICENSE` and `../../NOTICE.md`. This asset change does not alter contributor attribution, project provenance or license terms.

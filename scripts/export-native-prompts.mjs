@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Capture static text from the actual prompt registration. Runtime replacement
 // scans only the template, so inserted arguments cannot become other markers.
 import { Client } from '@modelcontextprotocol/client';

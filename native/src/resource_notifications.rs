@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Stdout binding for the typed resource owner. No OBS/Service operations.
 use crate::{
     protocol::OwnedReplyContext,

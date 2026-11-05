@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Library composition only: real Session/Bridge/Take/store owners, fake host/media.
 //! This does not qualify a public manual route, frontend retention, or live OBS.
 use futures_util::{SinkExt, StreamExt};

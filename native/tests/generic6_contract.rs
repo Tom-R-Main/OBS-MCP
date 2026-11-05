@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Opaque callbacks remain closed metadata identities with one charged payload.
 use obs_mcp_native::{
     generic_requests::Call,

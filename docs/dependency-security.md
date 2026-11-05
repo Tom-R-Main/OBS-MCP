@@ -4,11 +4,11 @@ Checked on October 14, 2026. This records a remaining dependency advisory, not a
 
 ## Runtime license constraint
 
-The project is GPL-2.0-only. Review of the published MCP 2.0, 2.1, and 2.2 tarballs found the same mixed LICENSE text involving Apache-2.0 despite their MIT package metadata. SDK 2.3 synchronizes its package metadata with that existing license text; it does not introduce this distribution concern. Apache's [GPL compatibility guidance](https://www.apache.org/licenses/GPL-compatibility) explains the GPLv2 incompatibility.
+The project is MIT-licensed as of November 2026 (see `../NOTICE.md`). Review of the published MCP 2.0, 2.1, and 2.2 tarballs found the same mixed LICENSE text involving Apache-2.0 despite their MIT package metadata. Under the earlier GPL-2.0-only license that was a distribution concern, because Apache-2.0 is incompatible with GPLv2 ([Apache guidance](https://www.apache.org/licenses/GPL-compatibility)); under MIT it is not.
 
 Returning to an earlier SDK version does not resolve the published-license discrepancy. This pass updates the source integration to SDK 2.3.1 and tests a local artifact; it does not change the project license or publish a package.
 
-The GPL choice follows the inherited `royshil/obs-mcp` implementation. This fork introduced explicit GPL-2.0-only metadata and source notices in August 2026. OBS Studio and OBS WebSocket explicitly permit GPLv2 or later, so their licensing alone does not establish a GPLv2-only restriction. Roy's upstream ships GPLv2 license text without a separate clear later-version grant; the sample later-version wording in the license appendix is not a project-specific grant. Establish the applicable inherited permissions before changing the combined project to GPLv3 or claiming MIT availability. This is a license-alignment question for redistribution, not a blocker on source integration or private local verification.
+The earlier GPL choice followed the inherited `royshil/obs-mcp` implementation, and this fork added explicit GPL-2.0-only metadata and source notices in August 2026. In November 2026 Roy Shilkrot agreed to license his contributions under MIT, and the project moved to MIT. The generated OBS WebSocket protocol data under `docs/protocol*` stays under obs-websocket's GPL-2.0 terms.
 
 The offline dependency guard checks pinned versions, registry sources, integrity, lockfile correspondence, and installation hooks. License compatibility requires a separate review of actual license documents; package metadata and version numbers are insufficient here. Development tools and files included in the source distribution also require their own assessment.
 

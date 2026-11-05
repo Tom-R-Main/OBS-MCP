@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {describe,expect,it} from 'vitest';

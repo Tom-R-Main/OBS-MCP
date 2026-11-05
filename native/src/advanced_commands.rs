@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Five closed manual commands. They grant no owned Take Stop, file, recovery,
 //! stage or arbitrary-RPC capability. Actual execution stays with Service.
 use crate::operation_store::GenericKind;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pure Capture Window values. A plan, identity or intent grants NO Session,
 //! fence, mutation, replay, snapshot, receipt, lease or rendered-target rights.
 //! Service must acquire/recheck its own live authority and retain admitted I/O.

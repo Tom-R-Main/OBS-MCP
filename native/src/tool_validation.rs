@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pinned SDK/Zod input-error projection, never a dispatch validator.
 //! Only exact exported schemas are admitted. Unsupported/lossy projections
 //! return a typed refusal; a valid input never becomes an invented tool error.

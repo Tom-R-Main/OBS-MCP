@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 export interface PackOptions {
   root?: string;
   nativeBundle?: boolean;

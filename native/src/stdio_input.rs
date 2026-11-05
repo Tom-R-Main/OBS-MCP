@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded cancellation-safe MCP stdin framing; no child-process ownership.
 use std::io;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};

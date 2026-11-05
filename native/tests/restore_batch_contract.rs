@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed library boundary over actual Session/Broker; no public Restore route.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

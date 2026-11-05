@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 /** OBS platform strings vary with Linux packaging. Select by advertised source kinds,
  * never the MCP host's DISPLAY/WAYLAND_DISPLAY (OBS may be remote). */
 export const VIDEO_ONLY_CAPTURE_KINDS = new Set(["xcomposite_input", "pipewire-window-capture-source", "pipewire-screen-capture-source"]);

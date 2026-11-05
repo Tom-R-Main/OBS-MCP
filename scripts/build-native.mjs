@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Optional development driver. Direct Cargo builds require no Node installation.
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';

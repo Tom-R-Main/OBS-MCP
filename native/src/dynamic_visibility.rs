@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Session-local metadata only. Visibility never grants OBS, journal, policy or
 //! worker authority. Effects are owned descriptions for a later frontend owner;
 //! this module cannot publish notifications, dispatch work, or activate a mode.

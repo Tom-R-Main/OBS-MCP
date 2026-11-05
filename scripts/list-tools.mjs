@@ -2,7 +2,7 @@
 /*
  * Modified for the independent OBS MCP project in August 2026.
  * See NOTICE.md and Git history for authorship and change dates.
- * SPDX-License-Identifier: GPL-2.0-only
+ * SPDX-License-Identifier: MIT
  */
 import { Client } from "@modelcontextprotocol/client";
 import { McpServer, InMemoryTransport } from "@modelcontextprotocol/server";

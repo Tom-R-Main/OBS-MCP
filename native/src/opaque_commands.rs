@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Advanced-only opaque effects. Fixed catalog membership is not settlement
 //! evidence: one retained request/batch owns an identity-only incompatibility
 //! receipt until its actual transport observer settles. No replay or Take grant.

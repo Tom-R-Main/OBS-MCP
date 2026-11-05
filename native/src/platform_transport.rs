@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Opt-in integration staging. The outer owner outlives establishment futures.
 #[cfg(target_os = "linux")]
 use std::net::SocketAddr;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Built-in Node parser used by Source's default http.createServer; fixture only.
 import http from 'node:http';
 import net from 'node:net';

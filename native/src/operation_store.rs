@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Durable identity-only operation receipts. The caller supplies operation IDs
 //! and UTC timestamps and retains the sole mutable writer for this store.
 //!

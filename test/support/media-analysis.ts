@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: GPL-2.0-only
+ * SPDX-License-Identifier: MIT
  *
  * Pure signal checks for scenario tests. They judge what a recording actually
  * contains, independent of what OBS reported while it was being written.

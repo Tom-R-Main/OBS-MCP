@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { expectNativeInventory } from '../support/native-inventory.js';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';

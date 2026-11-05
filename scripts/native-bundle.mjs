@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Development packaging metadata. Never imports or starts the Source server.
 import {existsSync,lstatSync,readFileSync,readdirSync,mkdirSync,mkdtempSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';

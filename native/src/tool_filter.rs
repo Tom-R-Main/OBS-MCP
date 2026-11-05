@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Static tool selection from the generated SDK registration. Dynamic selection
 //! remains SDK-owned until its state changes and notifications move together.
 use serde_json::{Value, json};

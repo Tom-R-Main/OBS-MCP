@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Structural audit over the same typed read adapter as scene planning. This
 //! source-specific profile retains 512 reads and a UTF-16 evidence limit. Its
 //! provider must use invalidates_event below, not the broader planning profile.

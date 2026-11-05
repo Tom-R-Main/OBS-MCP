@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Development fixture refresh from actual compiled Source controllers/SDK.
 // Requires npm run build. Never connects to OBS or computes native projections.
 import assert from 'node:assert/strict';

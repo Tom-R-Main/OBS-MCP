@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded saved-file observations from the sole physical OBS event owner.
 //! A filename event has no request identity and never proves attribution.
 use crate::session::{ConnectionToken, ObsEvent, SessionHandle};

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Durable preparation provenance. `PossibleDispatch` deliberately precedes the
 //! socket send: it never claims that a request was sent. A crash in that gap is
 //! uncertain, and reading the desired value cannot upgrade it to Accepted.

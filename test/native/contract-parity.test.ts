@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { nativeDefaultFixture, productionSourceTools } from "../support/native-default-fixture.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Binary-local visibility and publication owner. No OBS or Service capability.
 use crate::{
     protocol::OwnedReplyContext,

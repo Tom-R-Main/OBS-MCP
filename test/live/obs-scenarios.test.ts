@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 /*
  * Use-case scenarios against a real OBS. Each one builds a setup through MCP
  * tools, records it, and judges the file with ffmpeg rather than trusting

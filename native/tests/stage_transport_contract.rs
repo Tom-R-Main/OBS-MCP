@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Real loopback transport plus real receipt files. No live OBS or MCP registration.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

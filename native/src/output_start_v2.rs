@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Additive closed output confirmation over the sole observer's V2 provider.
 //! The caller retains this entire future and its RPC/receipt owner. No task,
 //! connection, store or public tool is created here. Legacy Take is unchanged.

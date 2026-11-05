@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Library prerequisite only: real Session binding, no public critical routes.
 use futures_util::{SinkExt, StreamExt};
 use obs_mcp_native::{

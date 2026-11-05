@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Evidence only: actual compiled Source callbacks + actual Source client on loopback.
 import assert from 'node:assert/strict';
 import {once} from 'node:events';

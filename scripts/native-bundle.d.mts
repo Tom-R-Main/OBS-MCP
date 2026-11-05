@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 export interface NativeManifest {
   server: {type: 'binary'; entry_point: string; mcp_config: {command: string; args: string[]; env: Record<string,string>}};
   compatibility: {platforms: NodeJS.Platform[]};

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Trim planning and an owned no-clobber publication boundary. Process adapters
 //! are injected. A frontend must retain ExportOwner while cancelling its finish
 //! await; dropping the await does not cancel, retry, or relinquish its jobs.

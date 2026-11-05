@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 // Actual Source OBS client; fake timers advance only its application timers.
 // WebSocket data/handshake fences are real loopback events, not elapsed sleeps.
 import {once} from 'node:events';

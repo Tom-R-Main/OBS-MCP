@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual Service/Session workflows over one owned mock socket; no public route.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

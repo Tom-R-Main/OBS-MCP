@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! One retained, closed two-stage effect owner. It owns no socket, task, file,
 //! recording ticket or public route. Service must retain/finish the same owner;
 //! Drop is emergency revocation, not an awaited shutdown or automatic abort.

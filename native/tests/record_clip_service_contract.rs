@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Library-only Clip ownership through the actual Service/Session actors.
 //! Fake OBS and explicit host seam; no live capture or public route.
 #[path = "support/output_start_three.rs"]

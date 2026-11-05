@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 // Development Source oracle. The Rust service owns durable request receipts.
 import {createHash} from 'node:crypto';
 import {constants,closeSync,fstatSync,lstatSync,mkdtempSync,openSync,readSync,readdirSync,realpathSync,rmdirSync,unlinkSync,writeSync} from 'node:fs';

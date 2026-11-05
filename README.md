@@ -472,7 +472,7 @@ This project began with [Roy Shilkrot's `obs-mcp`](https://github.com/royshil/ob
 
 ## License
 
-OBS MCP is licensed under GPL-2.0-only. The native MCPB layout retains corresponding Rust source, native assets, pinned build inputs and notices. TypeScript remains development oracle code. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
+OBS MCP is licensed under the MIT License. The generated OBS WebSocket protocol data under `docs/protocol*` remains under obs-websocket's GPL-2.0 terms (`licenses/obs-websocket/GPL-2.0.txt`). The native MCPB layout retains the Rust source, native assets, pinned build inputs and notices. TypeScript remains development oracle code. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md).
 
 ## Native implementation notes
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pure Source-shaped bodies for the deferred Record/named Output callbacks.
 //!
 //! These functions own no transport, policy, journal, timer or output identity.

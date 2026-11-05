@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { GAME_TONE_HZ, MIC_TONE_HZ } from "./scenario-media.js";

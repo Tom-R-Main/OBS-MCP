@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 use obs_mcp_native::take_monitor::{
     CleanupError, MonitorOptions, Phase, SampleKind, SampleObservation, StillTracker,
     TakeMonitorCore,

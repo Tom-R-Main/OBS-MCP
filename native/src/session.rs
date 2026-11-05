@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! A policy-free OBS transport shared by native read-only observations and
 //! future governed effects. Domain effects must use checked requests/batches
 //! to revalidate lease/take/confirmation authority at actual dispatch.

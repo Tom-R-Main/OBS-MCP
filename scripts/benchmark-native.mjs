@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { Client } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment } from "@modelcontextprotocol/client/stdio";
 import { WebSocketServer } from "ws";

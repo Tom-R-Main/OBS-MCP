@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Custom read-only callbacks on a supplied physical session. The service owns
 //! the entire future through cancellation/deadline settlement. No task, socket,
 //! observer, journal writer or take-feed consumer is created here.

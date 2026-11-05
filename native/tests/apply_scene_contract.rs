@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Pure-domain contracts with the actual corrected compiled Source as oracle.
 //! No OBS socket, Service, operation store, recording or public admission.
 use obs_mcp_native::{

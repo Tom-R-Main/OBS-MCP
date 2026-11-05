@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { expectNativeInventory } from '../support/native-inventory.js';
 // Source-grounded closed recording timeline callbacks, retained by the native owner.
 import { spawn, execFileSync } from 'node:child_process';

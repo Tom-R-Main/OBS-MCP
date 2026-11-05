@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Bounded first-head facts from httparse, before Hyper's framing normalization.
 //! This never decodes body framing or grants an MCP/Stop capability.
 use obs_mcp_native::http_protocol::{MAX_HEADER_BYTES, MAX_HEADERS, MAX_TARGET_BYTES, RequestHead};

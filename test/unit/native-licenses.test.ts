@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync, unlinkSync, symlinkSync, renameSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,10 +18,10 @@ const registry = "registry+https://github.com/rust-lang/crates.io-index";
 function fixture(expression = "MIT OR Apache-2.0") {
   const rootPath = mkdtempSync(join(temporary, "project-"));
   const rootManifest = join(rootPath, "native", "Cargo.toml"); createManifest(rootManifest);
-  const root: Package = { id: "root", name: "obs-mcp-native", version: "1.1.1", license: "GPL-2.0-only", source: null, manifest_path: rootManifest };
+  const root: Package = { id: "root", name: "obs-mcp-native", version: "1.1.1", license: "MIT", source: null, manifest_path: rootManifest };
   const dep: Package = { id: "dep", name: "fixture-crate", version: "1.0.0", license: expression, source: registry, manifest_path: manifest };
   const metadata = { packages: [root, dep], resolve: { root: "root", nodes: [{ id: "root", dependencies: ["dep"] }, { id: "dep", dependencies: [] as string[] }] } };
-  const reviewed = new Map([["obs-mcp-native@1.1.1", "GPL-2.0-only"], ["fixture-crate@1.0.0", expression]]);
+  const reviewed = new Map([["obs-mcp-native@1.1.1", "MIT"], ["fixture-crate@1.0.0", expression]]);
   return { metadata, activeMetadata: structuredClone(metadata), target: "fixture-target", reviewed, root: rootPath };
 }
 
@@ -115,16 +115,16 @@ function ownedFixture() {
   ]) {
     const manifestPath = join(input.root, "native", "crates", path!, "Cargo.toml");
     createManifest(manifestPath);
-    const pkg: Package = {id: name!, name: name!, version: "0.0.0", license: "GPL-2.0-only", source: null, manifest_path: manifestPath};
+    const pkg: Package = {id: name!, name: name!, version: "0.0.0", license: "MIT", source: null, manifest_path: manifestPath};
     input.metadata.packages.push(pkg);
     input.metadata.resolve.nodes.push({id: pkg.id, dependencies: []});
     input.metadata.resolve.nodes[0]!.dependencies.push(pkg.id);
-    input.reviewed.set(`${pkg.name}@${pkg.version}`, "GPL-2.0-only");
+    input.reviewed.set(`${pkg.name}@${pkg.version}`, "MIT");
   }
   input.activeMetadata = structuredClone(input.metadata);
   return input;
 }
-describe("exact owned GPL manifest identity and optional inventory", () => {
+describe("exact owned manifest identity and optional inventory", () => {
   it("admits only the root and two reviewed canonical private crates", () => {
     const input = ownedFixture();
     expect(auditNativeLicenses(input).passed).toBe(true);
@@ -146,13 +146,13 @@ describe("exact owned GPL manifest identity and optional inventory", () => {
     const input = ownedFixture(); input.metadata.packages[index]!.license = "GPL-2.0-or-later"; input.activeMetadata = structuredClone(input.metadata);
     expect(auditNativeLicenses(input).blockers).toContainEqual(expect.objectContaining({reason:"license expression changed after review"}));
   });
-  it("does not let a reviewed lookalike name turn any local GPL dependency into an owned crate", () => {
+  it("does not let a reviewed lookalike name turn any local dependency into an owned crate", () => {
     const input = ownedFixture(); const pkg = input.metadata.packages[2]!;
-    input.reviewed.delete(`${pkg.name}@${pkg.version}`);pkg.name += "-copy"; input.reviewed.set(`${pkg.name}@${pkg.version}`, "GPL-2.0-only"); input.activeMetadata=structuredClone(input.metadata);
+    input.reviewed.delete(`${pkg.name}@${pkg.version}`);pkg.name += "-copy"; input.reviewed.set(`${pkg.name}@${pkg.version}`, "MIT"); input.activeMetadata=structuredClone(input.metadata);
     expect(auditNativeLicenses(input).passed).toBe(false);
   });
   it("does not admit a registry GPL dependency even with exact inventoried terms", () => {
-    expect(auditNativeLicenses(fixture("GPL-2.0-only")).blockers).toContainEqual(expect.objectContaining({reason:expect.stringContaining("two canonical private")}));
+    expect(auditNativeLicenses(fixture("GPL-2.0-only")).blockers).toContainEqual(expect.objectContaining({reason:expect.stringContaining("copyleft")}));
   });
   it("rejects a symlink manifest even when its target is a file", () => {
     const input = ownedFixture(); const pkg = input.metadata.packages[2]!; const target=join(input.root,"foreign-Cargo.toml");createManifest(target);
@@ -196,7 +196,7 @@ describe("exact owned GPL manifest identity and optional inventory", () => {
   it("binds root admission to its exact name, role and canonical manifest too", () => {
     const input=ownedFixture();const target=join(input.root,"foreign-root.toml");createManifest(target);input.metadata.packages[0]!.manifest_path=target;input.activeMetadata=structuredClone(input.metadata);
     expect(auditNativeLicenses(input).passed).toBe(false);
-    input.metadata.packages[0]!.manifest_path=join(input.root,"native","Cargo.toml");input.metadata.packages[0]!.name="root-lookalike";input.reviewed.set("root-lookalike@1.1.1","GPL-2.0-only");input.activeMetadata=structuredClone(input.metadata);
+    input.metadata.packages[0]!.manifest_path=join(input.root,"native","Cargo.toml");input.metadata.packages[0]!.name="root-lookalike";input.reviewed.set("root-lookalike@1.1.1","MIT");input.activeMetadata=structuredClone(input.metadata);
     expect(auditNativeLicenses(input).blockers).toContainEqual(expect.objectContaining({reason:"unreviewed root package identity"}));
   });
 });

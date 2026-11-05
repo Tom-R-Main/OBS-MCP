@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { nativeDefaultFixture } from "../support/native-default-fixture.js";
 import { expectNativeInventory } from '../support/native-inventory.js';
 import { execFileSync, spawnSync, spawn } from "node:child_process";

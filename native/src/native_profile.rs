@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Immutable service-lifetime authority. A tool filter cannot promote a profile.
 use serde_json::{Value, json};
 

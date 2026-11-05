@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Closed public safety Stop lane remains independent of ordinary and owned Take work.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::session::{

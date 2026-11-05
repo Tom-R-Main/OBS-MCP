@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Source-generated resource metadata and closed list/completion projections.
 //! Resource notifications/subscriptions are separate, unqualified interfaces.
 use serde_json::Value;

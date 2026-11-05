@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";

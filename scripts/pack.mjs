@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 // Node/MCPB CLI are development archive tools only, never extension payload.
 import {execFileSync} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';

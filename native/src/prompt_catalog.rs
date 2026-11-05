@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Static prompts exported from the actual SDK registration, including its
 //! argument and callback errors. Prompt interpretation never opens OBS.
 use obs_mcp_native::config::trim;

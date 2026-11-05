@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Actual Session/Broker contracts; no public Apply Scene admission.
 use futures_util::{SinkExt, StreamExt, poll};
 use obs_mcp_native::{

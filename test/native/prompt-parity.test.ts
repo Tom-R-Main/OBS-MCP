@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: MIT */
 import { nativeDefaultFixture } from "../support/native-default-fixture.js";
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: MIT
 //! Source-shaped obs-observe / obs://status report. The caller supplies the
 //! physical connection projection and fresh local metadata; this module owns
 //! no socket, writer or task. Agreement is repeated observation, never atomicity.
